@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
 import QtQuick.Window
+
 PanelWindow {
     anchors {
         top: true
@@ -15,22 +16,29 @@ PanelWindow {
     color: "transparent"
 
     Bar {
-        anchors.fill: parent
+        id: bar
+
+        x: clock.x
+        width: clock.width
+        height: parent.height
+
+        z: 0
     }
+
     Clock {
-        anchors {
-            
-            top: parent.top
-        }
+        id: clock
+//192.77
+        property int fontsize: Math.round(Settings.barHeight / (2*(150/1000)+1))
+        property int hvost: Math.round((((313.856) / 1000)) * fontsize)
+        
+        width: Math.round((fontsize * (Settings.isSeconds ? 8 : 5)) + (hvost * 2))
 
+        x: Math.round((parent.width - width) / 2)
+        y: Math.round(Settings.barGap  + Settings.barHeight * 0.5)
 
-        property int fontsize: ((1000.0-(150.0*2.0))/1000.0) * Settings.barHeight
-        property int hvost: ((192.77/1000)*2) * fontsize
+        z: 1
+    }
 
-        x: Settings.leftMargin + hvost
-        width: fontsize * 5
-        height: (Settings.barGap * 2) + Settings.barHeight
-    } 
     IpcHandler {
         target: "main"
 

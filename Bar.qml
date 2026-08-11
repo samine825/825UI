@@ -2,8 +2,11 @@ import QtQuick
 import QtQuick.Shapes
 
 Shape {
-    anchors.fill: parent
-
+    //anchors.fill: parent
+    
+        layer.enabled: true // 2. Enables high-quality anti-aliasing
+        layer.samples: 8
+        
     ShapePath {
         fillColor: Settings.barColor
         strokeColor: "transparent"
@@ -11,6 +14,7 @@ Shape {
         startX: 0
         startY: 0
 
+        
         PathLine {
             x: Settings.leftMargin
             y: Settings.barGap

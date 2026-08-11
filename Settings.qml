@@ -11,6 +11,8 @@ Singleton {
     property alias rightMargin: settings.rightMargin
     property alias edgeSize: settings.edgeSize
     property alias barColor: settings.barColor
+    property alias barType: settings.barType
+    property alias isSeconds: settings.isSeconds
 
     FileView {
         id: configFile
@@ -26,6 +28,8 @@ Singleton {
             property int rightMargin: 100
             property int edgeSize: 20
             property string barColor: "#ffffff"
+            property int barType: 0
+            property bool isSeconds: false
         }
 
         onAdapterUpdated: writeAdapter()
