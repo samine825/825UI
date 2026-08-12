@@ -1,9 +1,11 @@
 {
     "barGap": 20,
-    "barHeight": 40,
+    "barHeight": 60,
     "leftMargin": 0,
     "rightMargin": 0,
+    "edgeSize": 20,
     "barColor": "#ffffff",
     "barType": 0,
-    "isSeconds":false
+    "secondsMode": 1,
+    "infexClock": true
 }

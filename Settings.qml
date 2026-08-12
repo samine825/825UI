@@ -12,7 +12,8 @@ Singleton {
     property alias edgeSize: settings.edgeSize
     property alias barColor: settings.barColor
     property alias barType: settings.barType
-    property alias isSeconds: settings.isSeconds
+    property alias secondsMode: settings.secondsMode
+    property alias infexClock: settings.infexClock
 
     FileView {
         id: configFile
@@ -29,7 +30,8 @@ Singleton {
             property int edgeSize: 20
             property string barColor: "#ffffff"
             property int barType: 0
-            property bool isSeconds: false
+            property int secondsMode: 0
+            property bool infexClock: true
         }
 
         onAdapterUpdated: writeAdapter()

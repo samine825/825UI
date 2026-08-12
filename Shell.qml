@@ -18,6 +18,7 @@ PanelWindow {
     Bar {
         id: bar
 
+        // Бар автоматически следует за позицией и шириной часов
         x: clock.x
         width: clock.width
         height: parent.height
@@ -27,14 +28,13 @@ PanelWindow {
 
     Clock {
         id: clock
-//192.77
-        property int fontsize: Math.round(Settings.barHeight / (2*(150/1000)+1))
-        property int hvost: Math.round((((313.856) / 1000)) * fontsize)
         
-        width: Math.round((fontsize * (Settings.isSeconds ? 8 : 5)) + (hvost * 2))
-
-        x: Math.round((parent.width - width) / 2)
-        y: Math.round(Settings.barGap  + Settings.barHeight * 0.5)
+        // Жестко центрируем по горизонтали. 
+        // При изменении ширины часы будут расширяться симметрично влево и вправо.
+        anchors.horizontalCenter: parent.horizontalCenter
+        
+        // Фиксируем позицию сверху (это выровняет текст по вертикали внутри бара)
+        y: Settings.barGap 
 
         z: 1
     }
