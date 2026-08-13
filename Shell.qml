@@ -11,7 +11,7 @@ PanelWindow {
         right: true
     }
 
-    implicitHeight: Settings.barGap + Settings.barHeight
+    implicitHeight: Settings.barGap * 2 + Settings.barHeight
 
     color: "transparent"
 
@@ -22,7 +22,7 @@ PanelWindow {
         x: clock.x
         width: clock.width
         height: parent.height
-
+        fontLineWidth: clock.fontsize * (150/1000) * 2
         z: 0
     }
 

@@ -1,100 +1,79 @@
 import QtQuick
 import QtQuick.Shapes
+Item {
+    property real fontLineWidth: 0
+    id: barRoot
 
-Shape {
-    //anchors.fill: parent
-    
-        layer.enabled: true // 2. Enables high-quality anti-aliasing
-        layer.samples: 8
-        
-    ShapePath {
-        fillColor: Settings.barColor
-        strokeColor: "transparent"
+    // Внешняя черная обводка
+    Shape {
+        anchors.fill: parent
+        layer.enabled: false 
+        preferredRendererType: Shape.CurveRenderer
+        ShapePath {
+            strokeColor: "black"
+            strokeWidth: fontLineWidth*2 // Толщина обводки
+            joinStyle: ShapePath.MiterJoin // Острые углы
+            capStyle: ShapePath.FlatCap
+            fillColor: Settings.barColor
 
-        startX: 0
-        startY: 0
+            startX: Settings.leftMargin
+            startY: Settings.barGap
 
-        
-        PathLine {
-            x: Settings.leftMargin
-            y: Settings.barGap
+            PathLine { x: Settings.leftMargin; y: Settings.barGap }
+            PathLine { x: Settings.leftMargin + Settings.barHeight * (403.16/1000); y: Settings.barGap + Settings.barHeight / 2 }
+            PathLine { x: Settings.leftMargin; y: Settings.barGap + Settings.barHeight }
+            PathLine { x: width - Settings.rightMargin; y: Settings.barGap + Settings.barHeight }
+            PathLine { x: width - Settings.rightMargin - Settings.barHeight * (403.16/1000); y: Settings.barGap + Settings.barHeight / 2 }
+            PathLine { x: width - Settings.rightMargin; y: Settings.barGap }
+            PathLine { x: Settings.leftMargin; y: Settings.barGap }
         }
+    }
+    // Средняя белая обводка
+    Shape {
+        anchors.fill: parent
+        layer.enabled: false 
+        preferredRendererType: Shape.CurveRenderer
+        ShapePath {
+            strokeColor: Settings.barColor
+            strokeWidth: fontLineWidth // Толщина обводки
+            joinStyle: ShapePath.MiterJoin // Острые углы
+            capStyle: ShapePath.FlatCap
+            fillColor: Settings.barColor
 
-        PathLine {
-            x: Settings.leftMargin + Settings.barHeight * (403.16/1000)
-            y: Settings.barGap + Settings.barHeight / 2
-        }
+            startX: Settings.leftMargin
+            startY: Settings.barGap
 
-        PathLine {
-            x: Settings.leftMargin
-            y: Settings.barGap + Settings.barHeight
-        }
-
-        PathLine {
-            x: width - Settings.rightMargin
-            y: Settings.barGap + Settings.barHeight
-        }
-
-        PathLine {
-            x: width - Settings.rightMargin - Settings.barHeight * (403.16/1000)
-            y: Settings.barGap + Settings.barHeight / 2
-        }
-
-        PathLine {
-            x: width - Settings.rightMargin
-            y: Settings.barGap
-        }
-
-        PathLine {
-            x: Settings.leftMargin
-            y: Settings.barGap
+            PathLine { x: Settings.leftMargin; y: Settings.barGap }
+            PathLine { x: Settings.leftMargin + Settings.barHeight * (403.16/1000); y: Settings.barGap + Settings.barHeight / 2 }
+            PathLine { x: Settings.leftMargin; y: Settings.barGap + Settings.barHeight }
+            PathLine { x: width - Settings.rightMargin; y: Settings.barGap + Settings.barHeight }
+            PathLine { x: width - Settings.rightMargin - Settings.barHeight * (403.16/1000); y: Settings.barGap + Settings.barHeight / 2 }
+            PathLine { x: width - Settings.rightMargin; y: Settings.barGap }
+            PathLine { x: Settings.leftMargin; y: Settings.barGap }
         }
     }
 
-
-    ShapePath {
-        fillColor: Settings.barColor
-        strokeColor: "transparent"
-
-        startX: 0
-        startY: 0
-
+    // Черный бар
+    Shape {
+        preferredRendererType: Shape.CurveRenderer
+        anchors.fill: parent
+        layer.enabled: true
+        layer.samples: 8
         
-        PathLine {
-            x: Settings.leftMargin - 50
-            y: Settings.barGap
-        }
+        ShapePath {
+            fillColor: "black"
+            strokeColor: "transparent"
 
-        PathLine {
-            x: Settings.leftMargin + Settings.barHeight * (403.16/1000)
-            y: Settings.barGap + Settings.barHeight / 2
-        }
+            startX: 0
+            startY: 0
 
-        PathLine {
-            x: Settings.leftMargin
-            y: Settings.barGap + Settings.barHeight
-        }
-
-        PathLine {
-            x: width - Settings.rightMargin
-            y: Settings.barGap + Settings.barHeight
-        }
-
-        PathLine {
-            x: width - Settings.rightMargin - Settings.barHeight * (403.16/1000)
-            y: Settings.barGap + Settings.barHeight / 2
-        }
-
-        PathLine {
-            x: width - Settings.rightMargin
-            y: Settings.barGap
-        }
-
-        PathLine {
-            x: Settings.leftMargin
-            y: Settings.barGap
+            PathLine { x: Settings.leftMargin; y: Settings.barGap }
+            PathLine { x: Settings.leftMargin + Settings.barHeight * (403.16/1000); y: Settings.barGap + Settings.barHeight / 2 }
+            PathLine { x: Settings.leftMargin; y: Settings.barGap + Settings.barHeight }
+            PathLine { x: width - Settings.rightMargin; y: Settings.barGap + Settings.barHeight }
+            PathLine { x: width - Settings.rightMargin - Settings.barHeight * (403.16/1000); y: Settings.barGap + Settings.barHeight / 2 }
+            PathLine { x: width - Settings.rightMargin; y: Settings.barGap }
+            PathLine { x: Settings.leftMargin; y: Settings.barGap }
         }
     }
 }
-
-//0.4228

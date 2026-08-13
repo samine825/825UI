@@ -38,7 +38,7 @@ Item {
             
             font.family: Settings.infexClock ? clockFont.name : ""
             font.pixelSize: clockRoot.fontsize
-            color: "#000000"
+            color: Settings.barColor
 
             // Привязываем к левому краю контейнера
             anchors.left: parent.left
@@ -67,7 +67,7 @@ Item {
                 
                 font.family: Settings.infexClock ? clockFont.name : ""
                 font.pixelSize: clockRoot.fontsize
-                color: "#000000"
+                color: Settings.barColor
 
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
