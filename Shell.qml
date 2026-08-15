@@ -4,46 +4,50 @@ import Quickshell.Wayland
 import Quickshell.Io
 import QtQuick.Window
 
-PanelWindow {
-    anchors {
-        top: true
-        left: true
-        right: true
-    }
-
-    implicitHeight: Settings.barGap * 2 + Settings.barHeight
-
-    color: "transparent"
-
-    Bar {
-        id: bar
-
-        // Бар автоматически следует за позицией и шириной часов
-        x: clock.x
-        width: clock.width
-        height: parent.height
-        fontLineWidth: clock.fontsize * (150/1000) * 2
-        z: 0
-    }
-
-    Clock {
-        id: clock
-        
-        // Жестко центрируем по горизонтали. 
-        // При изменении ширины часы будут расширяться симметрично влево и вправо.
-        anchors.horizontalCenter: parent.horizontalCenter
-        
-        // Фиксируем позицию сверху (это выровняет текст по вертикали внутри бара)
-        y: Settings.barGap 
-
-        z: 1
-    }
-
-    IpcHandler {
-        target: "main"
-
-        function forceReload(): void {
-            Quickshell.reload(true)
+ShellRoot {
+    // Основное окно бара
+    PanelWindow {
+        id: shellRoot
+        anchors {
+            top: true
+            left: true
+            right: true
         }
+
+        implicitHeight: Settings.barGap * 2 + Settings.barHeight
+        color: "transparent"
+
+        Bar {
+            id: bar
+            x: clock.x
+            width: clock.width
+            height: parent.height
+            fontLineWidth: clock.fontsize * (150/1000) * 2
+            z: 0
+        }
+
+        Clock {
+            id: clock
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: Settings.barGap 
+            z: 1
+        }
+
+        IpcHandler {
+            target: "main"
+
+            function forceReload(): void {
+                Quickshell.reload(true)
+            }
+
+            function toggleSettings(): void {
+                settingsMenu.visible = !settingsMenu.visible
+            }
+        }
+    }
+
+    // Окно настроек
+    SettingsMenu {
+        id: settingsMenu
     }
 }
