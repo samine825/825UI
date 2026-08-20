@@ -29,7 +29,6 @@ ShellRoot {
         Clock {
             id: clock
             anchors.horizontalCenter: parent.horizontalCenter
-            y: Settings.barGap 
             z: 1
         }
 

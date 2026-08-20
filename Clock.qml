@@ -20,7 +20,7 @@ Item {
     // Теперь ширина clockRoot сама плавно меняется, 
     // так как она привязана к ширине textContainer, который анимируется.
     width: textContainer.width + (hvost * 2) + (Settings.infexClock ? 0 : Settings.barHeight)
-    height: Settings.barHeight
+    height: Settings.barHeight + Settings.barGap * 2
 
     // Невидимый контейнер, который держит оба текста и идеально центрируется
     Item {
