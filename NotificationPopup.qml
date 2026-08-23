@@ -12,7 +12,7 @@ Rectangle {
     property var line: 5
 
     y: 0
-    x: !maxY ? ((screenX - width) / 2) : undefined
+    x: (screenX - width) / 2
     width: startSize
     height: startSize
     color: 'transparent'
@@ -24,6 +24,7 @@ Rectangle {
     
     property var currentNotification: null
     property var screenX: 0
+    property real progress: 1.0
 
     Component {
         id: contentLayout
@@ -153,7 +154,7 @@ Rectangle {
     Item {
         id: progressBarContainer
         height: parent.height
-        width: popupWindow.width * progress
+        width: popupWindow.width * popupWindow.progress
         clip: true
 
         Loader {
@@ -253,8 +254,6 @@ PropertyAnimation {
     }
     property var ugolFinished: false
 
-    property real progress: 1.0
-
     // раскрытие
 
     PropertyAnimation {
@@ -293,6 +292,7 @@ PropertyAnimation {
                   ? popupWindow.currentNotification.expireTimeout / 2
                   : 5000
         running: main !== false && !closeClicked
+        easing.type: Easing.Linear
         onFinished: {
             uhod = true
         }
@@ -404,10 +404,8 @@ PropertyAnimation {
     MouseArea {
         anchors.fill: parent
         onClicked: {
-            closeRequested()
+            closeClicked = true
         }
     }
     property var closeClicked: false
-
-    signal closeRequested()
 }
