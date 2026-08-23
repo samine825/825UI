@@ -30,7 +30,7 @@ Singleton {
                 body: notification.body,
                 appName: notification.appName,
                 appIcon: notification.appIcon,
-                image: notification.image, // <-- ДОБАВЬТЕ ЭТУ СТРОКУ
+                image: notification.image,
                 urgency: notification.urgency,
                 expireTimeout: notification.expireTimeout,
                 time: Date.now(),
@@ -42,8 +42,7 @@ Singleton {
             root.unread++
             root.notificationAdded(entry)
             
-            // Auto timeout
-            let timeout = notification.expireTimeout > 0 ? notification.expireTimeout : 7000
+            let timeout = notification.expireTimeout > 0 ? notification.expireTimeout : 5000
             if (notification.urgency === NotificationUrgency.Critical) timeout = 0
             
             if (timeout > 0) {
@@ -64,7 +63,6 @@ Singleton {
             root.notifications.splice(idx, 1)
             root.notificationRemoved(id)
         }
-        // Dismiss from server
         let values = notifServer.trackedNotifications.values
         let serverIdx = values.findIndex(n => n.id === id)
         if (serverIdx !== -1) {

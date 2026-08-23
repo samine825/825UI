@@ -16,19 +16,15 @@ Item {
     property real fontsize: Settings.barHeight / (2*(150/1000)+1)
     property real hvost: (((313.856) / 1000)) * fontsize
     
-    // Убрали Behavior on width у корневого элемента!
-    // Теперь ширина clockRoot сама плавно меняется, 
-    // так как она привязана к ширине textContainer, который анимируется.
     width: textContainer.width + (hvost * 2) + (Settings.infexClock ? 0 : Settings.barHeight)
     height: Settings.barHeight + Settings.barGap * 2
 
-    // Невидимый контейнер, который держит оба текста и идеально центрируется
+    // контейнер, который держит оба текста и центрируется
     Item {
         id: textContainer
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.verticalCenter: parent.verticalCenter
         
-        // Его ширина СУММИРУЕТСЯ из реальных ширин текстовых блоков
         width: mainTime.implicitWidth + secWrapper.width
         height: parent.height
 
@@ -40,20 +36,19 @@ Item {
             font.pixelSize: clockRoot.fontsize
             color: Settings.barColor
 
-            // Привязываем к левому краю контейнера
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
         }
 
-        // Контейнер для секунд, который будет "проявлять" текст
+        // контейнер для секунд
         Item {
             id: secWrapper
-            anchors.left: mainTime.right // Сразу после основных часов
+            anchors.left: mainTime.right // после основных часов
             anchors.verticalCenter: parent.verticalCenter
             
             height: secText.implicitHeight 
 
-            // Ширина меняется от 0 до реальной ширины текста секунд
+            // от 0 до реальной ширины текста
             width: clockRoot.showSeconds ? secText.implicitWidth : 0
             clip: true 
 

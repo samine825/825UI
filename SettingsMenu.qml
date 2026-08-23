@@ -10,8 +10,6 @@ PanelWindow {
     visible: false
     focusable: true
 
-    // Окно должно реально получать клавиатуру от композитора
-    // (иначе focus/Keys внутри не работают — клавиши не доходят до Qt)
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
 
     exclusiveZone: -1
@@ -30,8 +28,7 @@ PanelWindow {
     property var wallpaperBuffer: []
     property bool wallpapersLoaded: false
 
-    // Управление активным табом стрелками вправо/влево (зацикленно).
-    // PanelWindow — не Item, поэтому Keys висит на Item-обёртке с фокусом.
+    // управление стрелками зацикленно
     Item {
         id: keyCatcher
         anchors.fill: parent
@@ -111,7 +108,6 @@ PanelWindow {
 
     onVisibleChanged: {
         if (settingsRoot.visible) {
-            // Фокус на окно, чтобы стрелки гарантированно ловились
             settingsRoot.forceActiveFocus()
 
             if (settingsRoot.currentTab === 2) {
@@ -155,8 +151,7 @@ PanelWindow {
                 property real tabBorderWidth: 5
                 property real blackOutlineWidth: 5
 
-                // Внешняя черная обводка.
-                // Размеры и координаты tabBar не меняются.
+                // черная обводка
                 Shape {
                     id: tabOuterOutline
 
@@ -170,8 +165,6 @@ PanelWindow {
 
                         strokeColor: "black"
 
-                        // Существующая цветная линия имеет ширину 5px.
-                        // Благодаря этой формуле черная часть снаружи будет 5px.
                         strokeWidth: tabBar.tabBorderWidth
                                     + tabBar.blackOutlineWidth * 2
 
@@ -364,7 +357,7 @@ PanelWindow {
                 }
             }
 
-            // --- Content ---
+            // контент
             Item {
                 id: contentArea
                 width: parent.width
@@ -387,7 +380,7 @@ PanelWindow {
                     border.width: 5
                 }
 
-                // System
+                // system
                 Item {
                     visible: settingsRoot.currentTab === 0
                     anchors.fill: parent
@@ -400,7 +393,7 @@ PanelWindow {
                     }
                 }
 
-                // Bar
+                // bar
                 Item {
                     visible: settingsRoot.currentTab === 1
                     anchors.fill: parent
@@ -413,7 +406,7 @@ PanelWindow {
                     }
                 }
 
-                // Wallpapers
+                // wallpapers
                 Item {
                     id: wallpapersTab
                     visible: settingsRoot.currentTab === 2
@@ -470,7 +463,6 @@ PanelWindow {
                                 x: wallpaperFlick.margin + col * (wallpaperFlick.itemSize + wallpaperFlick.gap)
                                 y: wallpaperFlick.margin + row * (wallpaperFlick.itemSize + wallpaperFlick.gap)
 
-                                // Изображение (lazy load — только в вьюпорте)
                                 Loader {
                                     id: imgLoader
                                     anchors.fill: parent
@@ -490,12 +482,12 @@ PanelWindow {
                                     }
                                 }
 
-                                // Треугольники в углах (закрывают углы изображения)
+                                // уголки
                                 Shape {
                                     anchors.fill: parent
                                     z: 2
 
-                                    // Верхний-левый
+                                    // ВЛ
                                     ShapePath {
                                         joinStyle: ShapePath.MiterJoin
                                         capStyle: ShapePath.FlatCap
@@ -508,7 +500,7 @@ PanelWindow {
                                         PathLine { x: 0; y: 0 }
                                     }
 
-                                    // Верхний-правый
+                                    // ВП
                                     ShapePath {
                                         joinStyle: ShapePath.MiterJoin
                                         capStyle: ShapePath.FlatCap
@@ -521,7 +513,7 @@ PanelWindow {
                                         PathLine { x: wallpaperDelegate.width - wallpaperDelegate.cornerCut; y: 0 }
                                     }
 
-                                    // Нижний-правый
+                                    // НП
                                     ShapePath {
                                         joinStyle: ShapePath.MiterJoin
                                         capStyle: ShapePath.FlatCap
@@ -534,7 +526,7 @@ PanelWindow {
                                         PathLine { x: wallpaperDelegate.width; y: wallpaperDelegate.height - wallpaperDelegate.cornerCut }
                                     }
 
-                                    // Нижний-левый
+                                    // НЛ
                                     ShapePath {
                                         joinStyle: ShapePath.MiterJoin
                                         capStyle: ShapePath.FlatCap
@@ -548,7 +540,7 @@ PanelWindow {
                                     }
                                 }
 
-                                // Белая восьмиугольная рамка (5px)
+                                // белая рамка
                                 Shape {
                                     anchors.fill: parent
                                     z: 3
@@ -573,7 +565,7 @@ PanelWindow {
                                     }
                                 }
 
-                                // Подпись файла
+                                // подпись
                                 Rectangle {
                                     anchors.bottom: parent.bottom
                                     anchors.left: parent.left
@@ -614,7 +606,7 @@ PanelWindow {
                         }
                     }
 
-                    // ===== Скроллбар =====
+                    // скролл
                     Rectangle {
                         id: wallpaperScrollTrack
                         anchors.right: parent.right
@@ -693,7 +685,7 @@ PanelWindow {
                         }
                     }
 
-                    // Кнопка обновления
+                    // кнопка обновления
                     Rectangle {
                         anchors.top: parent.top
                         anchors.left: parent.left
@@ -720,7 +712,7 @@ PanelWindow {
                     }
                 }
 
-                // Monitor
+                // monitor
                 Item {
                     visible: settingsRoot.currentTab === 3
                     anchors.fill: parent
@@ -733,7 +725,7 @@ PanelWindow {
                     }
                 }
 
-                // About
+                // about
                 Item {
                     visible: settingsRoot.currentTab === 4
                     anchors.fill: parent
@@ -748,8 +740,7 @@ PanelWindow {
             }
         }
 
-        // Чёрная обводка окна контента (5px снару...[truncated]
-        // Зависит от contentArea (id), поэтому не участвует в layout Column.
+        // чорн обводка окна контента
         Rectangle {
             id: contentBlackOutline
             anchors.fill: contentArea

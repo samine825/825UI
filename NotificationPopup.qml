@@ -141,16 +141,16 @@ Rectangle {
         }
     }
 
-    // 1: нижний слой
+    // 1. нижний слой
     Loader {
         id: runeDownLayer
         anchors.fill: parent
         sourceComponent: contentLayout
-        property color textColor: '#000000' // Черный текст
-        property color backgroundColor: '#ffffff' // Белый фон
+        property color textColor: '#000000'
+        property color backgroundColor: '#ffffff'
     }
 
-    // 2: верхний слой
+    // 2. верхний слой
     Item {
         id: progressBarContainer
         height: parent.height
@@ -162,8 +162,8 @@ Rectangle {
             width: popupWindow.width 
             height: popupWindow.height
             sourceComponent: contentLayout
-            property color textColor: '#ffffff' // Белый текст
-            property color backgroundColor: '#000000' // Черный фон
+            property color textColor: '#ffffff'
+            property color backgroundColor: '#000000'
         }
     }
 

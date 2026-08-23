@@ -6,7 +6,7 @@ import QtQuick.Window
 import QtQuick.Shapes
 
 ShellRoot {
-    // ─── ОСНОВНОЙ БАР ───────────────────────────────────────────
+    // бар
     PanelWindow {
         id: shellRoot
         anchors {
