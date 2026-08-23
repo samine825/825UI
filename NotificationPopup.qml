@@ -11,8 +11,8 @@ Rectangle {
     property var startSize: 80
     property var line: 5
 
-    y: 0
-    x: (screenX - width) / 2
+    y: -startSize
+    x: !maxY ? ((screenX - width) / 2) : undefined
     width: startSize
     height: startSize
     color: 'transparent'
@@ -182,7 +182,7 @@ Rectangle {
         running: popupWindow.currentNotification !== null && popupWindow.screenX !== null
         easing.type: Easing.InCubic
     }
-PropertyAnimation {
+    PropertyAnimation {
         id: progressAnimationColor2
         target: runeDownLayer
         property: "backgroundColor"
@@ -196,7 +196,7 @@ PropertyAnimation {
         id: progressAnimationY
         target: popupWindow
         property: "y"
-        from: 0
+        from: -startSize
         to: 300
         duration: 600
         running: popupWindow.currentNotification !== null && popupWindow.screenX !== null
@@ -223,33 +223,33 @@ PropertyAnimation {
         id: progressAnimationX
         target: popupWindow
         property: "x"
-        from: (popupWindow.screenX - width) / 2
+        from: popupWindow.x
         to: popupWindow.screenX - (maxWidth+startSize+popupWindow.line)/2
         duration: 1200
-        running: maxY !== false
+        running: maxY !== false && closeClicked !== true
         easing.type: Easing.InOutCubic
     }
     PropertyAnimation {
         id: progressAnimationY2
         target: popupWindow
         property: "y"
-        from: 300
+        from: popupWindow.y
         to: popupWindow.line
         duration: 1200
-        running: maxY !== false
+        running: maxY !== false && closeClicked !== true
         easing.type: Easing.InCubic
     }
     PropertyAnimation {
         id: progressAnimationRotation2
         target: popupWindow
         property: "rotation"
-        from: 180
+        from: popupWindow.rotation
         to: 360
         duration: 1200
         running: maxY !== false
         easing.type: Easing.InOutBack
         onFinished: {
-            ugolFinished = true
+            ugolFinished = true && closeClicked !== true
         }
     }
     property var ugolFinished: false
@@ -260,20 +260,20 @@ PropertyAnimation {
         id: progressAnimationWidth
         target: popupWindow
         property: "width"
-        from: startSize
+        from: popupWindow.width
         to: maxWidth
         duration: 700
-        running: ugolFinished !== false
+        running: ugolFinished !== false && closeClicked !== true
         easing.type: Easing.OutBack
     }
     PropertyAnimation {
         id: progressAnimationX2
         target: popupWindow
         property: "x"
-        from: popupWindow.screenX - (maxWidth+startSize+((20*(313.857/2000) * popupWindow.line) / 1.5))/2
+        from: popupWindow.x
         to: popupWindow.screenX - maxWidth - ((20*(313.857/2000) * popupWindow.line) / 1.5)
         duration: 700
-        running: ugolFinished !== false
+        running: ugolFinished !== false && closeClicked !== true
         easing.type: Easing.OutBack
         onFinished: {
             main = true
@@ -304,7 +304,7 @@ PropertyAnimation {
         id: progressAnimationWidth2
         target: popupWindow
         property: "width"
-        from: maxWidth
+        from: popupWindow.width
         to: startSize
         duration: 1000
         running: uhod !== false || closeClicked !== false
@@ -314,7 +314,7 @@ PropertyAnimation {
         id: progressAnimationX3
         target: popupWindow
         property: "x"
-        from: popupWindow.screenX - maxWidth - ((20*(313.857/2000) * popupWindow.line) / 1.5)
+        from: popupWindow.x
         to: popupWindow.screenX - (maxWidth+startSize+((20*(313.857/2000) * popupWindow.line) / 1.5))/2
         duration: 1000
         running: uhod !== false || closeClicked !== false
@@ -324,7 +324,7 @@ PropertyAnimation {
         id: progressAnimationY3
         target: popupWindow
         property: "y"
-        from: popupWindow.line
+        from: popupWindow.y
         to: -startSize
         duration: 1000
         running: uhod !== false || closeClicked !== false
