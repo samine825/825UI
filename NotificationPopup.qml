@@ -11,11 +11,22 @@ Rectangle {
     property var startSize: 80
     property var line: 5
 
+    // ── стек уведомлений ──
+    // slotIndex выставляется извне (Shell.qml) и отражает позицию
+    // этого уведомления в столбце активных (ещё не уходящих) уведомлений.
+    property int slotIndex: 0
+    // расстояние по вертикали между соседними уведомлениями в столбце
+    property real stackSpacing: 10
+    // итоговая Y-координата "своего места" в столбце для текущего slotIndex
+    property real dockedY: popupWindow.line + slotIndex * (startSize + stackSpacing)
+
     y: -startSize
     x: !maxY ? ((screenX - width) / 2) : undefined
     width: startSize
     height: startSize
     color: 'transparent'
+    // уходящее уведомление всегда должно быть позади остальных
+    z: (uhod || closeClicked) ? 0 : 1
 
     FontLoader { 
         id: notifFont 
@@ -88,13 +99,13 @@ Rectangle {
 
                     anchors.topMargin: 10
                     anchors.bottomMargin: 10
-                    anchors.leftMargin: startSize - ((width - startSize)/16)
-                    anchors.rightMargin: startSize - ((width - startSize)/16)
-
+                    anchors.leftMargin: (popupWindow.startSize*(popupWindow.width + popupWindow.startSize - (2*popupWindow.maxWidth)))/(2*(popupWindow.startSize - popupWindow.maxWidth)) + (313.857/150) * popupWindow.line
+                    anchors.rightMargin: (popupWindow.startSize*(popupWindow.width + popupWindow.startSize - (2*popupWindow.maxWidth)))/(2*(popupWindow.startSize - popupWindow.maxWidth)) + (313.857/150) * popupWindow.line
+                    //(startSize*(width + startSize - 2*maxWidth))/(2*(startSize - maxWidth))
                     Image {
                         id: notifImage
-                        width: startSize - 10*2
-                        height: startSize - 10*2
+                        width: popupWindow.startSize - 10*2
+                        height: popupWindow.startSize - 10*2
                         fillMode: Image.PreserveAspectCrop
                         source: popupWindow.currentNotification ? popupWindow.currentNotification.image : ""
                         visible: popupWindow.currentNotification && popupWindow.currentNotification.image !== ""
@@ -229,15 +240,46 @@ Rectangle {
         running: maxY !== false && closeClicked !== true
         easing.type: Easing.InOutCubic
     }
-    PropertyAnimation {
-        id: progressAnimationY2
+    // Вместо жёстко зафиксированного "to: line" уведомление едет к своей
+    // позиции в столбце (dockedY). Эта позиция может меняться в любой
+    // момент, пока уведомление активно (например, когда другое уведомление
+    // выше по стеку исчезает) — тогда все нижестоящие плавно подвигаются
+    // ближе к углу, а "призрачное" место не остаётся пустым.
+    //
+    // easing.type здесь намеренно НЕ совпадает с easing'ом X
+    // (Easing.InOutCubic) — именно из-за рассинхрона кривых X и Y
+    // траектория получается изогнутой, "по дуге", как и в исходной
+    // анимации, а не прямой диагональю в угол.
+    NumberAnimation {
+        id: dockYAnimation
         target: popupWindow
         property: "y"
-        from: popupWindow.y
-        to: popupWindow.line
-        duration: 1200
-        running: maxY !== false && closeClicked !== true
-        easing.type: Easing.InCubic
+        easing.type: Easing.InOutCubic
+    }
+
+    function animateToDockedY(duration) {
+        dockYAnimation.stop()
+        dockYAnimation.duration = duration
+        dockYAnimation.from = popupWindow.y
+        dockYAnimation.to = popupWindow.dockedY
+        dockYAnimation.start()
+    }
+
+    // первичный приезд в угол (аналог старой progressAnimationY2, тот же
+    // easing/duration — сохраняем исходную дугу движения)
+    onMaxYChanged: {
+        if (maxY !== false && closeClicked !== true) {
+            animateToDockedY(1200)
+        }
+    }
+
+    // репозиционирование при изменении места в столбце (кто-то выше исчез
+    // или, наоборот, перед этим уведомлением появилось новое) — та же
+    // кривая, но короче и мягче, т.к. это уже небольшая подстройка
+    onDockedYChanged: {
+        if (maxY !== false && closeClicked !== true && uhod !== true) {
+            animateToDockedY(500)
+        }
     }
     PropertyAnimation {
         id: progressAnimationRotation2

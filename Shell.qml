@@ -112,6 +112,32 @@ ShellRoot {
         // Сам popup может вращаться/анимироваться сколько угодно.
         property var notificationRegions: []
 
+        // Упорядоченный стек активных (ещё не уходящих) уведомлений.
+        // Индекс элемента в этом массиве == slotIndex popup'а == его место
+        // в столбце. Как только уведомление начинает уходить (uhod или
+        // closeClicked), оно немедленно убирается отсюда, а все, что были
+        // ниже него, переиндексируются и плавно подтягиваются к углу —
+        // так "призрачное" место не остаётся пустым.
+        property var activeStack: []
+
+        function pushToStack(popup) {
+            var newStack = notificationScreen.activeStack.concat([popup])
+            notificationScreen.activeStack = newStack
+            popup.slotIndex = newStack.length - 1
+        }
+
+        function removeFromStack(popup) {
+            var idx = notificationScreen.activeStack.indexOf(popup)
+            if (idx === -1)
+                return
+            var newStack = notificationScreen.activeStack.slice()
+            newStack.splice(idx, 1)
+            notificationScreen.activeStack = newStack
+            for (var i = 0; i < newStack.length; i++) {
+                newStack[i].slotIndex = i
+            }
+        }
+
         mask: Region {
             regions: notificationScreen.notificationRegions
         }
@@ -145,6 +171,24 @@ ShellRoot {
             popup.currentNotification = notification
             popup.visible = true
 
+            // Ставим уведомление в очередь столбца — оно получает
+            // slotIndex, определяющий его Y-позицию рядом с остальными.
+            notificationScreen.pushToStack(popup)
+
+            // Как только уведомление начинает "уходить" (истёк таймаут
+            // или клик по крестику) — сразу освобождаем его место, чтобы
+            // все нижестоящие уведомления подтянулись ближе к углу.
+            popup.uhodChanged.connect(function() {
+                if (popup.uhod) {
+                    notificationScreen.removeFromStack(popup)
+                }
+            })
+            popup.closeClickedChanged.connect(function() {
+                if (popup.closeClicked) {
+                    notificationScreen.removeFromStack(popup)
+                }
+            })
+
             // Это НЕ визуальный элемент popup.
             // Это отдельная невращаемая прямоугольная область клика.
             var hitbox = Qt.createQmlObject(
@@ -168,6 +212,10 @@ ShellRoot {
                 notificationScreen.notificationRegions.concat([region])
 
             popup.destroyed.connect(function() {
+                // страховка: если popup был уничтожен без прохождения
+                // через uhod/closeClicked, всё равно освобождаем слот
+                notificationScreen.removeFromStack(popup)
+
                 var regions = notificationScreen.notificationRegions.slice()
                 var index = regions.indexOf(region)
                 if (index !== -1) {
