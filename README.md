@@ -1,2 +1,2 @@
 # 825UI
-my quickshell config
+WIP
