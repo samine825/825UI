@@ -6,12 +6,10 @@ import Quickshell.Io
 import Quickshell.Wayland
 
 PanelWindow {
-    id: settingsRoot
+    id: root
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
     visible: false
     focusable: true
-
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
-
     exclusiveZone: -1
     anchors {
         top: true
@@ -20,6 +18,17 @@ PanelWindow {
         bottom: true
     }
     color: "transparent"
+    MouseArea {
+        anchors.fill: parent
+        onClicked: root.hide()
+    }
+    function show() {
+        root.visible = true
+    }
+
+    function hide() {
+        root.visible = false
+    }
 
     property var tabNames: ["System", "Bar", "Wallpapers", "Monitor", "About"]
     property int currentTab: 0
@@ -36,11 +45,11 @@ PanelWindow {
         z: 100
 
         Keys.onLeftPressed: {
-            settingsRoot.currentTab = (settingsRoot.currentTab - 1 + settingsRoot.tabNames.length) % settingsRoot.tabNames.length
+            root.currentTab = (root.currentTab - 1 + root.tabNames.length) % root.tabNames.length
         }
 
         Keys.onRightPressed: {
-            settingsRoot.currentTab = (settingsRoot.currentTab + 1) % settingsRoot.tabNames.length
+            root.currentTab = (root.currentTab + 1) % root.tabNames.length
         }
     }
 
@@ -58,14 +67,14 @@ PanelWindow {
             onRead: function(data) {
                 var line = String(data).trim()
                 if (line !== "") {
-                    settingsRoot.wallpaperBuffer.push(line)
+                    root.wallpaperBuffer.push(line)
                 }
             }
         }
 
         onRunningChanged: {
             if (!wallpaperScanner.running) {
-                settingsRoot.wallpaperModel = settingsRoot.wallpaperBuffer.slice().sort()
+                root.wallpaperModel = root.wallpaperBuffer.slice().sort()
             }
         }
     }
@@ -76,15 +85,15 @@ PanelWindow {
     }
 
     function ensureWallpapersLoaded() {
-        if (!settingsRoot.wallpapersLoaded) {
-            settingsRoot.wallpapersLoaded = true
-            settingsRoot.rescanWallpapers()
+        if (!root.wallpapersLoaded) {
+            root.wallpapersLoaded = true
+            root.rescanWallpapers()
         }
     }
 
     function rescanWallpapers() {
-        settingsRoot.wallpaperBuffer = []
-        settingsRoot.wallpaperModel = []
+        root.wallpaperBuffer = []
+        root.wallpaperModel = []
 
         wallpaperScanner.running = false
         wallpaperScanner.running = true
@@ -107,24 +116,18 @@ PanelWindow {
     }
 
     onVisibleChanged: {
-        if (settingsRoot.visible) {
-            settingsRoot.forceActiveFocus()
+        if (root.visible) {
 
-            if (settingsRoot.currentTab === 2) {
-                settingsRoot.ensureWallpapersLoaded()
+            if (root.currentTab === 2) {
+                root.ensureWallpapersLoaded()
             }
         }
     }
 
     onCurrentTabChanged: {
-        if (settingsRoot.visible && settingsRoot.currentTab === 2) {
-            settingsRoot.ensureWallpapersLoaded()
+        if (root.visible && root.currentTab === 2) {
+            root.ensureWallpapersLoaded()
         }
-    }
-
-    MouseArea {
-        anchors.fill: parent
-        onClicked: settingsRoot.visible = false
     }
 
     Rectangle {
@@ -146,7 +149,7 @@ PanelWindow {
                 anchors.horizontalCenter: parent.horizontalCenter
 
                 property real point: height * (403.16 / 1000)
-                property real tabWidth: width / settingsRoot.tabNames.length
+                property real tabWidth: width / root.tabNames.length
 
                 property real tabBorderWidth: 5
                 property real blackOutlineWidth: 5
@@ -239,7 +242,7 @@ PanelWindow {
                     width: tabBar.tabWidth - 5 * 6
                     height: indH
                     y: (tabBar.height - indH) / 2
-                    x: settingsRoot.currentTab * tabBar.tabWidth + 5 * 3
+                    x: root.currentTab * tabBar.tabWidth + 5 * 3
 
                     Behavior on x {
                         NumberAnimation { duration: 300; easing.type: Easing.InOutQuad }
@@ -264,7 +267,7 @@ PanelWindow {
                 }
 
                 Repeater {
-                    model: settingsRoot.tabNames.length - 1
+                    model: root.tabNames.length - 1
 
                     delegate: Shape {
                         id: dividerShape
@@ -285,7 +288,7 @@ PanelWindow {
                             startY: 0
 
                             PathLine {
-                                x: settingsRoot.currentTab <= index
+                                x: root.currentTab <= index
                                     ? dividerShape.xPos - tabBar.point
                                     : dividerShape.xPos + tabBar.point
                                 y: tabBar.height / 2
@@ -308,7 +311,7 @@ PanelWindow {
                     z: 3
 
                     Repeater {
-                        model: settingsRoot.tabNames
+                        model: root.tabNames
 
                         delegate: Item {
                             width: tabBar.tabWidth
@@ -316,10 +319,10 @@ PanelWindow {
 
                             property real textOffset: {
                                 var i = index
-                                var last = settingsRoot.tabNames.length - 1
+                                var last = root.tabNames.length - 1
 
-                                var leftNotch = (i === 0) || (settingsRoot.currentTab >= i)
-                                var rightNotch = (i === last) || (settingsRoot.currentTab <= i)
+                                var leftNotch = (i === 0) || (root.currentTab >= i)
+                                var rightNotch = (i === last) || (root.currentTab <= i)
 
                                 if (leftNotch && !rightNotch)
                                     return tabBar.point / 2
@@ -332,7 +335,7 @@ PanelWindow {
 
                             Text {
                                 text: modelData
-                                color: settingsRoot.currentTab === index ? "#0a0a0a" : Settings.barColor
+                                color: root.currentTab === index ? "#0a0a0a" : Settings.barColor
                                 anchors.verticalCenter: parent.verticalCenter
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 anchors.horizontalCenterOffset: textOffset
@@ -350,7 +353,7 @@ PanelWindow {
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: settingsRoot.currentTab = index
+                                onClicked: root.currentTab = index
                             }
                         }
                     }
@@ -382,7 +385,7 @@ PanelWindow {
 
                 // system
                 Item {
-                    visible: settingsRoot.currentTab === 0
+                    visible: root.currentTab === 0
                     anchors.fill: parent
                     anchors.margins: 5
 
@@ -395,7 +398,7 @@ PanelWindow {
 
                 // bar
                 Item {
-                    visible: settingsRoot.currentTab === 1
+                    visible: root.currentTab === 1
                     anchors.fill: parent
                     anchors.margins: 5
 
@@ -409,7 +412,7 @@ PanelWindow {
                 // wallpapers
                 Item {
                     id: wallpapersTab
-                    visible: settingsRoot.currentTab === 2
+                    visible: root.currentTab === 2
                     anchors.fill: parent
                     anchors.margins: 5
                     clip: true
@@ -431,7 +434,7 @@ PanelWindow {
                             Math.floor((width - margin * 2 - gap * (columns - 1)) / columns)
                         )
 
-                        property real rows: Math.ceil(settingsRoot.wallpaperModel.length / columns)
+                        property real rows: Math.ceil(root.wallpaperModel.length / columns)
 
                         contentWidth: width
                         contentHeight: Math.max(
@@ -440,7 +443,7 @@ PanelWindow {
                         )
 
                         Repeater {
-                            model: settingsRoot.wallpaperModel
+                            model: root.wallpaperModel
 
                             delegate: Item {
                                 id: wallpaperDelegate
@@ -593,14 +596,14 @@ PanelWindow {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
                                     z: 4
-                                    onClicked: settingsRoot.applyWallpaper(wallpaperDelegate.path)
+                                    onClicked: root.applyWallpaper(wallpaperDelegate.path)
                                 }
                             }
                         }
 
                         Text {
                             anchors.centerIn: parent
-                            visible: settingsRoot.wallpaperModel.length === 0
+                            visible: root.wallpaperModel.length === 0
                             text: "~/Pictures/Wallpapers"
                             color: Settings.barColor
                         }
@@ -707,14 +710,14 @@ PanelWindow {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: settingsRoot.rescanWallpapers()
+                            onClicked: root.rescanWallpapers()
                         }
                     }
                 }
 
                 // monitor
                 Item {
-                    visible: settingsRoot.currentTab === 3
+                    visible: root.currentTab === 3
                     anchors.fill: parent
                     anchors.margins: 5
 
@@ -727,7 +730,7 @@ PanelWindow {
 
                 // about
                 Item {
-                    visible: settingsRoot.currentTab === 4
+                    visible: root.currentTab === 4
                     anchors.fill: parent
                     anchors.margins: 5
 

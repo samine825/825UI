@@ -44,11 +44,11 @@ ShellRoot {
             width: Notifications.notifications.length > 0 ? badgeRect.width : 0
             height: parent.height
             visible: Notifications.notifications.length > 0
-            
+
             Behavior on width {
                 NumberAnimation { duration: 200 }
             }
-            
+
             Rectangle {
                 id: badgeRect
                 anchors.centerIn: parent
@@ -56,7 +56,7 @@ ShellRoot {
                 height: badgeText.implicitHeight + 6
                 color: "#ff4444"
             }
-            
+
             Text {
                 id: badgeText
                 anchors.centerIn: parent
@@ -65,11 +65,20 @@ ShellRoot {
                 font.bold: true
                 color: "white"
             }
-            
+
             MouseArea {
                 anchors.fill: parent
                 onClicked: Notifications.dismissAll()
             }
+        }
+
+        // клик по бару → лаунчер
+        MouseArea {
+            id: barClick
+            anchors.fill: bar
+            z: 10
+            cursorShape: Qt.PointingHandCursor
+            onClicked: appLauncher.show()
         }
 
         IpcHandler {
@@ -91,6 +100,10 @@ ShellRoot {
                     "Это тестовое уведомление"
                 ])
             }
+
+            function toggleLauncher(): void {
+                !appLauncher.visible ? appLauncher.show() : appLauncher.hide()
+            }
         }
     }
 
@@ -109,15 +122,9 @@ ShellRoot {
         color: "transparent"
 
         // Только hitbox'ы уведомлений входят в Wayland input region.
-        // Сам popup может вращаться/анимироваться сколько угодно.
         property var notificationRegions: []
 
-        // Упорядоченный стек активных (ещё не уходящих) уведомлений.
-        // Индекс элемента в этом массиве == slotIndex popup'а == его место
-        // в столбце. Как только уведомление начинает уходить (uhod или
-        // closeClicked), оно немедленно убирается отсюда, а все, что были
-        // ниже него, переиндексируются и плавно подтягиваются к углу —
-        // так "призрачное" место не остаётся пустым.
+        // Упорядоченный стек активных уведомлений
         property var activeStack: []
 
         function pushToStack(popup) {
@@ -159,8 +166,6 @@ ShellRoot {
                 return
             }
 
-            // ВАЖНО: popup и hitbox создаются непосредственно в columnRef.
-            // Никаких дополнительных динамических parent-объектов.
             var popup = component.createObject(columnRef)
             if (!popup) {
                 console.error("Failed to create NotificationPopup")
@@ -171,13 +176,8 @@ ShellRoot {
             popup.currentNotification = notification
             popup.visible = true
 
-            // Ставим уведомление в очередь столбца — оно получает
-            // slotIndex, определяющий его Y-позицию рядом с остальными.
             notificationScreen.pushToStack(popup)
 
-            // Как только уведомление начинает "уходить" (истёк таймаут
-            // или клик по крестику) — сразу освобождаем его место, чтобы
-            // все нижестоящие уведомления подтянулись ближе к углу.
             popup.uhodChanged.connect(function() {
                 if (popup.uhod) {
                     notificationScreen.removeFromStack(popup)
@@ -189,8 +189,6 @@ ShellRoot {
                 }
             })
 
-            // Это НЕ визуальный элемент popup.
-            // Это отдельная невращаемая прямоугольная область клика.
             var hitbox = Qt.createQmlObject(
                 'import QtQuick; Item {\n                    property var popup: null\n                    x: popup ? popup.x : 0\n                    y: popup ? popup.y : 0\n                    width: popup ? popup.width : 0\n                    height: popup ? popup.height : 0\n                    MouseArea {\n                        anchors.fill: parent\n                        onClicked: {\n                            if (parent.popup)\n                                parent.popup.closeClicked = true\n                        }\n                    }\n                }',
                 columnRef,
@@ -200,7 +198,6 @@ ShellRoot {
             hitbox.popup = popup
             hitbox.z = 100000
 
-            // Region следит за hitbox, а hitbox следит за x/y/width/height popup.
             var region = Qt.createQmlObject(
                 'import Quickshell; Region {}',
                 notificationScreen,
@@ -212,8 +209,6 @@ ShellRoot {
                 notificationScreen.notificationRegions.concat([region])
 
             popup.destroyed.connect(function() {
-                // страховка: если popup был уничтожен без прохождения
-                // через uhod/closeClicked, всё равно освобождаем слот
                 notificationScreen.removeFromStack(popup)
 
                 var regions = notificationScreen.notificationRegions.slice()
@@ -230,12 +225,16 @@ ShellRoot {
         }
 
         function onAllCleared() {
-            // Не обращаемся к несуществующему notifPopup.
         }
     }
 
     // ─── ОКНО НАСТРОЕК ──────────────────────────────────────────
     SettingsMenu {
         id: settingsMenu
+    }
+
+    // ─── ЛАУНЧЕР ПРИЛОЖЕНИЙ ─────────────────────────────────────
+    AppLauncher {
+        id: appLauncher
     }
 }
