@@ -85,90 +85,7 @@ PanelWindow {
     property var allApps: []       
     property var filteredApps: []  
     
-    Item {
-	    id: active
-	    width: circle.width
-	    height: circle.height
-	    x: (Screen.width - width) / 2
-	    y: circle.y
-	    z: 1
-	
-	    Shape {
-	        id: activeShape
-	        anchors.fill: parent
-	        //preferredRendererType: Shape.CurveRenderer
-	
-	        ShapePath {
-	            id: sh
-	            fillColor: "#ffffff"
-	            strokeColor: "transparent"
-	            strokeWidth: 0
-
-	            // дуги
-	            readonly property real rr: circle.width / 2 - root.line * 2
-	            readonly property real r: circle.width / 2 - (root.thickness - root.line * 2)
-
-	            // углы дуг
-	            readonly property real angle1: (90-root.angle/2) * Math.PI / 180
-	            readonly property real angle2: (90+root.angle/2) * Math.PI / 180
-
-	            function offX(theta, radius, sign) {
-	                var t = Math.sqrt(Math.max(0, radius*radius - root.line*root.line*9))
-	                return circle.width/2 + t * Math.cos(theta) - sign * 3*root.line * Math.sin(theta)
-	            }
-	            function offY(theta, radius, sign) {
-	                var t = Math.sqrt(Math.max(0, radius*radius - root.line*root.line*9))
-	                return circle.height/2 + t * Math.sin(theta) + sign * 3*root.line * Math.cos(theta)
-	            }
-
-	            readonly property real rMid: (rr + r) / 2
-	            readonly property real pointCoef: 403.16 / 1000
-	            readonly property real notchDepth: pointCoef * (root.thickness - root.line * 3)
-
-	            startX: sh.offX(sh.angle1, sh.rr, 1)
-	            startY: sh.offY(sh.angle1, sh.rr, 1)
-
-	            // внешняя дуга
-	            PathArc {
-	                x: sh.offX(sh.angle2, sh.rr, -1)
-	                y: sh.offY(sh.angle2, sh.rr, -1)
-	                radiusX: sh.rr
-	                radiusY: sh.rr
-	                useLargeArc: false
-	                direction: PathArc.Clockwise
-	            }
-	            // право верх
-	            PathLine {
-	                x: sh.offX(sh.angle2, sh.rMid, -1) + sh.notchDepth * Math.sin(sh.angle2)
-	                y: sh.offY(sh.angle2, sh.rMid, -1) - sh.notchDepth * Math.cos(sh.angle2)
-	            }
-	            // право низ
-	            PathLine {
-	                x: sh.offX(sh.angle2, sh.r, -1)
-	                y: sh.offY(sh.angle2, sh.r, -1)
-	            }
-	            // внутренняя дуга
-	            PathArc {
-	                x: sh.offX(sh.angle1, sh.r, 1)
-	                y: sh.offY(sh.angle1, sh.r, 1)
-	                radiusX: sh.r
-	                radiusY: sh.r
-	                useLargeArc: false
-	                direction: PathArc.Counterclockwise
-	            }
-	            // лево низ
-	            PathLine {
-	                x: sh.offX(sh.angle1, sh.rMid, 1) - sh.notchDepth * Math.sin(sh.angle1)
-	                y: sh.offY(sh.angle1, sh.rMid, 1) + sh.notchDepth * Math.cos(sh.angle1)
-	            }
-	            // лево верх
-	            PathLine {
-	                x: sh.startX
-	                y: sh.startY
-	            }
-	        }
-	    }
-	}
+    
     
     
     
@@ -339,7 +256,7 @@ PanelWindow {
                 id: dividerShape
                 preferredRendererType: Shape.CurveRenderer
                 anchors.fill: parent
-                z: 2
+                z: 1
 
                 property real pointCoef: (403.16 / 1000)
 
@@ -374,95 +291,154 @@ PanelWindow {
             }
         }
 
+        Item {
+		    id: active
+		    width: circle.width
+		    height: circle.height
+		
+		    z: 2
+		    rotation: -circle.rotation
+		    Shape {
+	
+		        id: activeShape
+		        anchors.fill: parent
+		        //preferredRendererType: Shape.CurveRenderer
+		
+		        ShapePath {
+		            id: sh
+		            fillColor: "#ffffff"
+		            strokeColor: "transparent"
+		            strokeWidth: 0
+	
+		            // дуги
+		            readonly property real rr: circle.width / 2 - root.line * 2
+		            readonly property real r: circle.width / 2 - (root.thickness - root.line * 2)
+	
+		            // углы дуг
+		            readonly property real angle1: (90-root.angle/2) * Math.PI / 180
+		            readonly property real angle2: (90+root.angle/2) * Math.PI / 180
+	
+		            function offX(theta, radius, sign) {
+		                var t = Math.sqrt(Math.max(0, radius*radius - root.line*root.line*9))
+		                return circle.width/2 + t * Math.cos(theta) - sign * 3*root.line * Math.sin(theta)
+		            }
+		            function offY(theta, radius, sign) {
+		                var t = Math.sqrt(Math.max(0, radius*radius - root.line*root.line*9))
+		                return circle.height/2 + t * Math.sin(theta) + sign * 3*root.line * Math.cos(theta)
+		            }
+	
+		            readonly property real rMid: (rr + r) / 2
+		            readonly property real pointCoef: 403.16 / 1000
+		            readonly property real notchDepth: pointCoef * (root.thickness - root.line * 3)
+	
+		            startX: sh.offX(sh.angle1, sh.rr, 1)
+		            startY: sh.offY(sh.angle1, sh.rr, 1)
+	
+		            // внешняя дуга
+		            PathArc {
+		                x: sh.offX(sh.angle2, sh.rr, -1)
+		                y: sh.offY(sh.angle2, sh.rr, -1)
+		                radiusX: sh.rr
+		                radiusY: sh.rr
+		                useLargeArc: false
+		                direction: PathArc.Clockwise
+		            }
+		            // право верх
+		            PathLine {
+		                x: sh.offX(sh.angle2, sh.rMid, -1) + sh.notchDepth * Math.sin(sh.angle2)
+		                y: sh.offY(sh.angle2, sh.rMid, -1) - sh.notchDepth * Math.cos(sh.angle2)
+		            }
+		            // право низ
+		            PathLine {
+		                x: sh.offX(sh.angle2, sh.r, -1)
+		                y: sh.offY(sh.angle2, sh.r, -1)
+		            }
+		            // внутренняя дуга
+		            PathArc {
+		                x: sh.offX(sh.angle1, sh.r, 1)
+		                y: sh.offY(sh.angle1, sh.r, 1)
+		                radiusX: sh.r
+		                radiusY: sh.r
+		                useLargeArc: false
+		                direction: PathArc.Counterclockwise
+		            }
+		            // лево низ
+		            PathLine {
+		                x: sh.offX(sh.angle1, sh.rMid, 1) - sh.notchDepth * Math.sin(sh.angle1)
+		                y: sh.offY(sh.angle1, sh.rMid, 1) + sh.notchDepth * Math.cos(sh.angle1)
+		            }
+		            // лево верх
+		            PathLine {
+		                x: sh.startX
+		                y: sh.startY
+		            }
+		        }
+		    }
+		}
         Repeater {
-            model: root.filteredApps
-
-            delegate: Item {
-                property real pointCoef: (403.16 / 1000)
-                id: appCell
-                anchors.fill: parent
-                visible: Math.abs(index - root.selectedIndex) <= Math.floor(root.elementsCount / 2)
-                rotation: -index * root.angle
-                z: visible ? 10 + (root.elementsCount - Math.abs(index - root.selectedIndex)) : 0
-                
-                Rectangle {
-                    color:"#00ff0000"
-                    
-	                y: appCell.height - root.thickness + root.line
-	                property var dlinna: (Math.sin((angle/2)*(Math.PI / 180))*(circle.height/2))*2
-	                
-	
-	                property bool idx0: 0 <= -((-index+1 + selectedIndex) % elementsCount) * angle
-	                property bool idx1: 0 <= -((-index + selectedIndex) % elementsCount) * angle
-	                property var gR: idx0
-                            ? ((circle.width-dlinna) / 2) - (pointCoef * (thickness - (line * 0.5))*0.5)
-                            : ((circle.width-dlinna) / 2) + (pointCoef * (thickness - (line * 0.5))*0.5)
-                    property var gL: idx0 === idx1
-                            ? dlinna
-                            : idx1 
-                            ? dlinna - (pointCoef * (thickness - (line * 0.5)))
-                            : dlinna + (pointCoef * (thickness - (line * 0.5)))
-	                x: gR
-	                width: gL
-	                height: root.thickness - root.line*2
-	                
-                }
-                Column {
-                    
-	                y: appCell.height - root.thickness + root.line
-	                property var dlinna: (Math.sin((angle/2)*(Math.PI / 180))*(circle.height/2))*2
-	                
-	
-	                property bool idx0: 0 <= -((-index+1 + selectedIndex) % elementsCount) * angle
-	                property bool idx1: 0 <= -((-index + selectedIndex) % elementsCount) * angle
-	                property var gR: idx0
-                            ? ((circle.width-dlinna) / 2) - (pointCoef * (thickness - (line * 0.5))*0.5)
-                            : ((circle.width-dlinna) / 2) + (pointCoef * (thickness - (line * 0.5))*0.5)
-                    property var gL: idx0 === idx1
-                            ? dlinna 
-                            : idx1
-                            ? dlinna - (pointCoef * (thickness - (line * 0.5)))
-                            : dlinna + (pointCoef * (thickness - (line * 0.5)))
-	                x: gR
-	                width: gL
-	                height: root.thickness - root.line*2
-	                Behavior on width {
-                        NumberAnimation { duration: 500; easing.type: Easing.InOutQuad }
-                    }
-	                Behavior on x {
-                        NumberAnimation { duration: 500; easing.type: Easing.InOutQuad }
-                    }
-	                Image {
-	                    id: appIcon
-	                    width: 40
-	                    height: 40
-	                    //x: appCell.width / 2 - width / 2
-	                    //y: appText.y + appText.height + 5
-	                    source: modelData.icon ? Quickshell.iconPath(modelData.icon, "application-x-executable") : ""
-	                    fillMode: Image.PreserveAspectFit
-	                    smooth: true
-	                    visible: source !== "" && status === Image.Ready
-	                    anchors.horizontalCenter: parent.horizontalCenter
-	                }
-	                Text {
-	                    id: appText
-	                    color: "#ffffff"
-	                    text: modelData.name || ""
-	                    font.family: "IosevkaTerm NF"
-	                    font.pixelSize: 15
-	                    horizontalAlignment: Text.AlignHCenter
-	                    verticalAlignment: Text.AlignVCenter
-	                    anchors.horizontalCenter: parent.horizontalCenter
-	                    //x: appCell.width / 2 - width / 2
-	                    //y: appCell.height - root.thickness + root.line * 2 + root.thickness * 0.1
-	                    elide: Text.ElideRight
-	                }
-                }
-            }
-        }
+		    model: root.filteredApps
+		
+		    delegate: Item {
+		        z: 3
+		        property real pointCoef: (403.16 / 1000)
+		        id: appCell
+		        anchors.fill: parent
+		        visible: Math.abs(index - root.selectedIndex) <= Math.floor(root.elementsCount / 2)
+		        rotation: -index * root.angle
+		       
+		        Item {
+		            y: appCell.height - root.thickness + root.line
+		            property var dlinna: (Math.sin((angle/2)*(Math.PI / 180))*(circle.height/2))*2
+		            
+		            property bool idx0: 0 <= -((-index+1 + selectedIndex) % elementsCount) * angle
+		            property bool idx1: 0 <= -((-index + selectedIndex) % elementsCount) * angle
+		            property var gR: idx0
+		                        ? ((circle.width-dlinna) / 2) - (pointCoef * (thickness - (line * 0.5))*0.5)
+		                        : ((circle.width-dlinna) / 2) + (pointCoef * (thickness - (line * 0.5))*0.5)
+		            property var gL: idx0 === idx1
+		                        ? dlinna 
+		                        : idx1
+		                        ? dlinna - (pointCoef * (thickness - (line * 0.5)))
+		                        : dlinna + (pointCoef * (thickness - (line * 0.5)))
+		            x: gR
+		            width: gL
+		            height: root.thickness - root.line*2
+		            Behavior on width { NumberAnimation { duration: 500; easing.type: Easing.InOutQuad } }
+		            Behavior on x { NumberAnimation { duration: 500; easing.type: Easing.InOutQuad } }
+		            
+		            Column {
+		            	anchors.centerIn: parent
+			            Image {
+			                id: appIcon
+			                width: 40
+			                height: 40
+			                source: modelData.icon ? Quickshell.iconPath(modelData.icon, "application-x-executable") : ""
+			                fillMode: Image.PreserveAspectFit
+			                smooth: true
+			                visible: source !== "" && status === Image.Ready
+			                anchors.horizontalCenter: parent.horizontalCenter
+			            }
+			            Text {
+			                id: appText
+			                color: index === root.selectedIndex ? "#000000" : "#ffffff"
+			                Behavior on color { ColorAnimation { duration: 300 } }
+			                
+			                text: modelData.name || ""
+			                font.family: "IosevkaTerm NF"
+			                font.pixelSize: 15
+			                horizontalAlignment: Text.AlignHCenter
+			                verticalAlignment: Text.AlignVCenter
+			                anchors.horizontalCenter: parent.horizontalCenter
+			                elide: Text.ElideRight
+			            }
+	            	}
+		        }
+		    }
+		}
     }
-     // поиск
+    // поиск
     Item {
+    
         id: searchArea
         x: (Screen.width - width) / 2
         y: circle.height/4
