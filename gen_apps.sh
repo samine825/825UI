@@ -1,8 +1,8 @@
 #!/bin/bash
-OUT="/home/samine/.config/quickshell/825UI/apps.json"
+OUT="/data/data/com.termux/home/apps.json"
 echo '[' > "$OUT"
 first=true
-for f in $(find /usr/share/applications ~/.local/share/applications -name '*.desktop' 2>/dev/null | head -400); do
+for f in $(find /data/data/com.termux/files/usr/share/applications -name '*.desktop' 2>/dev/null | head -400); do
     name=$(grep -m1 '^Name=' "$f" 2>/dev/null | cut -d= -f2)
     icon=$(grep -m1 '^Icon=' "$f" 2>/dev/null | cut -d= -f2)
     exec=$(grep -m1 '^Exec=' "$f" 2>/dev/null | cut -d= -f2 | sed 's/%[fFuDdUutTv]//g')
