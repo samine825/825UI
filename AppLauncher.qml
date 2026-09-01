@@ -194,7 +194,9 @@ PanelWindow {
 	property var angle: 360.0 / elementsCount
     // круг
     Item {
-        //transform: Rotation { origin.x: 30; origin.y: 30; axis { x: 0; y: 1; z: 0 } angle: 54 }
+
+        
+        //transform: Rotation {id: abcd; origin.x: 500; origin.y: 500; axis { x: 0; y: 1; z: 0 } angle: 54 }
         id: circle
         width: 900
         height: 900
@@ -438,16 +440,7 @@ PanelWindow {
 		    }
 		}
     }
-    // PropertyAnimation {
-    //     id: progressAnimation
-    //     target: searchArea
-    //     property: "firstAngle"
-    //     from: 0
-    //     to: 360
-    //     duration: 4000
-    //     running: true
-    //     loops: Animation.Infinite
-    // }
+
     Item {
         id: searchArea
         width: circle.width - root.thickness*2 - root.line*6 - inputHeight
@@ -489,6 +482,30 @@ PanelWindow {
                     radiusY: searchArea.height / 2
                     direction: PathArc.Counterclockwise
                     useLargeArc: searchArea.angleDiff > 180
+                    Behavior on x {
+                        NumberAnimation {
+                            duration: 130
+                            easing.type: Easing.OutQuad
+                        }
+                    }
+                    Behavior on y {
+                        NumberAnimation {
+                            duration: 130
+                            easing.type: Easing.OutQuad
+                        }
+                    }
+                }
+                Behavior on startX {
+                    NumberAnimation {
+                        duration: 130
+                        easing.type: Easing.OutQuad
+                    }
+                }
+                Behavior on startY {
+                    NumberAnimation {
+                        duration: 130
+                        easing.type: Easing.OutQuad
+                    }
                 }
             }
 
@@ -507,6 +524,30 @@ PanelWindow {
                     radiusY: searchArea.height / 2
                     direction: PathArc.Counterclockwise
                     useLargeArc: searchArea.angleDiff > 180
+                    Behavior on x {
+                        NumberAnimation {
+                            duration: 130
+                            easing.type: Easing.OutQuad
+                        }
+                    }
+                    Behavior on y {
+                        NumberAnimation {
+                            duration: 130
+                            easing.type: Easing.OutQuad
+                        }
+                    }
+                }
+                Behavior on startX {
+                    NumberAnimation {
+                        duration: 130
+                        easing.type: Easing.OutQuad
+                    }
+                }
+                Behavior on startY {
+                    NumberAnimation {
+                        duration: 130
+                        easing.type: Easing.OutQuad
+                    }
                 }
             }
 
@@ -525,6 +566,30 @@ PanelWindow {
                     radiusY: searchArea.height / 2
                     direction: PathArc.Counterclockwise
                     useLargeArc: searchArea.angleDiff > 180
+                    Behavior on x {
+                        NumberAnimation {
+                            duration: 130
+                            easing.type: Easing.OutQuad
+                        }
+                    }
+                    Behavior on y {
+                        NumberAnimation {
+                            duration: 130
+                            easing.type: Easing.OutQuad
+                        }
+                    }
+                }
+                Behavior on startX {
+                    NumberAnimation {
+                        duration: 130
+                        easing.type: Easing.OutQuad
+                    }
+                }
+                Behavior on startY {
+                    NumberAnimation {
+                        duration: 130
+                        easing.type: Easing.OutQuad
+                    }
                 }
             }
         }
@@ -586,7 +651,7 @@ PanelWindow {
             id: curvedText
             anchors.fill: parent
             property int characterCount: searchInput.text.length
-            property real totalAngle: Math.max(0, (characterCount ) * searchArea.charAngle)
+            property real totalAngle: Math.max(0, (characterCount +1) * searchArea.charAngle)
             property real firstAngle: 270 - totalAngle / 2
 
             Repeater {
@@ -657,74 +722,7 @@ PanelWindow {
             rotation: 0
         }
 
-        Rectangle {
-            id: inputCaret
-            visible: searchInput.activeFocus
-            width: 4
-            height: 20
-            radius: 1
-            color: "#00ffffff"
-
-            property int count: searchInput.text.length
-            property real theta: (
-                curvedText.characterCount === 0
-                ? 270
-                : curvedText.firstAngle
-                  + 0 * searchArea.charAngle
-            ) * Math.PI / 180
-
-            x: -searchArea.arcRadius * Math.cos(theta)
-
-
-            y: -searchArea.arcRadius * Math.sin(theta)
-               - height / 2
-
-            rotation: theta * 180 / Math.PI + 90
-
-            Behavior on x {
-                NumberAnimation {
-                    duration: 130
-                    easing.type: Easing.OutQuad
-                }
-            }
-
-            Behavior on y {
-                NumberAnimation {
-                    duration: 130
-                    easing.type: Easing.OutQuad
-                }
-            }
-
-            Behavior on rotation {
-                NumberAnimation {
-                    duration: 130
-                    easing.type: Easing.OutQuad
-                }
-            }
-            property bool yes: true
-            
-            
-
-
-SequentialAnimation {
-    id: blinkAnimation
-    running: true
-    loops: Animation.Infinite
-    
-    ColorAnimation {
-        target: inputCaret
-        property: "color"
-        to: "#00ffffff"
-        duration: 500
-    }
-    ColorAnimation {
-        target: inputCaret
-        property: "color"
-        to: "#ffffffff"
-        duration: 500
-    }
-}
-        }
+        
 
         MouseArea {
             anchors.fill: parent
