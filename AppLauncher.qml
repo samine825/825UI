@@ -438,30 +438,32 @@ PanelWindow {
 		    }
 		}
     }
-    PropertyAnimation {
-        id: progressAnimation
-        target: searchArea
-        property: "firstAngle"
-        from: 0
-        to: 360
-        duration: 4000
-        running: true
-        loops: Animation.Infinite
-    }
+    // PropertyAnimation {
+    //     id: progressAnimation
+    //     target: searchArea
+    //     property: "firstAngle"
+    //     from: 0
+    //     to: 360
+    //     duration: 4000
+    //     running: true
+    //     loops: Animation.Infinite
+    // }
     Item {
         id: searchArea
-        width: circle.width - root.thickness*2
-        height: circle.height - root.thickness*2
-        x: (Screen.width - width) / 2
+        width: circle.width - root.thickness*2 - root.line*6 - inputHeight
+        height: circle.height - root.thickness*2 - root.line*6  - inputHeight
+        x: circle.x + circle.width/2
         y: circle.y + circle.width/2
 
-        property real arcRadius: 540
+        property real arcRadius: searchArea.width/2
         property real arcCenterX: circle.width / 2
         property real arcCenterY: circle.height / 2
-        property real charAngle: 2
+        property real charAngle: 3
 
-        property real firstAngle: -60
-        property real secondAngle: 60
+        property real firstAngle: curvedText.firstAngle + 90
+        property real secondAngle: -curvedText.firstAngle - 90
+
+        property real inputHeight: 50
 
         readonly property real angleDiff: {
             let diff = (searchArea.secondAngle - searchArea.firstAngle) % 360;
@@ -471,16 +473,17 @@ PanelWindow {
         Shape {
             anchors.fill: parent
             preferredRendererType: Shape.CurveRenderer
+
             ShapePath {
-                strokeColor: "#ff0000"
-                strokeWidth: 18
+                strokeColor: "#000000"
+                strokeWidth: searchArea.inputHeight + root.line*2
                 fillColor: "transparent"
 
-                startX: searchArea.width/2 + (searchArea.width/2 * Math.sin(searchArea.firstAngle * Math.PI / 180) )
+                startX: searchArea.width/2 * Math.sin(searchArea.firstAngle * Math.PI / 180)
                 startY: searchArea.width/2 * Math.cos(searchArea.firstAngle * Math.PI / 180)
 
                 PathArc {
-                    x: searchArea.width/2 + (searchArea.width/2 * Math.sin(searchArea.secondAngle * Math.PI / 180) )
+                    x: searchArea.width/2 * Math.sin(searchArea.secondAngle * Math.PI / 180)
                     y: searchArea.width/2 * Math.cos(searchArea.secondAngle * Math.PI / 180)
                     radiusX: searchArea.width / 2
                     radiusY: searchArea.height / 2
@@ -490,15 +493,33 @@ PanelWindow {
             }
 
             ShapePath {
-                strokeColor: "#00ffff"
-                strokeWidth: 8
+                strokeColor: "#ffffff"
+                strokeWidth: searchArea.inputHeight
                 fillColor: "transparent"
 
-                startX: searchArea.width/2 + (searchArea.width/2 * Math.sin(searchArea.firstAngle * Math.PI / 180) )
+                startX: searchArea.width/2 * Math.sin(searchArea.firstAngle * Math.PI / 180)
                 startY: searchArea.width/2 * Math.cos(searchArea.firstAngle * Math.PI / 180)
 
                 PathArc {
-                    x: searchArea.width/2 + (searchArea.width/2 * Math.sin(searchArea.secondAngle * Math.PI / 180) )
+                    x: searchArea.width/2 * Math.sin(searchArea.secondAngle * Math.PI / 180)
+                    y: searchArea.width/2 * Math.cos(searchArea.secondAngle * Math.PI / 180)
+                    radiusX: searchArea.width / 2
+                    radiusY: searchArea.height / 2
+                    direction: PathArc.Counterclockwise
+                    useLargeArc: searchArea.angleDiff > 180
+                }
+            }
+
+            ShapePath {
+                strokeColor: "#000000"
+                strokeWidth: searchArea.inputHeight - root.line*2
+                fillColor: "transparent"
+
+                startX: searchArea.width/2 * Math.sin(searchArea.firstAngle * Math.PI / 180)
+                startY: searchArea.width/2 * Math.cos(searchArea.firstAngle * Math.PI / 180)
+
+                PathArc {
+                    x: searchArea.width/2 * Math.sin(searchArea.secondAngle * Math.PI / 180)
                     y: searchArea.width/2 * Math.cos(searchArea.secondAngle * Math.PI / 180)
                     radiusX: searchArea.width / 2
                     radiusY: searchArea.height / 2
@@ -565,7 +586,7 @@ PanelWindow {
             id: curvedText
             anchors.fill: parent
             property int characterCount: searchInput.text.length
-            property real totalAngle: Math.max(0, (characterCount - 1) * searchArea.charAngle)
+            property real totalAngle: Math.max(0, (characterCount ) * searchArea.charAngle)
             property real firstAngle: 270 - totalAngle / 2
 
             Repeater {
@@ -575,7 +596,7 @@ PanelWindow {
                     required property int index
                     property string character: searchInput.text.charAt(index)
 
-                    property real theta: (curvedText.firstAngle + (searchInput.text.length - index) * searchArea.charAngle) * Math.PI / 180
+                    property real theta: (curvedText.firstAngle + (searchInput.text.length - index ) * searchArea.charAngle) * Math.PI / 180
 
                     color: "#ffffff"
                     font.family: "IosevkaTerm NF"
@@ -584,11 +605,11 @@ PanelWindow {
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
 
-                    x: searchArea.arcRadius * Math.cos(theta)
-                       + width / 2
+                    x: -searchArea.arcRadius * Math.cos(theta)
+                       - width / 2
 
-                    y: searchArea.arcRadius * Math.sin(theta)
-                       + height / 2
+                    y: -searchArea.arcRadius * Math.sin(theta)
+                       - height / 2
 
                     rotation: theta * 180 / Math.PI + 90
 
@@ -626,13 +647,12 @@ PanelWindow {
 
             property real theta: 270 * Math.PI / 180
 
-            x: searchArea.arcCenterX
-               + searchArea.arcRadius * Math.cos(theta)
-               - width / 2
+            x: -searchArea.arcRadius * Math.cos(theta)
+                - width / 2
 
-            y: searchArea.arcCenterY
-               + searchArea.arcRadius * Math.sin(theta)
-               - height / 2
+            y: -searchArea.arcRadius * Math.sin(theta)
+                - height / 2
+
 
             rotation: 0
         }
