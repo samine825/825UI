@@ -436,48 +436,83 @@ PanelWindow {
 		    }
 		}
     }
-    // поиск
     Item {
-    
         id: searchArea
-        x: (Screen.width - width) / 2
-        y: circle.height/4
-        width: circle.height/4
-        height: 36
+        width: circle.width - root.thickness*2
+        height: circle.height - root.thickness*2
+        x: root.thickness
+        y: root.thickness
 
-        Rectangle {
+        property real arcRadius: 540
+        property real arcCenterX: circle.width / 2
+        property real arcCenterY: circle.height / 2
+        property real charAngle: 2
+
+        Shape {
             anchors.fill: parent
-            radius: 4
-            color: "#000000"
-            border.width: 5
-            border.color: "#ffffff"
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                strokeColor: "#000000"
+                strokeWidth: 18
+                fillColor: "transparent"
+
+                startX: 35
+                startY: 115
+
+                PathArc {
+                    x: searchArea.width - 35
+                    y: 115
+                    radiusX: 560
+                    radiusY: 560
+                    direction: PathArc.Clockwise
+                    useLargeArc: false
+                }
+            }
+
+            ShapePath {
+                strokeColor: "#ffffff"
+                strokeWidth: 8
+                fillColor: "transparent"
+
+                startX: 35
+                startY: 115
+
+                PathArc {
+                    x: searchArea.width - 35
+                    y: 115
+                    radiusX: circle.width / 2
+                    radiusY: circle.width / 2
+                    direction: PathArc.Clockwise
+                    useLargeArc: false
+                }
+            }
         }
 
         Text {
             id: searchIcon
-            anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: 12 }
+            x: 18
+            y: 93
             text: "\u2315"
             font.family: "IosevkaTerm NF"
-            font.pixelSize: 16
+            font.pixelSize: 18
             color: "#ffffff"
         }
-        
+
         TextInput {
             id: searchInput
-            anchors {
-                left: searchIcon.right
-                right: parent.right
-                leftMargin: 10
-                rightMargin: 10
-                verticalCenter: parent.verticalCenter
-            }
-            color: "#ffffff"
-            font.family: "IosevkaTerm NF"
-            font.pixelSize: 13
-            clip: true
-            selectByMouse: true
-            
+            x: 0
+            y: 0
+            width: 1
+            height: 1
+            color: "transparent"
+            font.pixelSize: 1
+            opacity: 0.01
+            clip: false
+            cursorVisible: false
+            selectByMouse: false
             focus: true
+
             onTextChanged: {
                 root.filterText = text
                 root.updateFilter()
@@ -489,20 +524,157 @@ PanelWindow {
             }
 
             Keys.onLeftPressed: {
-	            if (root.selectedIndex > 0) {
-	                root.selectedIndex -= 1
-	                circle.rotation = root.selectedIndex * root.angle
-	            }
-	        }
-	
-	        Keys.onRightPressed: {
-	            if (root.selectedIndex < root.filteredApps.length - 1) {
-	                root.selectedIndex += 1
-	                circle.rotation = root.selectedIndex * root.angle
-	            }
-	        }
+                if (root.selectedIndex > 0) {
+                    root.selectedIndex -= 1
+                    circle.rotation = root.selectedIndex * root.angle
+                }
+            }
+
+            Keys.onRightPressed: {   
+                if (root.selectedIndex < root.filteredApps.length - 1) {
+                    root.selectedIndex += 1
+                    circle.rotation = root.selectedIndex * root.angle
+                }
+            }
+
             Keys.onEscapePressed: {
                 root.hide()
+            }
+        }
+
+        Item {
+            id: curvedText
+            anchors.fill: parent
+
+            property int characterCount: searchInput.text.length
+            property real totalAngle: Math.max(0, (characterCount - 1) * searchArea.charAngle)
+            property real firstAngle: 270 - totalAngle / 2
+
+            Repeater {
+                model: searchInput.text.length
+
+                delegate: Text {
+                    required property int index
+                    property string character: searchInput.text.charAt(index)
+
+                    property real theta: (curvedText.firstAngle + index * searchArea.charAngle) * Math.PI / 180
+
+                    color: "#ffffff"
+                    font.family: "IosevkaTerm NF"
+                    font.pixelSize: 20
+                    text: character
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+
+                    x: searchArea.arcCenterX
+                       + searchArea.arcRadius * Math.cos(theta)
+                       - width / 2
+
+                    y: searchArea.arcCenterY
+                       + searchArea.arcRadius * Math.sin(theta)
+                       - height / 2
+
+                    rotation: theta * 180 / Math.PI + 90
+
+                    Behavior on x {
+                        NumberAnimation {
+                            duration: 130
+                            easing.type: Easing.OutQuad
+                        }
+                    }
+
+                    Behavior on y {
+                        NumberAnimation {
+                            duration: 130
+                            easing.type: Easing.OutQuad
+                        }
+                    }
+
+                    Behavior on rotation {
+                        NumberAnimation {
+                            duration: 130
+                            easing.type: Easing.OutQuad
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            id: curvedPlaceholder
+            visible: searchInput.text.length === 0
+            text: "Search"
+            color: "#ffffff"
+            font.family: "IosevkaTerm NF"
+            font.pixelSize: 16
+
+            property real theta: 270 * Math.PI / 180
+
+            x: searchArea.arcCenterX
+               + searchArea.arcRadius * Math.cos(theta)
+               - width / 2
+
+            y: searchArea.arcCenterY
+               + searchArea.arcRadius * Math.sin(theta)
+               - height / 2
+
+            rotation: 0
+        }
+
+        Rectangle {
+            id: inputCaret
+            visible: searchInput.activeFocus
+            width: 2
+            height: 20
+            radius: 1
+            color: "#ffffff"
+
+            property int count: searchInput.text.length
+            property real theta: (
+                curvedText.characterCount === 0
+                ? 270
+                : curvedText.firstAngle
+                  + curvedText.characterCount * searchArea.charAngle
+            ) * Math.PI / 180
+
+            x: searchArea.arcCenterX
+               + searchArea.arcRadius * Math.cos(theta)
+               - width / 2
+
+            y: searchArea.arcCenterY
+               + searchArea.arcRadius * Math.sin(theta)
+               - height / 2
+
+            rotation: theta * 180 / Math.PI + 90
+
+            Behavior on x {
+                NumberAnimation {
+                    duration: 130
+                    easing.type: Easing.OutQuad
+                }
+            }
+
+            Behavior on y {
+                NumberAnimation {
+                    duration: 130
+                    easing.type: Easing.OutQuad
+                }
+            }
+
+            Behavior on rotation {
+                NumberAnimation {
+                    duration: 130
+                    easing.type: Easing.OutQuad
+                }
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton
+
+            onClicked: {
+                searchInput.forceActiveFocus()
             }
         }
     }
