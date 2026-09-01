@@ -59,26 +59,26 @@ PanelWindow {
     readonly property int panelW: 520
     readonly property int panelH: Math.min(520, Screen.height - 160)
 
-    function updateFilter() {
-        let appsSource = DesktopEntries.applications.values || DesktopEntries.applications
-        let allApps = Array.from(appsSource)
-            
-        let q = filterText.trim().toLowerCase()
-        if (q === "") {
-            filteredApps = allApps
-        } else {
-            filteredApps = allApps.filter(app =>
-                app.name && app.name.toLowerCase().indexOf(q) !== -1
-            )
-        }
-        if (selectedIndex >= filteredApps.length)
-            selectedIndex = 0
-    }
-
-    function launchApp(entry) {
-        Quickshell.execDetached({ command: entry.command, workingDirectory: entry.workingDirectory })
-        root.hide()
-    }
+//    function updateFilter() {
+//        let appsSource = DesktopEntries.applications.values || DesktopEntries.applications
+//        let allApps = Array.from(appsSource)
+//            
+//        let q = filterText.trim().toLowerCase()
+//        if (q === "") {
+//            filteredApps = allApps
+//        } else {
+//            filteredApps = allApps.filter(app =>
+//                app.name && app.name.toLowerCase().indexOf(q) !== -1
+//            )
+//        }
+//        if (selectedIndex >= filteredApps.length)
+//            selectedIndex = 0
+//    }
+//
+//    function launchApp(entry) {
+//        Quickshell.execDetached({ command: entry.command, workingDirectory: entry.workingDirectory })
+//        root.hide()
+//    }
 	
     property string filterText: ""
     property int selectedIndex: 0
@@ -89,105 +89,105 @@ PanelWindow {
     
     
     
-    // ---
-    // ВРЕМЕННЫЙ МОДУЛЬ
-    // Process {
-    //     id: appListLoader
-    //     command: [
-    //         "sh", "-c",
-    //         //"cd /data/data/com.termux/files/usr/share/applications && grep -E '^(Name|Exec|Icon)=' *.desktop 2>/dev/null"
-    //         "cd /usr/share/applications && grep -E '^(Name|Exec|Icon)=' *.desktop 2>/dev/null"
-    //     ]
-    //     running: true
-    //     property var tempApps: ({})
-
-    //     stdout: SplitParser {
-    //         onRead: (line) => {
-    //             line = line.trim();
-    //             if (!line) return;
-
-    //             let separator = line.indexOf(":");
-    //             if (separator < 1) return;
-
-    //             let fileName = line.substring(0, separator);
-    //             let kv = line.substring(separator + 1);
-    //             let eq = kv.indexOf("=");
-    //             if (eq < 1) return;
-
-    //             let key = kv.substring(0, eq);
-    //             let value = kv.substring(eq + 1).trim();
-
-    //             let app = appListLoader.tempApps[fileName];
-    //             if (!app)
-    //                 app = {};
-
-    //             if (key === "Name")
-    //                 app.name = value;
-    //             else if (key === "Exec")
-    //                 app.command = value.replace(/%[fFuUidDkK]/g, "").trim();
-    //             else if (key === "Icon")
-    //                 app.icon = value;
-
-    //             appListLoader.tempApps[fileName] = app;
-
-    //             let apps = [];
-    //             let files = Object.keys(appListLoader.tempApps);
-    //             for (let i = 0; i < files.length; ++i) {
-    //                 let item = appListLoader.tempApps[files[i]];
-    //                 if (item.name && item.command)
-    //                     apps.push(item);
-    //             }
-
-    //             apps.sort((a, b) => a.name.localeCompare(b.name));
-    //             root.allApps = apps;
-    //             root.updateFilter();
-    //         }
-    //     }
-    // }
-
-    // // Функция фильтрации (остается прежней) ---
-    // function updateFilter() {
-    //     let q = filterText.trim().toLowerCase();
-    //     if (q === "") {
-    //         filteredApps = root.allApps;
-    //     } else {
-    //         filteredApps = root.allApps.filter(app =>
-    //             app.name && app.name.toLowerCase().indexOf(q) !== -1
-    //         );
-    //     }
-    //     if (filteredApps.length === 0) {
-    //         selectedIndex = 0;
-    //         circle.rotation = 0;
-    //     } else if (selectedIndex >= filteredApps.length) {
-    //         selectedIndex = filteredApps.length - 1;
-    //         circle.rotation = selectedIndex * angle;
-    //     }
-    // }
-
-    // // Функция запуска (использует родную команду из .desktop) ---
-    // function launchApp(entry) {
-    //     if (!entry) return;
-    //     // Запускает бинарник или скрипт, прописанный в Exec=
-    //     Quickshell.execDetached({ command: entry.command });
-    //     root.hide();
-    // }
-    
-    // // ---
-
-
-
-
-    // function ensureVisible(index) {
-    //     if (filteredApps.length === 0) return
-    //     let rowHeight = 32 + 2
-    //     let itemY = index * rowHeight
-        
-    //     if (itemY < listFlick.contentY) {
-    //         listFlick.contentY = itemY
-    //     } else if (itemY + rowHeight > listFlick.contentY + listFlick.height) {
-    //         listFlick.contentY = itemY + rowHeight - listFlick.height
-    //     }
-    // }
+	// ---
+	// ВРЕМЕННЫЙ МОДУЛЬ
+	Process {
+	    id: appListLoader
+	    command: [
+	        "sh", "-c",
+	        "cd /data/data/com.termux/files/usr/share/applications && grep -E '^[[:space:]]*(Name|Exec|Icon)=' *.desktop 2>/dev/null"
+	        //"cd /usr/share/applications && grep -E '^(Name|Exec|Icon)=' *.desktop 2>/dev/null"
+	    ]
+	    running: true
+	    property var tempApps: ({})
+	
+	    stdout: SplitParser {
+	        onRead: (line) => {
+	            line = line.trim();
+	            if (!line) return;
+	
+	            let separator = line.indexOf(":");
+	            if (separator < 1) return;
+	
+	            let fileName = line.substring(0, separator);
+	            let kv = line.substring(separator + 1);
+	            let eq = kv.indexOf("=");
+	            if (eq < 1) return;
+	
+	            let key = kv.substring(0, eq);
+	            let value = kv.substring(eq + 1).trim();
+	
+	            let app = appListLoader.tempApps[fileName];
+	            if (!app)
+	                app = {};
+	
+	            if (key === "Name")
+	                app.name = value;
+	            else if (key === "Exec")
+	                app.command = value.replace(/%[fFuUidDkK]/g, "").trim();
+	            else if (key === "Icon")
+	                app.icon = value;
+	
+	            appListLoader.tempApps[fileName] = app;
+	
+	            let apps = [];
+	            let files = Object.keys(appListLoader.tempApps);
+	            for (let i = 0; i < files.length; ++i) {
+	                let item = appListLoader.tempApps[files[i]];
+	                if (item.name && item.command)
+	                    apps.push(item);
+	            }
+	
+	            apps.sort((a, b) => a.name.localeCompare(b.name));
+	            root.allApps = apps;
+	            root.updateFilter();
+	        }
+	    }
+	}
+	
+	// Функция фильтрации (остается прежней) ---
+	function updateFilter() {
+	    let q = filterText.trim().toLowerCase();
+	    if (q === "") {
+	        filteredApps = root.allApps;
+	    } else {
+	        filteredApps = root.allApps.filter(app =>
+	            app.name && app.name.toLowerCase().indexOf(q) !== -1
+	        );
+	    }
+	    if (filteredApps.length === 0) {
+	        selectedIndex = 0;
+	        circle.rotation = 0;
+	    } else if (selectedIndex >= filteredApps.length) {
+	        selectedIndex = filteredApps.length - 1;
+	        circle.rotation = selectedIndex * angle;
+	    }
+	}
+	
+	// Функция запуска (использует родную команду из .desktop) ---
+	function launchApp(entry) {
+	    if (!entry) return;
+	    // Запускает бинарник или скрипт, прописанный в Exec=
+	    Quickshell.execDetached({ command: entry.command });
+	    root.hide();
+	}
+	
+	// ---
+	
+	
+	
+	
+	function ensureVisible(index) {
+	    if (filteredApps.length === 0) return
+	    let rowHeight = 32 + 2
+	    let itemY = index * rowHeight
+	    
+	    if (itemY < listFlick.contentY) {
+	        listFlick.contentY = itemY
+	    } else if (itemY + rowHeight > listFlick.contentY + listFlick.height) {
+	        listFlick.contentY = itemY + rowHeight - listFlick.height
+	    }
+	}
 
     
 	property var elementsCount: 11
@@ -660,25 +660,23 @@ PanelWindow {
         Rectangle {
             id: inputCaret
             visible: searchInput.activeFocus
-            width: 2
+            width: 4
             height: 20
             radius: 1
-            color: "#ffffff"
+            color: "#00ffffff"
 
             property int count: searchInput.text.length
             property real theta: (
                 curvedText.characterCount === 0
                 ? 270
-                : -curvedText.firstAngle
-                  - curvedText.characterCount * searchArea.charAngle
+                : curvedText.firstAngle
+                  + 0 * searchArea.charAngle
             ) * Math.PI / 180
 
-            x: searchArea.arcCenterX
-               + searchArea.arcRadius * Math.cos(theta)
-               - width / 2
+            x: -searchArea.arcRadius * Math.cos(theta)
 
-            y: searchArea.arcCenterY
-               + searchArea.arcRadius * Math.sin(theta)
+
+            y: -searchArea.arcRadius * Math.sin(theta)
                - height / 2
 
             rotation: theta * 180 / Math.PI + 90
@@ -703,6 +701,29 @@ PanelWindow {
                     easing.type: Easing.OutQuad
                 }
             }
+            property bool yes: true
+            
+            
+
+
+SequentialAnimation {
+    id: blinkAnimation
+    running: true
+    loops: Animation.Infinite
+    
+    ColorAnimation {
+        target: inputCaret
+        property: "color"
+        to: "#00ffffff"
+        duration: 500
+    }
+    ColorAnimation {
+        target: inputCaret
+        property: "color"
+        to: "#ffffffff"
+        duration: 500
+    }
+}
         }
 
         MouseArea {
