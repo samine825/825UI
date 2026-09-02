@@ -95,8 +95,8 @@ PanelWindow {
 	    id: appListLoader
 	    command: [
 	        "sh", "-c",
-	        "cd /data/data/com.termux/files/usr/share/applications && grep -E '^[[:space:]]*(Name|Exec|Icon)=' *.desktop 2>/dev/null"
-	        //"cd /usr/share/applications && grep -E '^(Name|Exec|Icon)=' *.desktop 2>/dev/null"
+	        //"cd /data/data/com.termux/files/usr/share/applications && grep -E '^[[:space:]]*(Name|Exec|Icon)=' *.desktop 2>/dev/null"
+	        "cd /usr/share/applications && grep -E '^(Name|Exec|Icon)=' *.desktop 2>/dev/null"
 	    ]
 	    running: true
 	    property var tempApps: ({})
@@ -201,7 +201,7 @@ PanelWindow {
         width: 900
         height: 900
         x: (Screen.width - width) / 2
-        //y: -width/2
+        y: -width/2
 		rotation: 0
         Behavior on rotation {
             NumberAnimation { duration: 500; easing.type: Easing.InOutQuad }
@@ -594,16 +594,6 @@ PanelWindow {
             }
         }
 
-        Text {
-            id: searchIcon
-            x: 18
-            y: 93
-            text: "\u2315"
-            font.family: "IosevkaTerm NF"
-            font.pixelSize: 18
-            color: "#ffffff"
-        }
-
         TextInput {
             id: searchInput
             x: 0
@@ -651,7 +641,7 @@ PanelWindow {
             id: curvedText
             anchors.fill: parent
             property int characterCount: searchInput.text.length
-            property real totalAngle: Math.max(0, (characterCount +1) * searchArea.charAngle)
+            property real totalAngle: Math.max(0, (characterCount) * searchArea.charAngle)
             property real firstAngle: 270 - totalAngle / 2
 
             Repeater {
@@ -661,7 +651,7 @@ PanelWindow {
                     required property int index
                     property string character: searchInput.text.charAt(index)
 
-                    property real theta: (curvedText.firstAngle + (searchInput.text.length - index ) * searchArea.charAngle) * Math.PI / 180
+                    property real theta: (curvedText.firstAngle + (searchInput.text.length - index - 0.5) * searchArea.charAngle) * Math.PI / 180
 
                     color: "#ffffff"
                     font.family: "IosevkaTerm NF"
@@ -701,28 +691,6 @@ PanelWindow {
                 }
             }
         }
-
-        Text {
-            id: curvedPlaceholder
-            visible: searchInput.text.length === 0
-            text: "Search"
-            color: "#ffffff"
-            font.family: "IosevkaTerm NF"
-            font.pixelSize: 16
-
-            property real theta: 270 * Math.PI / 180
-
-            x: -searchArea.arcRadius * Math.cos(theta)
-                - width / 2
-
-            y: -searchArea.arcRadius * Math.sin(theta)
-                - height / 2
-
-
-            rotation: 0
-        }
-
-        
 
         MouseArea {
             anchors.fill: parent
