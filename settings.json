@@ -7,5 +7,5 @@
     "barColor": "#ffffff",
     "barType": 0,
     "secondsMode": 1,
-    "infexClock": true
+    "infex": false
 }

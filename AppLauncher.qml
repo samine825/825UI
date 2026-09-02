@@ -7,6 +7,10 @@ import Quickshell.Wayland
 import Qt5Compat.GraphicalEffects
 
 PanelWindow {
+    FontLoader {
+        id: clockFont
+        source: "fonts/infex-main-150.ttf"
+    }
     id: root
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
     visible: false
@@ -28,10 +32,10 @@ PanelWindow {
     function show() {
         selectedIndex = 0
         filterText = ""
-        
+
         updateFilter()
         root.visible = true
-        
+
         circle.rotation = 0
         root.filterText = ""
         searchInput.text = ""
@@ -41,14 +45,14 @@ PanelWindow {
     function hide() {
         root.visible = false
     }
-    
-    
-    
+
+
+
 
     property var line: 5
     property var thickness: 90
-    
-    
+
+
 
 
 
@@ -62,7 +66,7 @@ PanelWindow {
 //    function updateFilter() {
 //        let appsSource = DesktopEntries.applications.values || DesktopEntries.applications
 //        let allApps = Array.from(appsSource)
-//            
+//
 //        let q = filterText.trim().toLowerCase()
 //        if (q === "") {
 //            filteredApps = allApps
@@ -79,16 +83,16 @@ PanelWindow {
 //        Quickshell.execDetached({ command: entry.command, workingDirectory: entry.workingDirectory })
 //        root.hide()
 //    }
-	
+
     property string filterText: ""
     property int selectedIndex: 0
-    property var allApps: []       
-    property var filteredApps: []  
-    
-    
-    
-    
-    
+    property var allApps: []
+    property var filteredApps: []
+
+
+
+
+
 	// ---
 	// ВРЕМЕННЫЙ МОДУЛЬ
 	Process {
@@ -100,36 +104,36 @@ PanelWindow {
 	    ]
 	    running: true
 	    property var tempApps: ({})
-	
+
 	    stdout: SplitParser {
 	        onRead: (line) => {
 	            line = line.trim();
 	            if (!line) return;
-	
+
 	            let separator = line.indexOf(":");
 	            if (separator < 1) return;
-	
+
 	            let fileName = line.substring(0, separator);
 	            let kv = line.substring(separator + 1);
 	            let eq = kv.indexOf("=");
 	            if (eq < 1) return;
-	
+
 	            let key = kv.substring(0, eq);
 	            let value = kv.substring(eq + 1).trim();
-	
+
 	            let app = appListLoader.tempApps[fileName];
 	            if (!app)
 	                app = {};
-	
+
 	            if (key === "Name")
 	                app.name = value;
 	            else if (key === "Exec")
 	                app.command = value.replace(/%[fFuUidDkK]/g, "").trim();
 	            else if (key === "Icon")
 	                app.icon = value;
-	
+
 	            appListLoader.tempApps[fileName] = app;
-	
+
 	            let apps = [];
 	            let files = Object.keys(appListLoader.tempApps);
 	            for (let i = 0; i < files.length; ++i) {
@@ -137,14 +141,14 @@ PanelWindow {
 	                if (item.name && item.command)
 	                    apps.push(item);
 	            }
-	
+
 	            apps.sort((a, b) => a.name.localeCompare(b.name));
 	            root.allApps = apps;
 	            root.updateFilter();
 	        }
 	    }
 	}
-	
+
 	// Функция фильтрации (остается прежней) ---
 	function updateFilter() {
 	    let q = filterText.trim().toLowerCase();
@@ -163,7 +167,7 @@ PanelWindow {
 	        circle.rotation = selectedIndex * angle;
 	    }
 	}
-	
+
 	// Функция запуска (использует родную команду из .desktop) ---
 	function launchApp(entry) {
 	    if (!entry) return;
@@ -171,31 +175,15 @@ PanelWindow {
 	    Quickshell.execDetached({ command: entry.command });
 	    root.hide();
 	}
-	
-	// ---
-	
-	
-	
-	
-	function ensureVisible(index) {
-	    if (filteredApps.length === 0) return
-	    let rowHeight = 32 + 2
-	    let itemY = index * rowHeight
-	    
-	    if (itemY < listFlick.contentY) {
-	        listFlick.contentY = itemY
-	    } else if (itemY + rowHeight > listFlick.contentY + listFlick.height) {
-	        listFlick.contentY = itemY + rowHeight - listFlick.height
-	    }
-	}
 
-    
+	// ---
+
 	property var elementsCount: 11
 	property var angle: 360.0 / elementsCount
     // круг
     Item {
 
-        
+
         //transform: Rotation {id: abcd; origin.x: 500; origin.y: 500; axis { x: 0; y: 1; z: 0 } angle: 54 }
         id: circle
         width: 900
@@ -211,23 +199,23 @@ PanelWindow {
             y: -root.line
             width: circle.width + root.line*2
             height: circle.height + root.line*2
-            
+
             color: "transparent"
             radius: width / 2
-            border.width: thickness + root.line*2
-            
+            border.width: root.thickness + root.line*2
+
             border.color: "#000000"
-            
+
             layer.enabled: true
         }
         Rectangle {
             anchors.fill: parent
             color: "transparent"
             radius: width / 2
-            border.width: thickness
-            
+            border.width: root.thickness
+
             border.color: "#ffffff"
-            
+
             layer.enabled: true
         }
         Rectangle {
@@ -245,14 +233,14 @@ PanelWindow {
 
             color: "transparent"
             radius: width / 2
-            border.width: thickness - root.line*2
-            
+            border.width: root.thickness - root.line*2
+
             border.color: "#000000"
-            
+
             layer.enabled: true
         }
-        
-		
+
+
         Repeater {
             model: elementsCount
 
@@ -299,29 +287,29 @@ PanelWindow {
 		    id: active
 		    width: circle.width
 		    height: circle.height
-		
+
 		    z: 2
 		    rotation: -circle.rotation
 		    Shape {
-	
+
 		        id: activeShape
 		        anchors.fill: parent
 		        preferredRendererType: Shape.CurveRenderer
-		
+
 		        ShapePath {
 		            id: sh
 		            fillColor: "#ffffff"
 		            strokeColor: "transparent"
 		            strokeWidth: 0
-	
+
 		            // дуги
 		            readonly property real rr: circle.width / 2 - root.line * 2
 		            readonly property real r: circle.width / 2 - (root.thickness - root.line * 2)
-	
+
 		            // углы дуг
 		            readonly property real angle1: (90-root.angle/2) * Math.PI / 180
 		            readonly property real angle2: (90+root.angle/2) * Math.PI / 180
-	
+
 		            function offX(theta, radius, sign) {
 		                var t = Math.sqrt(Math.max(0, radius*radius - root.line*root.line*9))
 		                return circle.width/2 + t * Math.cos(theta) - sign * 3*root.line * Math.sin(theta)
@@ -330,14 +318,14 @@ PanelWindow {
 		                var t = Math.sqrt(Math.max(0, radius*radius - root.line*root.line*9))
 		                return circle.height/2 + t * Math.sin(theta) + sign * 3*root.line * Math.cos(theta)
 		            }
-	
+
 		            readonly property real rMid: (rr + r) / 2
 		            readonly property real pointCoef: 403.16 / 1000
 		            readonly property real notchDepth: pointCoef * (root.thickness - root.line * 3)
-	
+
 		            startX: sh.offX(sh.angle1, sh.rr, 1)
 		            startY: sh.offY(sh.angle1, sh.rr, 1)
-	
+
 		            // внешняя дуга
 		            PathArc {
 		                x: sh.offX(sh.angle2, sh.rr, -1)
@@ -381,7 +369,7 @@ PanelWindow {
 		}
         Repeater {
 		    model: root.filteredApps
-		
+
 		    delegate: Item {
 		        z: 3
 		        property real pointCoef: (403.16 / 1000)
@@ -389,18 +377,18 @@ PanelWindow {
 		        anchors.fill: parent
 		        visible: Math.abs(index - root.selectedIndex) <= Math.floor(root.elementsCount / 2)
 		        rotation: -index * root.angle
-		       
+
 		        Item {
 		            y: appCell.height - root.thickness + root.line
 		            property var dlinna: (Math.sin((angle/2)*(Math.PI / 180))*(circle.height/2))*2
-		            
+
 		            property bool idx0: 0 <= -((-index+1 + selectedIndex) % elementsCount) * angle
 		            property bool idx1: 0 <= -((-index + selectedIndex) % elementsCount) * angle
 		            property var gR: idx0
 		                        ? ((circle.width-dlinna) / 2) - (pointCoef * (thickness - (line * 0.5))*0.5)
 		                        : ((circle.width-dlinna) / 2) + (pointCoef * (thickness - (line * 0.5))*0.5)
 		            property var gL: idx0 === idx1
-		                        ? dlinna 
+		                        ? dlinna
 		                        : idx1
 		                        ? dlinna - (pointCoef * (thickness - (line * 0.5)))
 		                        : dlinna + (pointCoef * (thickness - (line * 0.5)))
@@ -409,7 +397,7 @@ PanelWindow {
 		            height: root.thickness - root.line*2
 		            Behavior on width { NumberAnimation { duration: 500; easing.type: Easing.InOutQuad } }
 		            Behavior on x { NumberAnimation { duration: 500; easing.type: Easing.InOutQuad } }
-		            
+
 		            Column {
 		            	anchors.centerIn: parent
 			            Image {
@@ -426,9 +414,9 @@ PanelWindow {
 			                id: appText
 			                color: index === root.selectedIndex ? "#000000" : "#ffffff"
 			                Behavior on color { ColorAnimation { duration: 300 } }
-			                
+
 			                text: modelData.name || ""
-			                font.family: "IosevkaTerm NF"
+			                font.family: Settings.infex ? clockFont.name : ""
 			                font.pixelSize: 15
 			                horizontalAlignment: Text.AlignHCenter
 			                verticalAlignment: Text.AlignVCenter
@@ -484,26 +472,26 @@ PanelWindow {
                     useLargeArc: searchArea.angleDiff > 180
                     Behavior on x {
                         NumberAnimation {
-                            duration: 130
+                            duration: 100
                             easing.type: Easing.OutQuad
                         }
                     }
                     Behavior on y {
                         NumberAnimation {
-                            duration: 130
+                            duration: 100
                             easing.type: Easing.OutQuad
                         }
                     }
                 }
                 Behavior on startX {
                     NumberAnimation {
-                        duration: 130
+                        duration: 100
                         easing.type: Easing.OutQuad
                     }
                 }
                 Behavior on startY {
                     NumberAnimation {
-                        duration: 130
+                        duration: 100
                         easing.type: Easing.OutQuad
                     }
                 }
@@ -526,26 +514,26 @@ PanelWindow {
                     useLargeArc: searchArea.angleDiff > 180
                     Behavior on x {
                         NumberAnimation {
-                            duration: 130
+                            duration: 100
                             easing.type: Easing.OutQuad
                         }
                     }
                     Behavior on y {
                         NumberAnimation {
-                            duration: 130
+                            duration: 100
                             easing.type: Easing.OutQuad
                         }
                     }
                 }
                 Behavior on startX {
                     NumberAnimation {
-                        duration: 130
+                        duration: 100
                         easing.type: Easing.OutQuad
                     }
                 }
                 Behavior on startY {
                     NumberAnimation {
-                        duration: 130
+                        duration: 100
                         easing.type: Easing.OutQuad
                     }
                 }
@@ -568,26 +556,26 @@ PanelWindow {
                     useLargeArc: searchArea.angleDiff > 180
                     Behavior on x {
                         NumberAnimation {
-                            duration: 130
+                            duration: 100
                             easing.type: Easing.OutQuad
                         }
                     }
                     Behavior on y {
                         NumberAnimation {
-                            duration: 130
+                            duration: 100
                             easing.type: Easing.OutQuad
                         }
                     }
                 }
                 Behavior on startX {
                     NumberAnimation {
-                        duration: 130
+                        duration: 100
                         easing.type: Easing.OutQuad
                     }
                 }
                 Behavior on startY {
                     NumberAnimation {
-                        duration: 130
+                        duration: 100
                         easing.type: Easing.OutQuad
                     }
                 }
@@ -625,7 +613,7 @@ PanelWindow {
                 }
             }
 
-            Keys.onRightPressed: {   
+            Keys.onRightPressed: {
                 if (root.selectedIndex < root.filteredApps.length - 1) {
                     root.selectedIndex += 1
                     circle.rotation = root.selectedIndex * root.angle
@@ -640,54 +628,79 @@ PanelWindow {
         Item {
             id: curvedText
             anchors.fill: parent
-            property int characterCount: searchInput.text.length
-            property real totalAngle: Math.max(0, (characterCount) * searchArea.charAngle)
-            property real firstAngle: 270 - totalAngle / 2
+
+            readonly property real r: searchArea.arcRadius
+
+            property var anglesArray: []
+            property real totalTextAngle: 0
+            Behavior on totalTextAngle {NumberAnimation { duration: 1}}
+
+            function recalculateAngles() {
+                let count = textRepeater.count;
+                let widths = [];
+                let totalW = 0;
+
+                for (let i = 0; i < count; ++i) {
+                    let item = textRepeater.itemAt(i);
+                    let w = item ? item.contentWidth : 12;
+                    widths.push(w);
+                    totalW += w;
+                }
+
+                totalTextAngle = (totalW / (2 * Math.PI * r)) * 360;
+
+                let currentAngleOffset = 0;
+                let tempAngles = [];
+
+                for (let i = 0; i < count; ++i) {
+                    let charAngleWidth = (widths[i] / (2 * Math.PI * r)) * 360;
+                    tempAngles.push(currentAngleOffset + charAngleWidth / 2);
+                    currentAngleOffset += charAngleWidth;
+                }
+
+                anglesArray = tempAngles;
+            }
+
+            property real firstAngle: 270 - totalTextAngle / 2
 
             Repeater {
+                id: textRepeater
                 model: searchInput.text.length
 
                 delegate: Text {
+                    font.family: Settings.infex ? clockFont.name : ""
+                    id: charText
                     required property int index
                     property string character: searchInput.text.charAt(index)
 
-                    property real theta: (curvedText.firstAngle + (searchInput.text.length - index - 0.5) * searchArea.charAngle) * Math.PI / 180
-
                     color: "#ffffff"
-                    font.family: "IosevkaTerm NF"
                     font.pixelSize: 20
                     text: character
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
 
-                    x: -searchArea.arcRadius * Math.cos(theta)
-                       - width / 2
+                    onContentWidthChanged: curvedText.recalculateAngles()
 
-                    y: -searchArea.arcRadius * Math.sin(theta)
-                       - height / 2
+                    property real myAngleOffset: (curvedText.anglesArray && curvedText.anglesArray.length > index) 
+                        ? curvedText.anglesArray[index] 
+                        : 0
 
+                    property real theta: (curvedText.firstAngle + (curvedText.totalTextAngle - myAngleOffset)) * Math.PI / 180
+
+                    x: -searchArea.arcRadius * Math.cos(theta) - width / 2
+                    y: -searchArea.arcRadius * Math.sin(theta) - height / 2
                     rotation: theta * 180 / Math.PI + 90
 
-                    Behavior on x {
-                        NumberAnimation {
-                            duration: 130
-                            easing.type: Easing.OutQuad
-                        }
-                    }
+                    Behavior on x { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
+                    Behavior on y { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
+                    Behavior on rotation { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
+                }
+            }
 
-                    Behavior on y {
-                        NumberAnimation {
-                            duration: 130
-                            easing.type: Easing.OutQuad
-                        }
-                    }
-
-                    Behavior on rotation {
-                        NumberAnimation {
-                            duration: 130
-                            easing.type: Easing.OutQuad
-                        }
-                    }
+            Connections {
+                target: searchInput
+                function onTextChanged() {
+                    Qt.callLater(curvedText.recalculateAngles);
                 }
             }
         }

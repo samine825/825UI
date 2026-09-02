@@ -13,7 +13,7 @@ Singleton {
     property alias barColor: settings.barColor
     property alias barType: settings.barType
     property alias secondsMode: settings.secondsMode
-    property alias infexClock: settings.infexClock
+    property alias infex: settings.infex
 
     FileView {
         id: configFile
@@ -31,7 +31,7 @@ Singleton {
             property string barColor: "#ffffff"
             property int barType: 0
             property int secondsMode: 0
-            property bool infexClock: true
+            property bool infex: true
         }
 
         onAdapterUpdated: writeAdapter()

@@ -16,7 +16,7 @@ Item {
     property real fontsize: Settings.barHeight / (2*(150/1000)+1)
     property real hvost: (((313.856) / 1000)) * fontsize
     
-    width: textContainer.width + (hvost * 2) + (Settings.infexClock ? 0 : Settings.barHeight)
+    width: textContainer.width + (hvost * 2) + (Settings.infex ? 0 : Settings.barHeight)
     height: Settings.barHeight + Settings.barGap * 2
 
     // контейнер, который держит оба текста и центрируется
@@ -32,7 +32,7 @@ Item {
             id: mainTime
             text: Qt.formatTime(clockRoot.currentTime, "HH:mm")
             
-            font.family: Settings.infexClock ? clockFont.name : ""
+            font.family: Settings.infex ? clockFont.name : ""
             font.pixelSize: clockRoot.fontsize
             color: Settings.barColor
 
@@ -60,7 +60,7 @@ Item {
                 id: secText
                 text: Qt.formatTime(clockRoot.currentTime, ":ss")
                 
-                font.family: Settings.infexClock ? clockFont.name : ""
+                font.family: Settings.infex ? clockFont.name : ""
                 font.pixelSize: clockRoot.fontsize
                 color: Settings.barColor
 
