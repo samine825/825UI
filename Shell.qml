@@ -17,12 +17,13 @@ ShellRoot {
         implicitHeight: Settings.barGap * 2 + Settings.barHeight
         color: "transparent"
 
+
         Bar {
             id: bar
             x: clock.x
             width: clock.width
             height: parent.height
-            fontLineWidth: clock.fontsize * (150/1000) * 2
+            fontLineWidth: 5
             z: 0
         }
 
@@ -69,6 +70,32 @@ ShellRoot {
             MouseArea {
                 anchors.fill: parent
                 onClicked: Notifications.dismissAll()
+            }
+        }
+
+        Item {
+            id: rightModules
+            anchors {
+                verticalCenter: parent.verticalCenter
+            }
+            width: shellRoot.width
+            height: Settings.barHeight
+            z: 20
+
+            SystemStats {
+                id: systemStats
+                anchors {
+                    left: parent.left
+                }
+                height: Settings.barHeight
+            }
+
+            WorkspaceBar {
+                id: workspaceBar
+                anchors {
+                    right: parent.right
+                }
+                height: Settings.barHeight
             }
         }
 

@@ -117,7 +117,6 @@ PanelWindow {
 
     onVisibleChanged: {
         if (root.visible) {
-
             if (root.currentTab === 2) {
                 root.ensureWallpapersLoaded()
             }
@@ -145,14 +144,34 @@ PanelWindow {
             Item {
                 id: tabBar
                 width: parent.width - ((403.16 / 313.856) * 10)
-                height: 50
+                height: Settings.barHeight - Settings.line
                 anchors.horizontalCenter: parent.horizontalCenter
 
                 property real point: height * (403.16 / 1000)
-                property real tabWidth: width / root.tabNames.length
+                property real tabBorderWidth: Settings.line
+                property real blackOutlineWidth: Settings.line
 
-                property real tabBorderWidth: 5
-                property real blackOutlineWidth: 5
+                // Активная вкладка "съедается" стрелками разделителей на point слева и справа.
+                // Компенсируем это, делая её номинально шире на 2 * point.
+                property real activeExtra: root.currentTab >= 0 ? 2 * point : 0
+
+                // Базовая ширина обычной (неактивной) вкладки
+                property real baseTabWidth: (width - activeExtra) / root.tabNames.length
+
+                // Левая граница вкладки i
+                function tabX(i) {
+                    return i * baseTabWidth
+                        + (i > root.currentTab ? activeExtra : 0)
+                }
+
+                // Ширина вкладки i
+                function tabW(i) {
+                    return tabX(i + 1) - tabX(i)
+                }
+
+                // Плавная анимация при смене вкладки (предотвращает скачок при инициализации)
+                property bool animationsEnabled: false
+                Component.onCompleted: animationsEnabled = true
 
                 // черная обводка
                 Shape {
@@ -166,7 +185,7 @@ PanelWindow {
                         joinStyle: ShapePath.MiterJoin
                         capStyle: ShapePath.FlatCap
 
-                        strokeColor: "black"
+                        strokeColor: Settings.c2
 
                         strokeWidth: tabBar.tabBorderWidth
                                     + tabBar.blackOutlineWidth * 2
@@ -176,35 +195,12 @@ PanelWindow {
                         startX: 0
                         startY: 0
 
-                        PathLine {
-                            x: tabShape.width
-                            y: 0
-                        }
-
-                        PathLine {
-                            x: tabShape.width - tabBar.point
-                            y: tabShape.height / 2
-                        }
-
-                        PathLine {
-                            x: tabShape.width
-                            y: tabShape.height
-                        }
-
-                        PathLine {
-                            x: 0
-                            y: tabShape.height
-                        }
-
-                        PathLine {
-                            x: tabBar.point
-                            y: tabShape.height / 2
-                        }
-
-                        PathLine {
-                            x: 0
-                            y: 0
-                        }
+                        PathLine { x: tabShape.width;                y: 0 }
+                        PathLine { x: tabShape.width - tabBar.point; y: tabShape.height / 2 }
+                        PathLine { x: tabShape.width;                y: tabShape.height }
+                        PathLine { x: 0;                             y: tabShape.height }
+                        PathLine { x: tabBar.point;                  y: tabShape.height / 2 }
+                        PathLine { x: 0;                             y: 0 }
                     }
                 }
 
@@ -216,19 +212,19 @@ PanelWindow {
                     ShapePath {
                         joinStyle: ShapePath.MiterJoin
                         capStyle: ShapePath.FlatCap
-                        strokeColor: Settings.barColor
-                        strokeWidth: 5
-                        fillColor: "#000000"
+                        strokeColor: Settings.c1
+                        strokeWidth: Settings.line
+                        fillColor: Settings.c2
 
                         startX: 0
                         startY: 0
 
-                        PathLine { x: tabShape.width; y: 0 }
+                        PathLine { x: tabShape.width;                y: 0 }
                         PathLine { x: tabShape.width - tabBar.point; y: tabShape.height / 2 }
-                        PathLine { x: tabShape.width; y: tabShape.height }
-                        PathLine { x: 0; y: tabShape.height }
-                        PathLine { x: tabBar.point; y: tabShape.height / 2 }
-                        PathLine { x: 0; y: 0 }
+                        PathLine { x: tabShape.width;                y: tabShape.height }
+                        PathLine { x: 0;                             y: tabShape.height }
+                        PathLine { x: tabBar.point;                  y: tabShape.height / 2 }
+                        PathLine { x: 0;                             y: 0 }
                     }
                 }
 
@@ -236,33 +232,30 @@ PanelWindow {
                     id: activeIndicator
                     preferredRendererType: Shape.CurveRenderer
 
-                    property real indH: tabBar.height - 5 * 3
+                    property real indH: tabBar.height - Settings.line * 3
                     property real indPoint: indH * (403.16 / 1000)
+                    property real inset: Settings.line * 3
 
-                    width: tabBar.tabWidth - 5 * 6
+                    width: tabW(root.currentTab) - inset * 2
                     height: indH
                     y: (tabBar.height - indH) / 2
-                    x: root.currentTab * tabBar.tabWidth + 5 * 3
-
-                    Behavior on x {
-                        NumberAnimation { duration: 300; easing.type: Easing.InOutQuad }
-                    }
+                    x: tabX(root.currentTab) + inset
 
                     ShapePath {
                         joinStyle: ShapePath.MiterJoin
                         capStyle: ShapePath.FlatCap
-                        fillColor: Settings.barColor
+                        fillColor: Settings.c1
                         strokeColor: "transparent"
 
                         startX: 0
                         startY: 0
 
-                        PathLine { x: activeIndicator.width; y: 0 }
+                        PathLine { x: activeIndicator.width;                            y: 0 }
                         PathLine { x: activeIndicator.width - activeIndicator.indPoint; y: activeIndicator.height / 2 }
-                        PathLine { x: activeIndicator.width; y: activeIndicator.height }
-                        PathLine { x: 0; y: activeIndicator.height }
-                        PathLine { x: activeIndicator.indPoint; y: activeIndicator.height / 2 }
-                        PathLine { x: 0; y: 0 }
+                        PathLine { x: activeIndicator.width;                            y: activeIndicator.height }
+                        PathLine { x: 0;                                                y: activeIndicator.height }
+                        PathLine { x: activeIndicator.indPoint;                         y: activeIndicator.height / 2 }
+                        PathLine { x: 0;                                                y: 0 }
                     }
                 }
 
@@ -275,13 +268,14 @@ PanelWindow {
                         anchors.fill: parent
                         z: 2
 
-                        property real xPos: (index + 1) * tabBar.tabWidth
+                        property real xPos: tabX(index + 1)
+
 
                         ShapePath {
                             joinStyle: ShapePath.MiterJoin
                             capStyle: ShapePath.FlatCap
-                            strokeColor: Settings.barColor
-                            strokeWidth: 5
+                            strokeColor: Settings.c1
+                            strokeWidth: Settings.line
                             fillColor: "transparent"
 
                             startX: dividerShape.xPos
@@ -314,7 +308,8 @@ PanelWindow {
                         model: root.tabNames
 
                         delegate: Item {
-                            width: tabBar.tabWidth
+                            x: tabX(index)
+                            width: tabW(index)
                             height: tabBar.height
 
                             property real textOffset: {
@@ -335,7 +330,7 @@ PanelWindow {
 
                             Text {
                                 text: modelData
-                                color: root.currentTab === index ? "#0a0a0a" : Settings.barColor
+                                color: root.currentTab === index ? Settings.c2 : Settings.c1
                                 anchors.verticalCenter: parent.verticalCenter
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 anchors.horizontalCenterOffset: textOffset
@@ -364,34 +359,34 @@ PanelWindow {
             Item {
                 id: contentArea
                 width: parent.width
-                height: parent.height - tabBar.height - 7.5
+                height: parent.height - tabBar.height - Settings.line*1.5
 
                 Rectangle {
-                    x: -5
-                    y: -5
-                    width: parent.width + 10
-                    height: parent.height + 10
-                    color: "#000000"
-                    border.color: "#000000"
-                    border.width: 10
+                    x: -Settings.line
+                    y: -Settings.line
+                    width: parent.width + Settings.line * 2
+                    height: parent.height + Settings.line * 2
+                    color: Settings.c2
+                    border.color: Settings.c2
+                    border.width: Settings.line * 2
                 }
 
                 Rectangle {
                     anchors.fill: parent
-                    color: "#000000"
-                    border.color: Settings.barColor
-                    border.width: 5
+                    color: Settings.c2
+                    border.color: Settings.c1
+                    border.width: Settings.line
                 }
 
                 // system
                 Item {
                     visible: root.currentTab === 0
                     anchors.fill: parent
-                    anchors.margins: 5
+                    anchors.margins: Settings.line
 
                     Text {
                         text: "System"
-                        color: Settings.barColor
+                        color: Settings.c1
                         anchors.centerIn: parent
                     }
                 }
@@ -400,11 +395,11 @@ PanelWindow {
                 Item {
                     visible: root.currentTab === 1
                     anchors.fill: parent
-                    anchors.margins: 5
+                    anchors.margins: Settings.line
 
                     Text {
                         text: "Bar"
-                        color: Settings.barColor
+                        color: Settings.c1
                         anchors.centerIn: parent
                     }
                 }
@@ -414,7 +409,7 @@ PanelWindow {
                     id: wallpapersTab
                     visible: root.currentTab === 2
                     anchors.fill: parent
-                    anchors.margins: 5
+                    anchors.margins: Settings.line
                     clip: true
 
                     Flickable {
@@ -425,8 +420,8 @@ PanelWindow {
                         boundsBehavior: Flickable.StopAtBounds
                         flickDeceleration: 1000
 
-                        property real margin: 7.5
-                        property real gap: 10
+                        property real margin: Settings.line*1.5
+                        property real gap: Settings.line*2
                         property real columns: 4
 
                         property real itemSize: Math.max(
@@ -495,7 +490,7 @@ PanelWindow {
                                         joinStyle: ShapePath.MiterJoin
                                         capStyle: ShapePath.FlatCap
                                         strokeColor: "transparent"
-                                        fillColor: "#0a0a0a"
+                                        fillColor: Settings.c2
                                         startX: 0
                                         startY: 0
                                         PathLine { x: wallpaperDelegate.cornerCut; y: 0 }
@@ -508,7 +503,7 @@ PanelWindow {
                                         joinStyle: ShapePath.MiterJoin
                                         capStyle: ShapePath.FlatCap
                                         strokeColor: "transparent"
-                                        fillColor: "#000000"
+                                        fillColor: Settings.c2
                                         startX: wallpaperDelegate.width - wallpaperDelegate.cornerCut
                                         startY: 0
                                         PathLine { x: wallpaperDelegate.width; y: 0 }
@@ -521,7 +516,7 @@ PanelWindow {
                                         joinStyle: ShapePath.MiterJoin
                                         capStyle: ShapePath.FlatCap
                                         strokeColor: "transparent"
-                                        fillColor: "#0a0a0a"
+                                        fillColor: Settings.c2
                                         startX: wallpaperDelegate.width
                                         startY: wallpaperDelegate.height - wallpaperDelegate.cornerCut
                                         PathLine { x: wallpaperDelegate.width; y: wallpaperDelegate.height }
@@ -534,7 +529,7 @@ PanelWindow {
                                         joinStyle: ShapePath.MiterJoin
                                         capStyle: ShapePath.FlatCap
                                         strokeColor: "transparent"
-                                        fillColor: "#000000"
+                                        fillColor: Settings.c2
                                         startX: wallpaperDelegate.cornerCut
                                         startY: wallpaperDelegate.height
                                         PathLine { x: 0; y: wallpaperDelegate.height }
@@ -551,8 +546,8 @@ PanelWindow {
                                     ShapePath {
                                         joinStyle: ShapePath.MiterJoin
                                         capStyle: ShapePath.FlatCap
-                                        strokeColor: "white"
-                                        strokeWidth: 5
+                                        strokeColor: Settings.c1
+                                        strokeWidth: Settings.line 
                                         fillColor: "transparent"
 
                                         startX: wallpaperDelegate.cornerCut
@@ -573,9 +568,9 @@ PanelWindow {
                                     anchors.bottom: parent.bottom
                                     anchors.left: parent.left
                                     anchors.right: parent.right
-                                    anchors.margins: 2.5
+                                    anchors.margins: Settings.line/2
                                     height: 20
-                                    color: Qt.rgba(0, 0, 0, 0.5)
+                                    color: '#77' + Settings.c2.slice(1);
                                     z: 1
 
                                     Text {
@@ -605,7 +600,7 @@ PanelWindow {
                             anchors.centerIn: parent
                             visible: root.wallpaperModel.length === 0
                             text: "~/Pictures/Wallpapers"
-                            color: Settings.barColor
+                            color: Settings.c1
                         }
                     }
 
@@ -615,16 +610,16 @@ PanelWindow {
                         anchors.right: parent.right
                         anchors.top: parent.top
                         anchors.bottom: parent.bottom
-                        width: 5
+                        width: Settings.line
                         radius: 0
-                        color: Qt.rgba(0,0,0,0)
+                        color: Settings.c2
                         visible: wallpaperFlick.contentHeight > wallpaperFlick.height + 2
 
                         Rectangle {
                             id: wallpaperScrollHandle
                             width: parent.width
                             radius: parent.radius
-                            color: Settings.barColor
+                            color: Settings.c1
 
                             height: Math.max(
                                 20,
@@ -640,7 +635,7 @@ PanelWindow {
 
                         MouseArea {
                             anchors.fill: parent
-                            anchors.margins: -5
+                            anchors.margins: -Settings.line
                             z: 2
                             cursorShape: Qt.SizeVerCursor
 
@@ -692,18 +687,18 @@ PanelWindow {
                     Rectangle {
                         anchors.top: parent.top
                         anchors.left: parent.left
-                        anchors.margins: 5
+                        anchors.margins: Settings.line
                         width: 100
                         height: 24
                         radius: 12
                         color: "transparent"
-                        border.color: Settings.barColor
+                        border.color: Settings.c1
                         z: 3
 
                         Text {
                             anchors.centerIn: parent
                             text: wallpaperScanner.running ? "Скан…" : "Обновить"
-                            color: Settings.barColor
+                            color: Settings.c1
                             font.pixelSize: 12
                         }
 
@@ -719,11 +714,11 @@ PanelWindow {
                 Item {
                     visible: root.currentTab === 3
                     anchors.fill: parent
-                    anchors.margins: 5
+                    anchors.margins: Settings.line
 
                     Text {
                         text: "Monitor"
-                        color: Settings.barColor
+                        color: Settings.c1
                         anchors.centerIn: parent
                     }
                 }
@@ -732,11 +727,11 @@ PanelWindow {
                 Item {
                     visible: root.currentTab === 4
                     anchors.fill: parent
-                    anchors.margins: 5
+                    anchors.margins: Settings.line
 
                     Text {
                         text: "About"
-                        color: Settings.barColor
+                        color: Settings.c1
                         anchors.centerIn: parent
                     }
                 }
@@ -747,9 +742,9 @@ PanelWindow {
         Rectangle {
             id: contentBlackOutline
             anchors.fill: contentArea
-            anchors.margins: -5
+            anchors.margins: -Settings.line
             z: -1
-            color: "#000000"
+            color: Settings.c2
         }
 
     }

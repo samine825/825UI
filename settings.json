@@ -1,11 +1,13 @@
 {
     "barGap": 20,
-    "barHeight": 40,
+    "barHeight": 50,
+    "line": 5,
     "leftMargin": 0,
     "rightMargin": 0,
     "edgeSize": 20,
-    "barColor": "#ffffff",
+    "c1": "#4689ff",
+    "c2": "#381533",
     "barType": 0,
     "secondsMode": 1,
-    "infex": false
+    "infex": true
 }

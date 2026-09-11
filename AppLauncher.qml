@@ -49,8 +49,8 @@ PanelWindow {
 
 
 
-    property var line: 5
-    property var thickness: 90
+    property var line: Settings.line
+    property var thickness: Settings.barHeight
 
 
 
@@ -63,26 +63,26 @@ PanelWindow {
     readonly property int panelW: 520
     readonly property int panelH: Math.min(520, Screen.height - 160)
 
-//    function updateFilter() {
-//        let appsSource = DesktopEntries.applications.values || DesktopEntries.applications
-//        let allApps = Array.from(appsSource)
-//
-//        let q = filterText.trim().toLowerCase()
-//        if (q === "") {
-//            filteredApps = allApps
-//        } else {
-//            filteredApps = allApps.filter(app =>
-//                app.name && app.name.toLowerCase().indexOf(q) !== -1
-//            )
-//        }
-//        if (selectedIndex >= filteredApps.length)
-//            selectedIndex = 0
-//    }
-//
-//    function launchApp(entry) {
-//        Quickshell.execDetached({ command: entry.command, workingDirectory: entry.workingDirectory })
-//        root.hide()
-//    }
+   function updateFilter() {
+       let appsSource = DesktopEntries.applications.values || DesktopEntries.applications
+       let allApps = Array.from(appsSource)
+
+       let q = filterText.trim().toLowerCase()
+       if (q === "") {
+           filteredApps = allApps
+       } else {
+           filteredApps = allApps.filter(app =>
+               app.name && app.name.toLowerCase().indexOf(q) !== -1
+           )
+       }
+       if (selectedIndex >= filteredApps.length)
+           selectedIndex = 0
+   }
+
+   function launchApp(entry) {
+       Quickshell.execDetached({ command: entry.command, workingDirectory: entry.workingDirectory })
+       root.hide()
+   }
 
     property string filterText: ""
     property int selectedIndex: 0
@@ -95,90 +95,90 @@ PanelWindow {
 
 	// ---
 	// ВРЕМЕННЫЙ МОДУЛЬ
-	Process {
-	    id: appListLoader
-	    command: [
-	        "sh", "-c",
-	        //"cd /data/data/com.termux/files/usr/share/applications && grep -E '^[[:space:]]*(Name|Exec|Icon)=' *.desktop 2>/dev/null"
-	        "cd /usr/share/applications && grep -E '^(Name|Exec|Icon)=' *.desktop 2>/dev/null"
-	    ]
-	    running: true
-	    property var tempApps: ({})
+	// Process {
+	//     id: appListLoader
+	//     command: [
+	//         "sh", "-c",
+	//         //"cd /data/data/com.termux/files/usr/share/applications && grep -E '^[[:space:]]*(Name|Exec|Icon)=' *.desktop 2>/dev/null"
+	//         "cd /usr/share/applications && grep -E '^(Name|Exec|Icon)=' *.desktop 2>/dev/null"
+	//     ]
+	//     running: true
+	//     property var tempApps: ({})
 
-	    stdout: SplitParser {
-	        onRead: (line) => {
-	            line = line.trim();
-	            if (!line) return;
+	//     stdout: SplitParser {
+	//         onRead: (line) => {
+	//             line = line.trim();
+	//             if (!line) return;
 
-	            let separator = line.indexOf(":");
-	            if (separator < 1) return;
+	//             let separator = line.indexOf(":");
+	//             if (separator < 1) return;
 
-	            let fileName = line.substring(0, separator);
-	            let kv = line.substring(separator + 1);
-	            let eq = kv.indexOf("=");
-	            if (eq < 1) return;
+	//             let fileName = line.substring(0, separator);
+	//             let kv = line.substring(separator + 1);
+	//             let eq = kv.indexOf("=");
+	//             if (eq < 1) return;
 
-	            let key = kv.substring(0, eq);
-	            let value = kv.substring(eq + 1).trim();
+	//             let key = kv.substring(0, eq);
+	//             let value = kv.substring(eq + 1).trim();
 
-	            let app = appListLoader.tempApps[fileName];
-	            if (!app)
-	                app = {};
+	//             let app = appListLoader.tempApps[fileName];
+	//             if (!app)
+	//                 app = {};
 
-	            if (key === "Name")
-	                app.name = value;
-	            else if (key === "Exec")
-	                app.command = value.replace(/%[fFuUidDkK]/g, "").trim();
-	            else if (key === "Icon")
-	                app.icon = value;
+	//             if (key === "Name")
+	//                 app.name = value;
+	//             else if (key === "Exec")
+	//                 app.command = value.replace(/%[fFuUidDkK]/g, "").trim();
+	//             else if (key === "Icon")
+	//                 app.icon = value;
 
-	            appListLoader.tempApps[fileName] = app;
+	//             appListLoader.tempApps[fileName] = app;
 
-	            let apps = [];
-	            let files = Object.keys(appListLoader.tempApps);
-	            for (let i = 0; i < files.length; ++i) {
-	                let item = appListLoader.tempApps[files[i]];
-	                if (item.name && item.command)
-	                    apps.push(item);
-	            }
+	//             let apps = [];
+	//             let files = Object.keys(appListLoader.tempApps);
+	//             for (let i = 0; i < files.length; ++i) {
+	//                 let item = appListLoader.tempApps[files[i]];
+	//                 if (item.name && item.command)
+	//                     apps.push(item);
+	//             }
 
-	            apps.sort((a, b) => a.name.localeCompare(b.name));
-	            root.allApps = apps;
-	            root.updateFilter();
-	        }
-	    }
-	}
+	//             apps.sort((a, b) => a.name.localeCompare(b.name));
+	//             root.allApps = apps;
+	//             root.updateFilter();
+	//         }
+	//     }
+	// }
 
 	// Функция фильтрации (остается прежней) ---
-	function updateFilter() {
-	    let q = filterText.trim().toLowerCase();
-	    if (q === "") {
-	        filteredApps = root.allApps;
-	    } else {
-	        filteredApps = root.allApps.filter(app =>
-	            app.name && app.name.toLowerCase().indexOf(q) !== -1
-	        );
-	    }
-	    if (filteredApps.length === 0) {
-	        selectedIndex = 0;
-	        circle.rotation = 0;
-	    } else if (selectedIndex >= filteredApps.length) {
-	        selectedIndex = filteredApps.length - 1;
-	        circle.rotation = selectedIndex * angle;
-	    }
-	}
+	// function updateFilter() {
+	//     let q = filterText.trim().toLowerCase();
+	//     if (q === "") {
+	//         filteredApps = root.allApps;
+	//     } else {
+	//         filteredApps = root.allApps.filter(app =>
+	//             app.name && app.name.toLowerCase().indexOf(q) !== -1
+	//         );
+	//     }
+	//     if (filteredApps.length === 0) {
+	//         selectedIndex = 0;
+	//         circle.rotation = 0;
+	//     } else if (selectedIndex >= filteredApps.length) {
+	//         selectedIndex = filteredApps.length - 1;
+	//         circle.rotation = selectedIndex * angle;
+	//     }
+	// }
 
 	// Функция запуска (использует родную команду из .desktop) ---
-	function launchApp(entry) {
-	    if (!entry) return;
-	    // Запускает бинарник или скрипт, прописанный в Exec=
-	    Quickshell.execDetached({ command: entry.command });
-	    root.hide();
-	}
+	// function launchApp(entry) {
+	//     if (!entry) return;
+	//     // Запускает бинарник или скрипт, прописанный в Exec=
+	//     Quickshell.execDetached({ command: entry.command });
+	//     root.hide();
+	// }
 
 	// ---
 
-	property var elementsCount: 11
+	property var elementsCount: 13
 	property var angle: 360.0 / elementsCount
     // круг
     Item {
@@ -204,7 +204,7 @@ PanelWindow {
             radius: width / 2
             border.width: root.thickness + root.line*2
 
-            border.color: "#000000"
+            border.color: Settings.c2
 
             layer.enabled: true
         }
@@ -214,7 +214,7 @@ PanelWindow {
             radius: width / 2
             border.width: root.thickness
 
-            border.color: "#ffffff"
+            border.color: Settings.c1
 
             layer.enabled: true
         }
@@ -235,7 +235,7 @@ PanelWindow {
             radius: width / 2
             border.width: root.thickness - root.line*2
 
-            border.color: "#000000"
+            border.color: Settings.c2
 
             layer.enabled: true
         }
@@ -257,7 +257,7 @@ PanelWindow {
                 ShapePath {
                     joinStyle: ShapePath.MiterJoin
                     capStyle: ShapePath.FlatCap
-                    strokeColor: Settings.barColor
+                    strokeColor: Settings.c1
                     strokeWidth: root.line
                     fillColor: "transparent"
 
@@ -298,7 +298,7 @@ PanelWindow {
 
 		        ShapePath {
 		            id: sh
-		            fillColor: "#ffffff"
+		            fillColor: Settings.c1
 		            strokeColor: "transparent"
 		            strokeWidth: 0
 
@@ -368,65 +368,147 @@ PanelWindow {
 		    }
 		}
         Repeater {
-		    model: root.filteredApps
+            model: root.filteredApps
 
-		    delegate: Item {
-		        z: 3
-		        property real pointCoef: (403.16 / 1000)
-		        id: appCell
-		        anchors.fill: parent
-		        visible: Math.abs(index - root.selectedIndex) <= Math.floor(root.elementsCount / 2)
-		        rotation: -index * root.angle
+            delegate: Item {
+                id: appCell
 
-		        Item {
-		            y: appCell.height - root.thickness + root.line
-		            property var dlinna: (Math.sin((angle/2)*(Math.PI / 180))*(circle.height/2))*2
+                required property int index
+                required property var modelData
 
-		            property bool idx0: 0 <= -((-index+1 + selectedIndex) % elementsCount) * angle
-		            property bool idx1: 0 <= -((-index + selectedIndex) % elementsCount) * angle
-		            property var gR: idx0
-		                        ? ((circle.width-dlinna) / 2) - (pointCoef * (thickness - (line * 0.5))*0.5)
-		                        : ((circle.width-dlinna) / 2) + (pointCoef * (thickness - (line * 0.5))*0.5)
-		            property var gL: idx0 === idx1
-		                        ? dlinna
-		                        : idx1
-		                        ? dlinna - (pointCoef * (thickness - (line * 0.5)))
-		                        : dlinna + (pointCoef * (thickness - (line * 0.5)))
-		            x: gR
-		            width: gL
-		            height: root.thickness - root.line*2
-		            Behavior on width { NumberAnimation { duration: 500; easing.type: Easing.InOutQuad } }
-		            Behavior on x { NumberAnimation { duration: 500; easing.type: Easing.InOutQuad } }
+                anchors.fill: parent
+                z: 3
 
-		            Column {
-		            	anchors.centerIn: parent
-			            Image {
-			                id: appIcon
-			                width: 40
-			                height: 40
-			                source: modelData.icon ? Quickshell.iconPath(modelData.icon, "application-x-executable") : ""
-			                fillMode: Image.PreserveAspectFit
-			                smooth: true
-			                visible: source !== "" && status === Image.Ready
-			                anchors.horizontalCenter: parent.horizontalCenter
-			            }
-			            Text {
-			                id: appText
-			                color: index === root.selectedIndex ? "#000000" : "#ffffff"
-			                Behavior on color { ColorAnimation { duration: 300 } }
+                visible: Math.abs(appCell.index - root.selectedIndex)
+                        <= Math.floor(root.elementsCount / 2)
 
-			                text: modelData.name || ""
-			                font.family: Settings.infex ? clockFont.name : ""
-			                font.pixelSize: 15
-			                horizontalAlignment: Text.AlignHCenter
-			                verticalAlignment: Text.AlignVCenter
-			                anchors.horizontalCenter: parent.horizontalCenter
-			                elide: Text.ElideRight
-			            }
-	            	}
-		        }
-		    }
-		}
+                rotation: -appCell.index * root.angle
+
+                readonly property real cx: width / 2
+                readonly property real cy: height / 2
+
+                // Радиус, на котором расположены центры букв.
+                // Увеличение последнего числа сдвигает текст внутрь кольца.
+                readonly property real labelRadius:
+                    height / 2 - root.line - 17
+
+                // Радиус, на котором расположен центр иконки.
+                readonly property real iconRadius:
+                    height / 2 - root.thickness + root.line + 22
+
+                property color labelColor:
+                    appCell.index === root.selectedIndex
+                        ? Settings.c2
+                        : Settings.c1
+
+                Behavior on labelColor {
+                    ColorAnimation { duration: 300 }
+                }
+
+                Image {
+                    width: 30
+                    height: 30
+
+                    x: appCell.cx - width / 2
+                    y: appCell.cy + appCell.iconRadius - height / 2
+
+                    source: appCell.modelData.icon
+                        ? Quickshell.iconPath(
+                            appCell.modelData.icon,
+                            "application-x-executable"
+                        )
+                        : ""
+
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
+                    visible: status === Image.Ready
+                }
+
+                FontMetrics {
+                    id: labelFont
+                }
+
+                TextMetrics {
+                    id: labelMetrics
+
+                    text: appCell.modelData.name || ""
+
+                    elide: Qt.ElideRight
+
+                    // Оставляем отступы от краёв сектора.
+                    elideWidth: Math.max(
+                        1,
+                        appCell.labelRadius
+                            * Math.max(1, root.angle - 10)
+                            * Math.PI / 180
+                    )
+                }
+
+                readonly property var letters: {
+                    // Обновлять расчёт также при изменении шрифта.
+                    const currentFont = labelFont.font
+                    const chars = Array.from(labelMetrics.elidedText)
+                    const widths = []
+
+                    let totalWidth = 0
+
+                    for (let i = 0; i < chars.length; ++i) {
+                        const w = labelFont.advanceWidth(chars[i])
+                        widths.push(w)
+                        totalWidth += w
+                    }
+
+                    let offset = -totalWidth / 2
+                    const result = []
+
+                    for (let i = 0; i < chars.length; ++i) {
+                        result.push({
+                            character: chars[i],
+                            radians: (offset + widths[i] / 2)
+                                    / appCell.labelRadius
+                        })
+
+                        offset += widths[i]
+                    }
+
+                    return result
+                }
+
+                Repeater {
+                    model: appCell.letters
+
+                    delegate: Text {
+                        id: letter
+                        font.bold: true
+                        required property var modelData
+
+                        readonly property real theta: modelData.radians
+
+                        text: modelData.character
+                        color: appCell.labelColor
+
+                        width: implicitWidth
+                        height: implicitHeight
+
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+
+                        // Нижняя дуга окружности:
+                        // слева буквы выше, в центре ниже, справа выше.
+                        x: appCell.cx
+                        + appCell.labelRadius * Math.sin(theta)
+                        - width / 2
+
+                        y: appCell.cy
+                        + appCell.labelRadius * Math.cos(theta)
+                        - height / 2
+
+                        rotation: -theta * 180 / Math.PI
+                        transformOrigin: Item.Center
+                    }
+                }
+            }
+        }
     }
 
     Item {
@@ -456,7 +538,7 @@ PanelWindow {
             preferredRendererType: Shape.CurveRenderer
 
             ShapePath {
-                strokeColor: "#000000"
+                strokeColor: Settings.c2
                 strokeWidth: searchArea.inputHeight + root.line*2
                 fillColor: "transparent"
 
@@ -498,7 +580,7 @@ PanelWindow {
             }
 
             ShapePath {
-                strokeColor: "#ffffff"
+                strokeColor: Settings.c1
                 strokeWidth: searchArea.inputHeight
                 fillColor: "transparent"
 
@@ -540,7 +622,7 @@ PanelWindow {
             }
 
             ShapePath {
-                strokeColor: "#000000"
+                strokeColor: Settings.c2
                 strokeWidth: searchArea.inputHeight - root.line*2
                 fillColor: "transparent"
 
@@ -668,12 +750,12 @@ PanelWindow {
                 model: searchInput.text.length
 
                 delegate: Text {
-                    font.family: Settings.infex ? clockFont.name : ""
                     id: charText
+                    font.bold: true
                     required property int index
                     property string character: searchInput.text.charAt(index)
 
-                    color: "#ffffff"
+                    color: Settings.c1
                     font.pixelSize: 20
                     text: character
                     horizontalAlignment: Text.AlignHCenter

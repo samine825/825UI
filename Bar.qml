@@ -10,11 +10,11 @@ Item {
         layer.enabled: false 
         preferredRendererType: Shape.CurveRenderer
         ShapePath {
-            strokeColor: "black"
+            strokeColor: Settings.c2
             strokeWidth: fontLineWidth*2 // Толщина обводки
             joinStyle: ShapePath.MiterJoin // Острые углы
             capStyle: ShapePath.FlatCap
-            fillColor: Settings.barColor
+            fillColor: Settings.c1
 
             startX: Settings.leftMargin
             startY: Settings.barGap
@@ -34,11 +34,11 @@ Item {
         layer.enabled: false 
         preferredRendererType: Shape.CurveRenderer
         ShapePath {
-            strokeColor: Settings.barColor
+            strokeColor: Settings.c1
             strokeWidth: fontLineWidth // Толщина обводки
             joinStyle: ShapePath.MiterJoin // Острые углы
             capStyle: ShapePath.FlatCap
-            fillColor: Settings.barColor
+            fillColor: Settings.c1
 
             startX: Settings.leftMargin
             startY: Settings.barGap
@@ -61,7 +61,7 @@ Item {
         layer.samples: 8
         
         ShapePath {
-            fillColor: "black"
+            fillColor: Settings.c2
             strokeColor: "transparent"
 
             startX: 0

@@ -61,7 +61,7 @@ Rectangle {
                 ShapePath {
                     joinStyle: ShapePath.MiterJoin
                     capStyle: ShapePath.FlatCap
-                    fillColor: "#ffffff"
+                    fillColor: Settings.c1
 
                     startX: gs.padX
                     startY: gs.padY
@@ -157,8 +157,8 @@ Rectangle {
         id: runeDownLayer
         anchors.fill: parent
         sourceComponent: contentLayout
-        property color textColor: '#000000'
-        property color backgroundColor: '#ffffff'
+        property color textColor: Settings.c2
+        property color backgroundColor: Settings.c1
     }
 
     // 2. верхний слой
@@ -173,8 +173,8 @@ Rectangle {
             width: popupWindow.width 
             height: popupWindow.height
             sourceComponent: contentLayout
-            property color textColor: '#ffffff'
-            property color backgroundColor: '#000000'
+            property color textColor: Settings.c1
+            property color backgroundColor: Settings.c2
         }
     }
 
@@ -187,8 +187,8 @@ Rectangle {
         id: progressAnimationColor
         target: runeUpLayer
         property: "backgroundColor"
-        from: '#00000000'
-        to: '#ff000000'
+        from: '#00' + Settings.c2.slice(1);
+        to: '#ff' + Settings.c2.slice(1);
         duration: 1500
         running: popupWindow.currentNotification !== null && popupWindow.screenX !== null
         easing.type: Easing.InCubic
@@ -197,8 +197,8 @@ Rectangle {
         id: progressAnimationColor2
         target: runeDownLayer
         property: "backgroundColor"
-        from: '#00000000'
-        to: '#ffffffff'
+        from: '#00' + Settings.c2.slice(1);
+        to: '#ff' + Settings.c1.slice(1);
         duration: 1500
         running: popupWindow.currentNotification !== null && popupWindow.screenX !== null
         easing.type: Easing.InCubic
@@ -394,7 +394,7 @@ Rectangle {
             joinStyle: ShapePath.MiterJoin
             capStyle: ShapePath.FlatCap
             
-            strokeColor: '#000000'
+            strokeColor: Settings.c2
             strokeWidth: 15
             fillColor: "transparent"
 
@@ -425,7 +425,7 @@ Rectangle {
             joinStyle: ShapePath.MiterJoin
             capStyle: ShapePath.FlatCap
             
-            strokeColor: "#ffffff"
+            strokeColor: Settings.c1
             strokeWidth: 5
             fillColor: "transparent"
 
