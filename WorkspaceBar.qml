@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Shapes
 import Quickshell
 import Quickshell.Hyprland
-
+import "./Fonts" 
 Item {
     id: root
 
@@ -360,17 +360,59 @@ Item {
                                 easing.type: Easing.InOutQuad
                             }
                         }
+                        Infex {
+                            anchors.centerIn: parent
+                            ch: String(workspaceCell.workspaceId % 10)
+                            pixelSize: workspaceCell.isFocused
+                                ? Settings.barHeight - Settings.line * 6
+                                : Settings.barHeight - Settings.line * 4
+                            color: workspaceCell.isFocused
+                                ? Settings.c2
+                                : Settings.c1
+                            line: Settings.line
+                            Behavior on color {
+                                ColorAnimation { duration: 200 }
+                            }
+                            Behavior on pixelSize {
+                                PropertyAnimation { duration: 200 }
+                            }
+                        }
+                        // Text {
+                        //     anchors.centerIn: parent
 
+                        //     text: String(workspaceCell.workspaceId)
+
+                        //     color: workspaceCell.isFocused
+                        //         ? Settings.c2
+                        //         : Settings.c1
+
+                        //     // Рабочий стол, активный на другом мониторе,
+                        //     // остаётся ярким, пустые — немного приглушены.
+                        //     opacity: workspaceCell.isFocused
+                        //              || workspaceCell.isActive
+                        //              || workspaceCell.occupied
+                        //         ? 1
+                        //         : 0.55
+
+                        //     font.bold: true
+
+                        //     Behavior on color {
+                        //         ColorAnimation { duration: 200 }
+                        //     }
+
+                        //     Behavior on opacity {
+                        //         NumberAnimation { duration: 200 }
+                        //     }
+                        // }
                         Rectangle {
                             visible: workspaceCell.occupied
-
-                            width: 3
-                            height: 3
-                            radius: width / 2
+                            width: Settings.line
+                            height: Settings.line
+                            rotation: 45
 
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.bottom: parent.bottom
-                            anchors.bottomMargin: Settings.line * 1.5 + 1
+                            anchors.bottomMargin: -Settings.line * 3.5
 
                             color: workspaceCell.isFocused
                                 ? Settings.c2

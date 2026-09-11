@@ -117,6 +117,7 @@ PanelWindow {
 
     onVisibleChanged: {
         if (root.visible) {
+
             if (root.currentTab === 2) {
                 root.ensureWallpapersLoaded()
             }
@@ -148,30 +149,10 @@ PanelWindow {
                 anchors.horizontalCenter: parent.horizontalCenter
 
                 property real point: height * (403.16 / 1000)
+                property real tabWidth: width / root.tabNames.length
+
                 property real tabBorderWidth: Settings.line
                 property real blackOutlineWidth: Settings.line
-
-                // Активная вкладка "съедается" стрелками разделителей на point слева и справа.
-                // Компенсируем это, делая её номинально шире на 2 * point.
-                property real activeExtra: root.currentTab >= 0 ? 2 * point : 0
-
-                // Базовая ширина обычной (неактивной) вкладки
-                property real baseTabWidth: (width - activeExtra) / root.tabNames.length
-
-                // Левая граница вкладки i
-                function tabX(i) {
-                    return i * baseTabWidth
-                        + (i > root.currentTab ? activeExtra : 0)
-                }
-
-                // Ширина вкладки i
-                function tabW(i) {
-                    return tabX(i + 1) - tabX(i)
-                }
-
-                // Плавная анимация при смене вкладки (предотвращает скачок при инициализации)
-                property bool animationsEnabled: false
-                Component.onCompleted: animationsEnabled = true
 
                 // черная обводка
                 Shape {
@@ -234,12 +215,15 @@ PanelWindow {
 
                     property real indH: tabBar.height - Settings.line * 3
                     property real indPoint: indH * (403.16 / 1000)
-                    property real inset: Settings.line * 3
 
-                    width: tabW(root.currentTab) - inset * 2
+                    width: tabBar.tabWidth - Settings.line * 6
                     height: indH
                     y: (tabBar.height - indH) / 2
-                    x: tabX(root.currentTab) + inset
+                    x: root.currentTab * tabBar.tabWidth + Settings.line * 3
+
+                    Behavior on x {
+                        NumberAnimation { duration: 300; easing.type: Easing.InOutQuad }
+                    }
 
                     ShapePath {
                         joinStyle: ShapePath.MiterJoin
@@ -268,8 +252,7 @@ PanelWindow {
                         anchors.fill: parent
                         z: 2
 
-                        property real xPos: tabX(index + 1)
-
+                        property real xPos: (index + 1) * tabBar.tabWidth
 
                         ShapePath {
                             joinStyle: ShapePath.MiterJoin
@@ -308,8 +291,7 @@ PanelWindow {
                         model: root.tabNames
 
                         delegate: Item {
-                            x: tabX(index)
-                            width: tabW(index)
+                            width: tabBar.tabWidth
                             height: tabBar.height
 
                             property real textOffset: {

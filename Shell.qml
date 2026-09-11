@@ -23,7 +23,7 @@ ShellRoot {
             x: clock.x
             width: clock.width
             height: parent.height
-            fontLineWidth: 5
+            fontLineWidth: 10
             z: 0
         }
 
