@@ -361,22 +361,29 @@ Item {
                             }
                         }
                         Infex {
-                            anchors.centerIn: parent
-                            ch: String(workspaceCell.workspaceId % 10)
-                            pixelSize: workspaceCell.isFocused
-                                ? Settings.barHeight - Settings.line * 6
-                                : Settings.barHeight - Settings.line * 4
-                            color: workspaceCell.isFocused
-                                ? Settings.c2
-                                : Settings.c1
-                            line: Settings.line
-                            Behavior on color {
-                                ColorAnimation { duration: 200 }
-                            }
-                            Behavior on pixelSize {
-                                PropertyAnimation { duration: 200 }
-                            }
-                        }
+    anchors.centerIn: parent
+
+    ch: String(workspaceCell.workspaceId % 10)
+
+    pixelSize: workspaceCell.isFocused
+        ? Settings.barHeight - Settings.line * 6
+        : Settings.barHeight - Settings.line * 4
+
+    referencePixelSize:
+        Settings.barHeight - Settings.line * 4
+
+    color: workspaceCell.isFocused
+        ? Settings.c2
+        : Settings.c1
+
+    line: Settings.line
+
+    Behavior on color {
+        ColorAnimation {
+            duration: 200
+        }
+    }
+}
                         // Text {
                         //     anchors.centerIn: parent
 
@@ -415,8 +422,8 @@ Item {
                             anchors.bottomMargin: -Settings.line * 3.5
 
                             color: workspaceCell.isFocused
-                                ? Settings.c2
-                                : Settings.c1
+                                ? Settings.c1
+                                : Settings.c2
 
                             Behavior on color {
                                 ColorAnimation { duration: 200 }

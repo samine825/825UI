@@ -182,18 +182,53 @@ PanelWindow {
 	property var angle: 360.0 / elementsCount
     // круг
     Item {
-
-
-        //transform: Rotation {id: abcd; origin.x: 500; origin.y: 500; axis { x: 0; y: 1; z: 0 } angle: 54 }
         id: circle
         width: 900
         height: 900
         x: (Screen.width - width) / 2
         y: -width/2
-		rotation: 0
+        rotation: 0
         Behavior on rotation {
             NumberAnimation { duration: 500; easing.type: Easing.InOutQuad }
         }
+        MouseArea {
+            id: mouseTracker
+            anchors.fill: parent
+            width: Screen.width
+            height: Screen.height
+            x: -circle.x
+            y: -circle.y
+            hoverEnabled: true
+            propagateComposedEvents: true
+            acceptedButtons: Qt.NoButton 
+        }
+
+        readonly property real mouseXFactor: mouseTracker.containsMouse 
+            ? -(mouseTracker.mouseX - Screen.width / 2 + circle.x) / (Screen.width / 2) 
+            : 0
+        readonly property real mouseYFactor: mouseTracker.containsMouse 
+            ? -(mouseTracker.mouseY - Screen.height / 2) / (Screen.height / 2) 
+            : 0
+
+        readonly property real maxTiltAngle: 12 
+
+        transform: [
+            Rotation {
+                origin.x: circle.width / 2
+                origin.y: circle.height / 2
+                axis { x: 1; y: 0; z: 0 }
+                angle: -circle.mouseYFactor * circle.maxTiltAngle
+                Behavior on angle { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
+            },
+            Rotation {
+                origin.x: circle.width / 2
+                origin.y: circle.height / 2
+                axis { x: 0; y: 1; z: 0 }
+                angle: circle.mouseXFactor * circle.maxTiltAngle
+                Behavior on angle { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
+            }
+        ]
+
         Rectangle {
             x: -root.line
             y: -root.line
@@ -410,7 +445,7 @@ PanelWindow {
                     height: 30
 
                     x: appCell.cx - width / 2
-                    y: appCell.cy + appCell.iconRadius - height / 2
+                    y: appCell.cy + appCell.iconRadius + 30
 
                     source: appCell.modelData.icon
                         ? Quickshell.iconPath(
@@ -493,8 +528,6 @@ PanelWindow {
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
 
-                        // Нижняя дуга окружности:
-                        // слева буквы выше, в центре ниже, справа выше.
                         x: appCell.cx
                         + appCell.labelRadius * Math.sin(theta)
                         - width / 2
@@ -797,3 +830,9 @@ PanelWindow {
         }
     }
 }
+// TODO: 
+// сделать настраиваемое включение 3д мода
+// сделать прокрутку приложений с помощью колеса мыши
+// сделать выбор приложений по клику мыши
+// пофиксить приколы с поиском (если переключитьтся на далекий элемнт  написать чето в поиск, тт далекий элмен окажся пустым и ты на нем застрянешь)
+// при повороте колеса, 3д мод шифтится

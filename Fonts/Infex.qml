@@ -1,23 +1,47 @@
 import QtQuick
 import QtQuick.Shapes
 import Quickshell
+
 Item {
     id: pc
-    
+
     property string ch: "0"
     property real pixelSize: 0
+    property real referencePixelSize: 0
     property color color: "white"
     property bool mirrorX: true
+    property real line: 0
+
+    readonly property real actualReferencePixelSize:
+        referencePixelSize > 0 ? referencePixelSize : pixelSize
+
+    readonly property real calculatedWidth:
+        glyphGen.width
 
     implicitHeight: pixelSize
-    implicitWidth: pixelSize
-    property real line: 0
+    implicitWidth: calculatedWidth
+
+    onPixelSizeChanged: glyphGen.clearCache()
+    onReferencePixelSizeChanged: glyphGen.clearCache()
+    onLineChanged: glyphGen.clearCache()
+    onChChanged: svgPath.path = glyphGen.pathForChar(pc.ch)
+
+    Behavior on pixelSize {
+        NumberAnimation {
+            duration: 200
+        }
+    }
+
+    Behavior on implicitWidth {
+        NumberAnimation {
+            duration: 200
+            easing.type: Easing.InOutQuad
+        }
+    }
+
     QtObject {
         id: glyphGen
-        readonly property int l: 1000
-        readonly property int d: (pc.line/pc.pixelSize)*1000
-        
-    
+
         readonly property var charToTrue: ({
             "0": 7,
             "1": 18,
@@ -55,78 +79,139 @@ Item {
             5:[10,9,8]
         })
 
+        readonly property real h:
+            Math.max(1, pc.pixelSize)
+
+        readonly property real referenceSize:
+            Math.max(1, pc.actualReferencePixelSize)
+
+        readonly property real thickness:
+            Math.max(0.001, pc.line)
+
+        readonly property real referenceAngle: {
+            const ratio = thickness / (referenceSize * Math.sqrt(2))
+            const clamped = Math.max(-1, Math.min(1, ratio))
+            return Math.PI / 4 + Math.asin(clamped)
+        }
+
+        readonly property real sinA:
+            Math.sin(referenceAngle)
+
+        readonly property real cosA:
+            Math.cos(referenceAngle)
+
+        readonly property real tanA:
+            Math.tan(referenceAngle)
+
+        readonly property real cotA:
+            1 / tanA
+
+        readonly property real halfThickness:
+            thickness / 2
+
+        readonly property real leftInset:
+            thickness / sinA
+
+        readonly property real diagonalInset:
+            thickness / tanA
+
+        readonly property real width:
+            Math.max(
+                thickness * 2,
+                (h + thickness / cosA) / tanA
+            )
+
+        readonly property real middleX:
+            width / 2
+
+        readonly property real middleY:
+            h / 2
+
+        readonly property real centerLeftPointX:
+            diagonalInset
+            + (middleY - thickness) / tanA
+
+        readonly property real centerTopPointY:
+            thickness
+            + tanA * (middleX - (leftInset + diagonalInset))
+
         readonly property var polygons: (function () {
-            const L = glyphGen.l
-            const d = glyphGen.d
+            const W = glyphGen.width
+            const H = glyphGen.h
+            const t = glyphGen.thickness
+            const a = glyphGen.leftInset
+            const b = glyphGen.diagonalInset
+            const c = a + b
+            const x9 = glyphGen.centerLeftPointX
+            const y8 = glyphGen.centerTopPointY
+
             const p = new Array(20)
-            for (let i = 0; i < 20; i++) p[i] = [0, 0]
 
-            // 1
             p[0]  = [0, 0]
-            p[3]  = [L, 0]
-            p[16] = [0, L]
-            p[19] = [L, L]
+            p[3]  = [W, 0]
+            p[16] = [0, H]
+            p[19] = [W, H]
 
-            // 2
-            const hyp = (L/2) * Math.sqrt(2)
-            const katet = d/2
-            const angle = Math.PI/2 - Math.acos(katet/hyp) + Math.PI/4
-            const iskomoe = L - (L/Math.tan(angle))
+            p[1]  = [a, 0]
+            p[2]  = [W - a, 0]
+            p[17] = [a, H]
+            p[18] = [W - a, H]
 
-            p[1]  = [iskomoe, 0]
-            p[2]  = [L - iskomoe, 0]
-            p[17] = [iskomoe, L]
-            p[18] = [L - iskomoe, L]
+            p[4]  = [b, t]
+            p[7]  = [W - b, t]
+            p[12] = [b, H - t]
+            p[15] = [W - b, H - t]
 
-            // 3
-            const hzk = d/Math.tan(angle)
-            p[4]  = [hzk, d]
-            p[7]  = [L - hzk, d]
-            p[12] = [hzk, L - d]
-            p[15] = [L - hzk, L - d]
+            p[5]  = [c, t]
+            p[6]  = [W - c, t]
+            p[13] = [c, H - t]
+            p[14] = [W - c, H - t]
 
-            // 4
-            p[5]  = [hzk + iskomoe, d]
-            p[6]  = [L - hzk - iskomoe, d]
-            p[13] = [hzk + iskomoe, L - d]
-            p[14] = [L - hzk - iskomoe, L - d]
+            p[9]  = [x9, H / 2]
+            p[10] = [W - x9, H / 2]
 
-            // 5
-            const tri2 = (L/2)/Math.tan(angle)
-            p[9]  = [tri2, L/2]
-            p[10] = [L - tri2, L/2]
-
-            // 6
-            const tri3 = (L/2)/Math.tan(Math.PI/2 - angle)
-            p[8]  = [L/2, L - tri3]
-            p[11] = [L/2, tri3]
+            p[8]  = [W / 2, y8]
+            p[11] = [W / 2, H - y8]
 
             return p
         })()
 
         property var _cache: ({})
 
+        function clearCache() {
+            _cache = {}
+            svgPath.path = pathForChar(pc.ch)
+        }
+
         function _sameEdge(a, b) {
-            return (a[0] === b[0] && a[1] === b[1]) || (a[0] === b[1] && a[1] === b[0])
+            return (a[0] === b[0] && a[1] === b[1])
+                || (a[0] === b[1] && a[1] === b[0])
         }
 
         function _edgeExists(list, edge) {
-            for (let i = 0; i < list.length; i++)
-                if (_sameEdge(list[i], edge)) return true
+            for (let i = 0; i < list.length; i++) {
+                if (_sameEdge(list[i], edge))
+                    return true
+            }
             return false
         }
 
         function _isUniqueEdge(edge, maplines) {
             let seen = 0
+
             for (const key in maplines) {
                 const edges = maplines[key]
+
                 for (let i = 0; i < edges.length; i++) {
                     if (_sameEdge(edge, edges[i])) {
-                        if (seen > 0) return false
+                        if (seen > 0)
+                            return false
+
                         seen += 1
                     }
                 }
             }
+
             return true
         }
 
@@ -134,94 +219,144 @@ Item {
             for (const idx in elementMap) {
                 if (active_elements[idx]) {
                     const pts = elementMap[idx]
-                    for (let i = 0; i < pts.length; i++)
-                        if (pts[i] === point) return true
+
+                    for (let i = 0; i < pts.length; i++) {
+                        if (pts[i] === point)
+                            return true
+                    }
                 }
             }
+
             return false
         }
 
-        // findidx (порт python, включая удаление singleton [point])
         function _findidx(point, resultus) {
             for (let i = 0; i < resultus.length; i++) {
-                if (resultus[i].length === 1 && resultus[i][0] === point) {
+                if (resultus[i].length === 1
+                        && resultus[i][0] === point) {
                     resultus.splice(i, 1)
                     break
                 }
             }
+
             for (let num = 0; num < resultus.length; num++) {
                 const arr = resultus[num]
-                for (let j = 0; j < arr.length; j++)
-                    if (arr[j] === point) return num
+
+                for (let j = 0; j < arr.length; j++) {
+                    if (arr[j] === point)
+                        return num
+                }
             }
+
             return -1
         }
 
         function _paravozik(idx, start, resultus) {
-            if (!resultus || resultus.length === 0) return []
+            if (!resultus || resultus.length === 0)
+                return []
+
             const edge = resultus[idx]
             const pos = edge.indexOf(start)
-            if (pos !== -1) edge.splice(pos, 1)
+
+            if (pos !== -1)
+                edge.splice(pos, 1)
 
             const remainder = edge[0]
             const finded_idx = _findidx(remainder, resultus)
-            if (finded_idx === -1) return [start]
-            return [start].concat(_paravozik(finded_idx, remainder, resultus))
+
+            if (finded_idx === -1)
+                return [start]
+
+            return [start].concat(
+                _paravozik(finded_idx, remainder, resultus)
+            )
         }
 
         function pathForTrueNumber(truenumber) {
             const key = String(truenumber)
-            if (_cache[key] !== undefined) return _cache[key]
+
+            if (_cache[key] !== undefined)
+                return _cache[key]
 
             let bits = truenumber.toString(2)
-            while (bits.length < 6) bits = "0" + bits
-            const numlist = bits.split("").map(s => parseInt(s, 10))
 
-            // maplines
+            while (bits.length < 6)
+                bits = "0" + bits
+
+            const numlist = bits
+                .split("")
+                .map(s => parseInt(s, 10))
+
             const maplines = {}
+
             for (const i in elementMap) {
                 const k = elementMap[i]
                 maplines[i] = []
-                for (let linenum = 0; linenum < k.length; linenum++)
-                    maplines[i].push([k[linenum], k[(linenum + 1) % 4]])
+
+                for (let linenum = 0; linenum < k.length; linenum++) {
+                    maplines[i].push([
+                        k[linenum],
+                        k[(linenum + 1) % 4]
+                    ])
+                }
             }
 
-            // categorize edges unique/non-unique
             const maplinescategorized = {}
+
             for (const i in elementMap) {
-                maplinescategorized[i] = { u: [], n: [] }
+                maplinescategorized[i] = {
+                    u: [],
+                    n: []
+                }
+
                 const edges = maplines[i]
+
                 for (let linenum = 0; linenum < edges.length; linenum++) {
                     const e = edges[linenum]
-                    maplinescategorized[i][_isUniqueEdge(e, maplines) ? "u" : "n"].push(e)
+
+                    maplinescategorized[i][
+                        _isUniqueEdge(e, maplines) ? "u" : "n"
+                    ].push(e)
                 }
             }
 
             const active_elements = {}
-            for (let i = 0; i <= 10; i++) active_elements[i] = false
 
-            // активируем элементы (6 -> 11)
+            for (let i = 0; i <= 10; i++)
+                active_elements[i] = false
+
             for (let idx = 0; idx < numlist.length; idx++) {
                 if (numlist[idx]) {
                     const elements = elements4num[idx]
-                    for (let j = 0; j < elements.length; j++)
+
+                    for (let j = 0; j < elements.length; j++) {
                         active_elements[elements[j]] = true
+                    }
                 }
             }
 
-            // resultus
             const resultus = []
+
             for (const idx in elementMap) {
                 if (active_elements[idx]) {
                     const uedges = maplinescategorized[idx].u
-                    for (let i = 0; i < uedges.length; i++)
-                        resultus.push([uedges[i][0], uedges[i][1]])
+
+                    for (let i = 0; i < uedges.length; i++) {
+                        resultus.push([
+                            uedges[i][0],
+                            uedges[i][1]
+                        ])
+                    }
                 } else {
                     const nedges = maplinescategorized[idx].n
+
                     for (let i = 0; i < nedges.length; i++) {
                         const e = nedges[i]
-                        const a = e[0], b = e[1]
-                        if (_point_in_active(a, active_elements) || _point_in_active(b, active_elements)) {
+                        const a = e[0]
+                        const b = e[1]
+
+                        if (_point_in_active(a, active_elements)
+                                || _point_in_active(b, active_elements)) {
                             if (!_edgeExists(resultus, e))
                                 resultus.push([a, b])
                         }
@@ -229,28 +364,39 @@ Item {
                 }
             }
 
-            // paravozik
             const resulted_paravozik = []
-            while (resultus.length > 0) {
-                const sub = _paravozik(0, resultus[0][0], resultus)
 
-                if (sub.length >= 2 && polygons[sub[0]][0] > polygons[sub[1]][0])
+            while (resultus.length > 0) {
+                const sub = _paravozik(
+                    0,
+                    resultus[0][0],
+                    resultus
+                )
+
+                if (sub.length >= 2
+                        && polygons[sub[0]][0]
+                        > polygons[sub[1]][0]) {
                     sub.reverse()
+                }
+
                 if (sub.length === 3)
                     sub.reverse()
 
                 resulted_paravozik.push(sub)
             }
 
-            // svg-path
             let path = ""
+
             for (let i = 0; i < resulted_paravozik.length; i++) {
                 const chain = resulted_paravozik[i]
+
                 for (let n = 0; n < chain.length; n++) {
                     const pt = polygons[chain[n]]
+
                     path += (n === 0 ? "M " : "L ")
                     path += pt[0] + "," + pt[1] + " "
                 }
+
                 path += "Z "
             }
 
@@ -260,12 +406,14 @@ Item {
 
         function pathForChar(ch) {
             const tn = charToTrue[ch]
-            if (tn === undefined) return ""
+
+            if (tn === undefined)
+                return ""
+
             return pathForTrueNumber(tn)
         }
     }
 
-    // --- Отрисовка геометрии ---
     Shape {
         anchors.fill: parent
         preferredRendererType: Shape.CurveRenderer
@@ -274,8 +422,8 @@ Item {
             Scale {
                 origin.x: 0
                 origin.y: 0
-                xScale: (pc.mirrorX ? -1 : 1) * (pc.width / 1000)
-                yScale: (pc.height / 1000)
+                xScale: pc.mirrorX ? -1 : 1
+                yScale: 1
             },
             Translate {
                 x: pc.mirrorX ? pc.width : 0
@@ -287,7 +435,11 @@ Item {
             fillColor: pc.color
             strokeColor: "transparent"
             fillRule: ShapePath.OddEvenFill
-            PathSvg { path: glyphGen.pathForChar(pc.ch) }
+
+            PathSvg {
+                id: svgPath
+                path: glyphGen.pathForChar(pc.ch)
+            }
         }
     }
 }
