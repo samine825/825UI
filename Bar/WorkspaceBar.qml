@@ -2,17 +2,18 @@ import QtQuick
 import QtQuick.Shapes
 import Quickshell
 import Quickshell.Hyprland
-import "./Fonts" 
+import "../Fonts"
+import "../SmoothColorElements" 
+import "../"
 Item {
     id: root
 
     readonly property int workspaceCount: 10
-    readonly property real cellWidth: Settings.barHeight + (313.857/150) * 6
+    readonly property real cellWidth: Settings.barHeight// + (313.857/150) * 6
 
-    width: workspaceCount * cellWidth + Settings.line * (313.857/150) + Settings.barGap * 2
+    width: workspaceCount * cellWidth + Settings.line * (313.857/150)
     height: Settings.barHeight
 
-    // Индекс сфокусированного рабочего стола.
     readonly property int currentIndex: {
         const list = Hyprland.workspaces.values
 
@@ -39,39 +40,30 @@ Item {
 
         readonly property real point: height * (403.16 / 1000)
 
-        // Активная ячейка визуально "съедается" стрелками разделителей
-        // на point слева и на point справа. Компенсируем это, делая её
-        // номинально шире на 2 * point. Эти 2 * point равномерно
-        // распределяются между остальными ячейками (~2-3 px, незаметно).
         readonly property real activeExtra:
             root.currentIndex >= 0 ? 2 * point : 0
 
-        // Номинальная ширина обычной (неактивной) ячейки.
         readonly property real cellWidth:
             (width - activeExtra) / root.workspaceCount
 
-        // Левая граница ячейки i (i от 0 до workspaceCount).
         function cellX(i) {
             return i * cellWidth
                 + (root.currentIndex >= 0 && i > root.currentIndex
                     ? activeExtra : 0)
         }
 
-        // Номинальная ширина ячейки i.
         function cellW(i) {
             return cellX(i + 1) - cellX(i)
         }
 
-        // Чтобы ячейки не "разъезжались" анимацией при старте.
         property bool animationsEnabled: false
         Component.onCompleted: animationsEnabled = true
 
-        // Внешняя чёрная обводка.
         Shape {
             anchors.fill: parent
             preferredRendererType: Shape.CurveRenderer
 
-            ShapePath {
+            SShapePath {
                 joinStyle: ShapePath.MiterJoin
                 capStyle: ShapePath.FlatCap
 
@@ -109,12 +101,11 @@ Item {
             }
         }
 
-        // Основная рамка.
         Shape {
             anchors.fill: parent
             preferredRendererType: Shape.CurveRenderer
 
-            ShapePath {
+            SShapePath {
                 joinStyle: ShapePath.MiterJoin
                 capStyle: ShapePath.FlatCap
 
@@ -152,7 +143,6 @@ Item {
             }
         }
 
-        // Подвижная подсветка текущего рабочего стола.
         Shape {
             id: activeIndicator
 
@@ -162,7 +152,6 @@ Item {
             readonly property real inset: Settings.line * (313.857/150) * 1.5
             readonly property real point: height * (403.16 / 1000)
 
-            // Ширина активной ячейки (cellWidth + activeExtra) минус отступы.
             width: Math.max(1,
                 workspaceBar.cellWidth + workspaceBar.activeExtra
                 - inset * 2)
@@ -178,7 +167,7 @@ Item {
                 }
             }
 
-            ShapePath {
+            SShapePath {
                 joinStyle: ShapePath.MiterJoin
                 capStyle: ShapePath.FlatCap
 
@@ -216,7 +205,6 @@ Item {
             }
         }
 
-        // Разделители меняют направление относительно активной ячейки.
         Repeater {
             model: root.workspaceCount - 1
 
@@ -239,7 +227,7 @@ Item {
                     }
                 }
 
-                ShapePath {
+                SShapePath {
                     joinStyle: ShapePath.MiterJoin
                     capStyle: ShapePath.FlatCap
 
@@ -328,7 +316,6 @@ Item {
                         workspaceObject !== null
                         && workspaceObject.toplevels.values.length > 0
 
-                    // Аналог смещения текста во вкладках settings.
                     readonly property real textOffset: {
                         const leftNotch =
                             index === 0 || root.currentIndex >= index
@@ -361,30 +348,24 @@ Item {
                             }
                         }
                         Infex {
-    anchors.centerIn: parent
+                            anchors.centerIn: parent
 
-    ch: String(workspaceCell.workspaceId % 10)
+                            ch: String(workspaceCell.workspaceId % 10)
 
-    pixelSize: workspaceCell.isFocused
-        ? Settings.barHeight - Settings.line * 6
-        : Settings.barHeight - Settings.line * 4
+                            pixelSize: workspaceCell.isFocused
+                                ? Settings.barHeight - Settings.line * 6
+                                : Settings.barHeight - Settings.line * 4
 
-    referencePixelSize:
-        Settings.barHeight - Settings.line * 4
+                            referencePixelSize:
+                                Settings.barHeight - Settings.line * 4
 
-    color: workspaceCell.isFocused
-        ? Settings.c2
-        : Settings.c1
+                            color: workspaceCell.isFocused
+                                ? Settings.c2
+                                : Settings.c1
 
-    line: Settings.line
-
-    Behavior on color {
-        ColorAnimation {
-            duration: 200
-        }
-    }
-}
-                        // Text {
+                            line: Settings.line
+                        }
+                        // SText {
                         //     anchors.centerIn: parent
 
                         //     text: String(workspaceCell.workspaceId)
@@ -402,16 +383,7 @@ Item {
                         //         : 0.55
 
                         //     font.bold: true
-
-                        //     Behavior on color {
-                        //         ColorAnimation { duration: 200 }
-                        //     }
-
-                        //     Behavior on opacity {
-                        //         NumberAnimation { duration: 200 }
-                        //     }
-                        // }
-                        Rectangle {
+                        SRectangle {
                             visible: workspaceCell.occupied
                             width: Settings.line
                             height: Settings.line
@@ -424,10 +396,6 @@ Item {
                             color: workspaceCell.isFocused
                                 ? Settings.c1
                                 : Settings.c2
-
-                            Behavior on color {
-                                ColorAnimation { duration: 200 }
-                            }
                         }
                     }
 

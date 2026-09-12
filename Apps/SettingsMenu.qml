@@ -4,7 +4,8 @@ import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-
+import "../SmoothColorElements"
+import "../"
 PanelWindow {
     id: root
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
@@ -169,7 +170,7 @@ PanelWindow {
         const randomTransition = transitions[Math.floor(Math.random() * transitions.length)];
         wallpaperApplyProcess.command = [
             "sh", "-c",
-            `awww img ${path}
+            `awww img "${path}"
                 --transition-fps 144
                 --transition-type ${randomTransition}
                 --transition-pos ${Math.random()},${Math.random()}
@@ -184,11 +185,11 @@ PanelWindow {
 
         matugenProcess.running = false
         matugenProcess.output = ""
-
+        console.log(path)
         matugenProcess.command = [
             "sh",
             "-c",
-            `matugen image ${path} -m dark --json hex --prefer=saturation`,
+            `matugen image "${path}" -m dark --json hex --prefer=saturation`,
             "sh"
         ]
 
@@ -210,16 +211,15 @@ PanelWindow {
         }
     }
 
-    Rectangle {
+    Item {
         id: windowFrame
         width: 700
         height: 500
         anchors.centerIn: parent
-        color: "transparent"
 
         Column {
             anchors.fill: parent
-            spacing: 17.5
+            spacing: Settings.line * 3.5
 
             // --- Tabs ---
             Item {
@@ -242,7 +242,7 @@ PanelWindow {
                     z: -1
                     preferredRendererType: Shape.CurveRenderer
 
-                    ShapePath {
+                    SShapePath {
                         joinStyle: ShapePath.MiterJoin
                         capStyle: ShapePath.FlatCap
 
@@ -270,7 +270,7 @@ PanelWindow {
                     anchors.fill: parent
                     preferredRendererType: Shape.CurveRenderer
 
-                    ShapePath {
+                    SShapePath {
                         joinStyle: ShapePath.MiterJoin
                         capStyle: ShapePath.FlatCap
                         strokeColor: Settings.c1
@@ -305,7 +305,7 @@ PanelWindow {
                         NumberAnimation { duration: 300; easing.type: Easing.InOutQuad }
                     }
 
-                    ShapePath {
+                    SShapePath {
                         joinStyle: ShapePath.MiterJoin
                         capStyle: ShapePath.FlatCap
                         fillColor: Settings.c1
@@ -334,7 +334,7 @@ PanelWindow {
 
                         property real xPos: (index + 1) * tabBar.tabWidth
 
-                        ShapePath {
+                        SShapePath {
                             joinStyle: ShapePath.MiterJoin
                             capStyle: ShapePath.FlatCap
                             strokeColor: Settings.c1
@@ -390,17 +390,13 @@ PanelWindow {
                                 return 0
                             }
 
-                            Text {
+                            SText {
                                 text: modelData
                                 color: root.currentTab === index ? Settings.c2 : Settings.c1
                                 anchors.verticalCenter: parent.verticalCenter
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 anchors.horizontalCenterOffset: textOffset
                                 font.bold: true
-
-                                Behavior on color {
-                                    ColorAnimation { duration: 200 }
-                                }
 
                                 Behavior on anchors.horizontalCenterOffset {
                                     NumberAnimation { duration: 300; easing.type: Easing.InOutQuad }
@@ -423,7 +419,7 @@ PanelWindow {
                 width: parent.width
                 height: parent.height - tabBar.height - Settings.line*1.5
 
-                Rectangle {
+                SRectangle {
                     x: -Settings.line
                     y: -Settings.line
                     width: parent.width + Settings.line * 2
@@ -433,7 +429,7 @@ PanelWindow {
                     border.width: Settings.line * 2
                 }
 
-                Rectangle {
+                SRectangle {
                     anchors.fill: parent
                     color: Settings.c2
                     border.color: Settings.c1
@@ -446,7 +442,7 @@ PanelWindow {
                     anchors.fill: parent
                     anchors.margins: Settings.line
 
-                    Text {
+                    SText {
                         text: "System"
                         color: Settings.c1
                         anchors.centerIn: parent
@@ -459,7 +455,7 @@ PanelWindow {
                     anchors.fill: parent
                     anchors.margins: Settings.line
 
-                    Text {
+                    SText {
                         text: "Bar"
                         color: Settings.c1
                         anchors.centerIn: parent
@@ -548,7 +544,7 @@ PanelWindow {
                                     z: 2
 
                                     // ВЛ
-                                    ShapePath {
+                                    SShapePath {
                                         joinStyle: ShapePath.MiterJoin
                                         capStyle: ShapePath.FlatCap
                                         strokeColor: "transparent"
@@ -561,7 +557,7 @@ PanelWindow {
                                     }
 
                                     // ВП
-                                    ShapePath {
+                                    SShapePath {
                                         joinStyle: ShapePath.MiterJoin
                                         capStyle: ShapePath.FlatCap
                                         strokeColor: "transparent"
@@ -574,7 +570,7 @@ PanelWindow {
                                     }
 
                                     // НП
-                                    ShapePath {
+                                    SShapePath {
                                         joinStyle: ShapePath.MiterJoin
                                         capStyle: ShapePath.FlatCap
                                         strokeColor: "transparent"
@@ -587,7 +583,7 @@ PanelWindow {
                                     }
 
                                     // НЛ
-                                    ShapePath {
+                                    SShapePath {
                                         joinStyle: ShapePath.MiterJoin
                                         capStyle: ShapePath.FlatCap
                                         strokeColor: "transparent"
@@ -605,7 +601,7 @@ PanelWindow {
                                     anchors.fill: parent
                                     z: 3
 
-                                    ShapePath {
+                                    SShapePath {
                                         joinStyle: ShapePath.MiterJoin
                                         capStyle: ShapePath.FlatCap
                                         strokeColor: Settings.c1
@@ -626,7 +622,7 @@ PanelWindow {
                                 }
 
                                 // подпись
-                                Rectangle {
+                                SRectangle {
                                     anchors.bottom: parent.bottom
                                     anchors.left: parent.left
                                     anchors.right: parent.right
@@ -635,7 +631,7 @@ PanelWindow {
                                     color: '#77' + Settings.c2.slice(1);
                                     z: 1
 
-                                    Text {
+                                    SText {
                                         anchors.left: parent.left
                                         anchors.right: parent.right
                                         anchors.rightMargin: 20
@@ -658,7 +654,7 @@ PanelWindow {
                             }
                         }
 
-                        Text {
+                        SText {
                             anchors.centerIn: parent
                             visible: root.wallpaperModel.length === 0
                             text: "~/Pictures/Wallpapers"
@@ -667,7 +663,7 @@ PanelWindow {
                     }
 
                     // скролл
-                    Rectangle {
+                    SRectangle {
                         id: wallpaperScrollTrack
                         anchors.right: parent.right
                         anchors.top: parent.top
@@ -677,7 +673,7 @@ PanelWindow {
                         color: Settings.c2
                         visible: wallpaperFlick.contentHeight > wallpaperFlick.height + 2
 
-                        Rectangle {
+                        SRectangle {
                             id: wallpaperScrollHandle
                             width: parent.width
                             radius: parent.radius
@@ -746,7 +742,7 @@ PanelWindow {
                     }
 
                     // кнопка обновления
-                    Rectangle {
+                    SRectangle {
                         anchors.top: parent.top
                         anchors.left: parent.left
                         anchors.margins: Settings.line
@@ -757,7 +753,7 @@ PanelWindow {
                         border.color: Settings.c1
                         z: 3
 
-                        Text {
+                        SText {
                             anchors.centerIn: parent
                             text: wallpaperScanner.running ? "Скан…" : "Обновить"
                             color: Settings.c1
@@ -778,7 +774,7 @@ PanelWindow {
                     anchors.fill: parent
                     anchors.margins: Settings.line
 
-                    Text {
+                    SText {
                         text: "Monitor"
                         color: Settings.c1
                         anchors.centerIn: parent
@@ -791,7 +787,7 @@ PanelWindow {
                     anchors.fill: parent
                     anchors.margins: Settings.line
 
-                    Text {
+                    SText {
                         text: "About"
                         color: Settings.c1
                         anchors.centerIn: parent
@@ -801,7 +797,7 @@ PanelWindow {
         }
 
         // чорн обводка окна контента
-        Rectangle {
+        SRectangle {
             id: contentBlackOutline
             anchors.fill: contentArea
             anchors.margins: -Settings.line

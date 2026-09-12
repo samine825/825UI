@@ -5,7 +5,8 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import Qt5Compat.GraphicalEffects
-
+import "../SmoothColorElements"
+import "../"
 PanelWindow {
     FontLoader {
         id: clockFont
@@ -229,7 +230,7 @@ PanelWindow {
             }
         ]
 
-        Rectangle {
+        SRectangle {
             x: -root.line
             y: -root.line
             width: circle.width + root.line*2
@@ -243,7 +244,7 @@ PanelWindow {
 
             layer.enabled: true
         }
-        Rectangle {
+        SRectangle {
             anchors.fill: parent
             color: "transparent"
             radius: width / 2
@@ -253,7 +254,7 @@ PanelWindow {
 
             layer.enabled: true
         }
-        Rectangle {
+        SRectangle {
             anchors.fill: parent
 
             anchors.top: parent.top
@@ -289,7 +290,7 @@ PanelWindow {
 
                 rotation: index * angle
 
-                ShapePath {
+                SShapePath {
                     joinStyle: ShapePath.MiterJoin
                     capStyle: ShapePath.FlatCap
                     strokeColor: Settings.c1
@@ -331,7 +332,7 @@ PanelWindow {
 		        anchors.fill: parent
 		        preferredRendererType: Shape.CurveRenderer
 
-		        ShapePath {
+		        SShapePath {
 		            id: sh
 		            fillColor: Settings.c1
 		            strokeColor: "transparent"
@@ -436,9 +437,6 @@ PanelWindow {
                         ? Settings.c2
                         : Settings.c1
 
-                Behavior on labelColor {
-                    ColorAnimation { duration: 300 }
-                }
 
                 Image {
                     width: 30
@@ -512,7 +510,7 @@ PanelWindow {
                 Repeater {
                     model: appCell.letters
 
-                    delegate: Text {
+                    delegate: SText {
                         id: letter
                         font.bold: true
                         required property var modelData
@@ -568,7 +566,7 @@ PanelWindow {
             anchors.fill: parent
             preferredRendererType: Shape.CurveRenderer
 
-            ShapePath {
+            SShapePath {
                 strokeColor: Settings.c2
                 strokeWidth: searchArea.inputHeight + root.line*2
                 fillColor: "transparent"
@@ -610,7 +608,7 @@ PanelWindow {
                 }
             }
 
-            ShapePath {
+            SShapePath {
                 strokeColor: Settings.c1
                 strokeWidth: searchArea.inputHeight
                 fillColor: "transparent"
@@ -652,7 +650,7 @@ PanelWindow {
                 }
             }
 
-            ShapePath {
+            SShapePath {
                 strokeColor: Settings.c2
                 strokeWidth: searchArea.inputHeight - root.line*2
                 fillColor: "transparent"
@@ -780,7 +778,7 @@ PanelWindow {
                 id: textRepeater
                 model: searchInput.text.length
 
-                delegate: Text {
+                delegate: SText {
                     id: charText
                     font.bold: true
                     required property int index

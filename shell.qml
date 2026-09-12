@@ -4,6 +4,8 @@ import Quickshell.Wayland
 import Quickshell.Io
 import QtQuick.Window
 import QtQuick.Shapes
+import "./Apps"
+import "./Bar"
 
 ShellRoot {
     // бар
@@ -17,70 +19,52 @@ ShellRoot {
         implicitHeight: Settings.barGap * 2 + Settings.barHeight
         color: "transparent"
 
+        // Item {
+        //     id: notifBadge
+        //     anchors {
+        //         right: clock.left
+        //         rightMargin: 8
+        //         verticalCenter: parent.verticalCenter
+        //     }
+        //     z: 2
+        //     width: Notifications.notifications.length > 0 ? badgeRect.width : 0
+        //     height: parent.height
+        //     visible: Notifications.notifications.length > 0
 
-        Bar {
+        //     Behavior on width {
+        //         NumberAnimation { duration: 200 }
+        //     }
+
+        //     Rectangle {
+        //         id: badgeRect
+        //         anchors.centerIn: parent
+        //         width: badgeText.implicitWidth + 14
+        //         height: badgeText.implicitHeight + 6
+        //         color: "#ff4444"
+        //     }
+
+        //     Text {
+        //         id: badgeText
+        //         anchors.centerIn: parent
+        //         text: Notifications.notifications.length.toString()
+        //         font.pixelSize: 12
+        //         font.bold: true
+        //         color: "white"
+        //     }
+
+        //     MouseArea {
+        //         anchors.fill: parent
+        //         onClicked: Notifications.dismissAll()
+        //     }
+        // }
+
+        Item {
             id: bar
-            x: clock.x
-            width: clock.width
-            height: parent.height
-            fontLineWidth: 10
-            z: 0
-        }
-
-        Clock {
-            id: clock
-            anchors.horizontalCenter: parent.horizontalCenter
-            z: 1
-        }
-
-        // Счётчик уведомлений (красный бейдж)
-        Item {
-            id: notifBadge
-            anchors {
-                right: clock.left
-                rightMargin: 8
-                verticalCenter: parent.verticalCenter
-            }
-            z: 2
-            width: Notifications.notifications.length > 0 ? badgeRect.width : 0
-            height: parent.height
-            visible: Notifications.notifications.length > 0
-
-            Behavior on width {
-                NumberAnimation { duration: 200 }
-            }
-
-            Rectangle {
-                id: badgeRect
-                anchors.centerIn: parent
-                width: badgeText.implicitWidth + 14
-                height: badgeText.implicitHeight + 6
-                color: "#ff4444"
-            }
-
-            Text {
-                id: badgeText
-                anchors.centerIn: parent
-                text: Notifications.notifications.length.toString()
-                font.pixelSize: 12
-                font.bold: true
-                color: "white"
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                onClicked: Notifications.dismissAll()
-            }
-        }
-
-        Item {
-            id: rightModules
             anchors {
                 verticalCenter: parent.verticalCenter
             }
             width: shellRoot.width
             height: Settings.barHeight
-            z: 20
 
             SystemStats {
                 id: systemStats
@@ -89,7 +73,11 @@ ShellRoot {
                 }
                 height: Settings.barHeight
             }
-
+            Clock {
+                id: clock
+                anchors.horizontalCenter: parent.horizontalCenter
+                height: Settings.barHeight
+            }
             WorkspaceBar {
                 id: workspaceBar
                 anchors {
@@ -99,10 +87,9 @@ ShellRoot {
             }
         }
 
-        // клик по бару → лаунчер
         MouseArea {
             id: barClick
-            anchors.fill: bar
+            anchors.fill: clock
             z: 10
             cursorShape: Qt.PointingHandCursor
             onClicked: appLauncher.show()
@@ -114,22 +101,11 @@ ShellRoot {
             function forceReload(): void {
                 Quickshell.reload(true)
             }
-
             function toggleSettings(): void {
                 settingsMenu.visible = !settingsMenu.visible
             }
-
-            function testNotification(): void {
-                Quickshell.execDetached([
-                    "notify-send",
-                    "-a", "Test",
-                    "Test Notification",
-                    "Это тестовое уведомление"
-                ])
-            }
-
             function toggleLauncher(): void {
-                !appLauncher.visible ? appLauncher.show() : appLauncher.hide()
+                appLauncher.visible = !appLauncher.visible
             }
         }
     }
@@ -148,10 +124,7 @@ ShellRoot {
         WlrLayershell.layer: WlrLayer.Overlay
         color: "transparent"
 
-        // Только hitbox'ы уведомлений входят в Wayland input region.
         property var notificationRegions: []
-
-        // Упорядоченный стек активных уведомлений
         property var activeStack: []
 
         function pushToStack(popup) {
@@ -255,13 +228,6 @@ ShellRoot {
         }
     }
 
-    // ─── ОКНО НАСТРОЕК ──────────────────────────────────────────
-    SettingsMenu {
-        id: settingsMenu
-    }
-
-    // ─── ЛАУНЧЕР ПРИЛОЖЕНИЙ ─────────────────────────────────────
-    AppLauncher {
-        id: appLauncher
-    }
+    SettingsMenu {id: settingsMenu}
+    AppLauncher {id: appLauncher}
 }

@@ -442,4 +442,10 @@ Item {
             }
         }
     }
+
+    Behavior on color {
+        ColorAnimation {
+            duration: 250
+        }
+    }
 }
