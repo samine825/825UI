@@ -1,13 +1,13 @@
 {
     "barGap": 16,
     "barHeight": 40,
-    "line": 4,
-    "leftMargin": 0,
-    "rightMargin": 0,
-    "edgeSize": 20,
-    "c1": "#4689ff",
-    "c2": "#381533",
     "barType": 0,
-    "secondsMode": 1,
-    "infex": true
+    "c1": "#f7d3c6",
+    "c2": "#39475e",
+    "edgeSize": 20,
+    "infex": true,
+    "leftMargin": 0,
+    "line": 4,
+    "rightMargin": 0,
+    "secondsMode": 1
 }

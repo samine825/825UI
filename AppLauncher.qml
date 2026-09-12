@@ -445,7 +445,7 @@ PanelWindow {
                     height: 30
 
                     x: appCell.cx - width / 2
-                    y: appCell.cy + appCell.iconRadius + 30
+                    y: appCell.cy + appCell.iconRadius + height - 10
 
                     source: appCell.modelData.icon
                         ? Quickshell.iconPath(
@@ -525,8 +525,6 @@ PanelWindow {
                         width: implicitWidth
                         height: implicitHeight
 
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
 
                         x: appCell.cx
                         + appCell.labelRadius * Math.sin(theta)

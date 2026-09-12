@@ -83,6 +83,67 @@ PanelWindow {
         id: wallpaperApplyProcess
         running: false
     }
+    Process {
+        id: matugenProcess
+
+        running: false
+
+        property string output: ""
+        property string errorOutput: ""
+
+        stdout: SplitParser {
+            splitMarker: "\n"
+
+            onRead: function(data) {
+                matugenProcess.output += String(data) + "\n"
+            }
+        }
+
+        stderr: SplitParser {
+            splitMarker: "\n"
+
+            onRead: function(data) {
+                matugenProcess.errorOutput += String(data) + "\n"
+            }
+        }
+
+        onRunningChanged: {
+            if (matugenProcess.running)
+                return
+
+            var stdoutText = matugenProcess.output.trim()
+            var stderrText = matugenProcess.errorOutput.trim()
+
+            if (stderrText !== "")
+                console.log("Matugen stderr:", stderrText)
+
+            if (stdoutText === "") {
+                console.log("Matugen: empty stdout")
+                matugenProcess.output = ""
+                matugenProcess.errorOutput = ""
+                return
+            }
+
+            try {
+                var result = JSON.parse(stdoutText)
+//primary
+                var primary = result.base16.base00.light.color
+                var secondary = result.base16.base00.dark.color
+
+                console.log("Matugen primary:", primary)
+                console.log("Matugen secondary:", secondary)
+
+                if (primary && secondary)
+                    Settings.setColors(primary, secondary)
+            } catch (e) {
+                console.log("Matugen JSON parse error:", e)
+                console.log("Raw Matugen output:", stdoutText)
+            }
+
+            matugenProcess.output = ""
+            matugenProcess.errorOutput = ""
+        }
+    }
 
     function ensureWallpapersLoaded() {
         if (!root.wallpapersLoaded) {
@@ -104,15 +165,34 @@ PanelWindow {
             return
 
         wallpaperApplyProcess.running = false
-
+        const transitions = ["simple", "fade", "wipe", "any", "wave"]
+        const randomTransition = transitions[Math.floor(Math.random() * transitions.length)];
         wallpaperApplyProcess.command = [
             "sh", "-c",
-            "awww img --transition-fps 144 --transition-type random \"$1\" --transition-duration 1.5",
+            `awww img ${path}
+                --transition-fps 144
+                --transition-type ${randomTransition}
+                --transition-pos ${Math.random()},${Math.random()}
+                --transition-duration 1.5
+                --transition-angle ${Math.random() * 360}
+                --transition-wave ${Math.random()*100},${Math.random()*100}
+                `.replace(/\n/g, ' '),
+            "sh"
+        ]
+//--transition-bezier ${Math.random()},${Math.random()},${Math.random()},${Math.random()}
+        wallpaperApplyProcess.running = true
+
+        matugenProcess.running = false
+        matugenProcess.output = ""
+
+        matugenProcess.command = [
             "sh",
-            path
+            "-c",
+            `matugen image ${path} -m dark --json hex --prefer=saturation`,
+            "sh"
         ]
 
-        wallpaperApplyProcess.running = true
+        matugenProcess.running = true
     }
 
     onVisibleChanged: {

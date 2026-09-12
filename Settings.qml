@@ -22,6 +22,7 @@ Singleton {
 
         path: Qt.resolvedUrl("./settings.json")
         watchChanges: true
+
         adapter: JsonAdapter {
             id: settings
 
@@ -39,7 +40,16 @@ Singleton {
         }
 
         onAdapterUpdated: writeAdapter()
-
         onFileChanged: reload()
+    }
+
+    function setColors(primary, secondary) {
+        if (!primary || !secondary)
+            return
+
+        settings.c1 = primary
+        settings.c2 = secondary
+
+        configFile.writeAdapter()
     }
 }
