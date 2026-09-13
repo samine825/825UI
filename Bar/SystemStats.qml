@@ -1,8 +1,18 @@
 import QtQuick
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
-
+import "../Fonts"
+import "../SmoothColorElements"
+import "../"
 Item {
+    id: r
+    width: statsRow.implicitWidth + root.point * 2 + Settings.line * 4
+Item {
+    x: Settings.barGap + Settings.line * (192.773/150) * 1.5
+    width: parent.width
+    anchors.verticalCenter: parent.verticalCenter
+    height: Settings.barHeight
     id: root
 
     property string cpuText: "CPU --%"
@@ -12,63 +22,107 @@ Item {
     property double previousTotal: 0
     property double previousIdle: 0
 
-    readonly property int horizontalPadding: 12
-    readonly property int sectionGap: 10
+    // Геометрия и размеры, завязанные на глобальные настройки
+    readonly property real point: height * (403.16 / 1000)
 
-    width: statsRow.implicitWidth + horizontalPadding * 2
-    height: Settings.barHeight
-
-    Rectangle {
+    // 1. Внешний Shape (Фон и толстая обводка)
+    Shape {
         anchors.fill: parent
-        color: "black"
-        border.width: 1
-        border.color: "#3a3a3a"
+        preferredRendererType: Shape.CurveRenderer
+
+        SShapePath {
+            joinStyle: ShapePath.MiterJoin
+            capStyle: ShapePath.FlatCap
+
+            strokeColor: Settings.c2
+            strokeWidth: Settings.line * 3
+            fillColor: Settings.c2
+
+            startX: 0
+            startY: 0
+
+            PathLine { x: parent.width; y: 0 }
+            PathLine { x: parent.width - root.point; y: root.height / 2 }
+            PathLine { x: parent.width; y: root.height }
+            PathLine { x: 0; y: root.height }
+            PathLine { x: root.point; y: root.height / 2 }
+            PathLine { x: 0; y: 0 }
+        }
     }
 
+    // 2. Внутренний Shape (Тонкая рамка поверх фона)
+    Shape {
+        anchors.fill: parent
+        preferredRendererType: Shape.CurveRenderer
+
+        SShapePath {
+            joinStyle: ShapePath.MiterJoin
+            capStyle: ShapePath.FlatCap
+
+            strokeColor: Settings.c1
+            strokeWidth: Settings.line
+            fillColor: Settings.c2
+
+            startX: 0
+            startY: 0
+
+            PathLine { x: parent.width; y: 0 }
+            PathLine { x: parent.width - root.point; y: root.height / 2 }
+            PathLine { x: parent.width; y: root.height }
+            PathLine { x: 0; y: root.height }
+            PathLine { x: root.point; y: root.height / 2 }
+            PathLine { x: 0; y: 0 }
+        }
+    }
+
+    // 3. Строка с данными на базе SText
     Row {
         id: statsRow
         anchors.centerIn: parent
-        spacing: root.sectionGap
+        spacing: Settings.line * 2
 
-        Text {
+        SText {
             text: root.cpuText
-            color: "white"
-            font.pixelSize: Math.max(11, Settings.barHeight * 0.28)
+            color: Settings.c1
+            font.pixelSize: Math.max(11, Settings.barHeight * 0.4)
             font.bold: true
             verticalAlignment: Text.AlignVCenter
         }
 
-        Text {
+        SText {
             text: "•"
-            color: "#666666"
+            color: Settings.c1
+            opacity: 0.5
             font.pixelSize: Math.max(10, Settings.barHeight * 0.23)
             verticalAlignment: Text.AlignVCenter
         }
 
-        Text {
+        SText {
             text: root.tempText
-            color: "white"
-            font.pixelSize: Math.max(11, Settings.barHeight * 0.28)
+            color: Settings.c1
+            font.pixelSize: Math.max(11, Settings.barHeight * 0.4)
             font.bold: true
             verticalAlignment: Text.AlignVCenter
         }
 
-        Text {
+        SText {
             text: "•"
-            color: "#666666"
+            color: Settings.c1
+            opacity: 0.5
             font.pixelSize: Math.max(10, Settings.barHeight * 0.23)
             verticalAlignment: Text.AlignVCenter
         }
 
-        Text {
+        SText {
             text: root.ramText
-            color: "white"
-            font.pixelSize: Math.max(11, Settings.barHeight * 0.28)
+            color: Settings.c1
+            font.pixelSize: Math.max(11, Settings.barHeight * 0.4)
             font.bold: true
             verticalAlignment: Text.AlignVCenter
         }
     }
 
+    // 4. Логика сбора метрик (Bash скрипт)
     Process {
         id: statsProcess
 
@@ -103,8 +157,7 @@ Item {
         stdout: StdioCollector {
             onStreamFinished: {
                 var text = this.text.trim()
-                if (!text)
-                    return
+                if (!text) return
 
                 var cpuMatch = text.match(/CPU\s+(\d+)\s+(\d+)/)
                 var ramMatch = text.match(/RAM\s+(\d+)\s+(\d+)/)
@@ -113,18 +166,15 @@ Item {
                 if (cpuMatch) {
                     var cpuTotal = Number(cpuMatch[1])
                     var cpuIdle = Number(cpuMatch[2])
-
                     if (root.previousTotal > 0) {
                         var deltaTotal = cpuTotal - root.previousTotal
                         var deltaIdle = cpuIdle - root.previousIdle
-
                         if (deltaTotal > 0) {
                             var usage = (1 - deltaIdle / deltaTotal) * 100
                             usage = Math.max(0, Math.min(100, usage))
                             root.cpuText = "CPU " + Math.round(usage) + "%"
                         }
                     }
-
                     root.previousTotal = cpuTotal
                     root.previousIdle = cpuIdle
                 }
@@ -132,7 +182,6 @@ Item {
                 if (ramMatch) {
                     var usedKiB = Number(ramMatch[1])
                     var totalKiB = Number(ramMatch[2])
-
                     if (totalKiB > 0) {
                         var usedGiB = usedKiB / 1024 / 1024
                         var totalGiB = totalKiB / 1024 / 1024
@@ -142,7 +191,6 @@ Item {
 
                 if (tempMatch) {
                     var rawTemp = Number(tempMatch[1])
-
                     if (rawTemp >= 0) {
                         var tempC = rawTemp >= 1000 ? rawTemp / 1000 : rawTemp
                         root.tempText = "TEMP " + Math.round(tempC) + "°C"
@@ -159,10 +207,10 @@ Item {
         repeat: true
         running: true
         triggeredOnStart: true
-
         onTriggered: {
             if (!statsProcess.running)
                 statsProcess.running = true
         }
     }
+}
 }

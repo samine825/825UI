@@ -60,40 +60,45 @@ ShellRoot {
 
         Item {
             id: bar
-            anchors {
-                verticalCenter: parent.verticalCenter
-            }
+            anchors.verticalCenter: parent.verticalCenter
             width: shellRoot.width
-            height: Settings.barHeight
-
-            SystemStats {
-                id: systemStats
-                anchors {
-                    left: parent.left
+            height: parent.height
+            Row {
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                height: parent.height
+                SystemStats {
+                    id: systemStats
+                    height: parent.height
                 }
-                height: Settings.barHeight
             }
-            Clock {
-                id: clock
+            Row {
+                anchors.verticalCenter: parent.verticalCenter
                 anchors.horizontalCenter: parent.horizontalCenter
-                height: Settings.barHeight
-            }
-            WorkspaceBar {
-                id: workspaceBar
-                anchors {
-                    right: parent.right
+                height: parent.height
+                Clock {
+                    id: clock
+                    height: parent.height
+                    MouseArea {
+                        id: barClick
+                        anchors.fill: clock
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: appLauncher.show();
+                    }
                 }
-                height: Settings.barHeight
+            }
+            Row {
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.right: parent.right
+                height: parent.height
+                WorkspaceBar {
+                    id: workspaceBar
+                    height: parent.height
+                }
             }
         }
 
-        MouseArea {
-            id: barClick
-            anchors.fill: clock
-            z: 10
-            cursorShape: Qt.PointingHandCursor
-            onClicked: appLauncher.show()
-        }
+        
 
         IpcHandler {
             target: "main"
@@ -102,10 +107,10 @@ ShellRoot {
                 Quickshell.reload(true)
             }
             function toggleSettings(): void {
-                settingsMenu.visible = !settingsMenu.visible
+                settingsMenu.visible ? settingsMenu.hide() : settingsMenu.show()
             }
             function toggleLauncher(): void {
-                appLauncher.visible = !appLauncher.visible
+                appLauncher.visible ? appLauncher.hide() : appLauncher.show()
             }
         }
     }

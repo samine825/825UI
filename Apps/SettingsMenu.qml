@@ -234,6 +234,17 @@ PanelWindow {
                 property real tabBorderWidth: Settings.line
                 property real blackOutlineWidth: Settings.line
 
+                WheelHandler {
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                    onWheel: (event) => {
+                        if (event.angleDelta.y > 0) {
+                            root.currentTab = (root.currentTab - 1 + root.tabNames.length) % root.tabNames.length
+                        } else if (event.angleDelta.y < 0) {
+                            root.currentTab = (root.currentTab + 1) % root.tabNames.length
+                        }
+                    }
+                }
+
                 // черная обводка
                 Shape {
                     id: tabOuterOutline
@@ -302,7 +313,7 @@ PanelWindow {
                     x: root.currentTab * tabBar.tabWidth + Settings.line * 3
 
                     Behavior on x {
-                        NumberAnimation { duration: 300; easing.type: Easing.InOutQuad }
+                        NumberAnimation { duration: 300; easing.type: Easing.OutQuad }
                     }
 
                     SShapePath {
