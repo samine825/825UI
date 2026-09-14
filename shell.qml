@@ -4,12 +4,16 @@ import Quickshell.Wayland
 import Quickshell.Io
 import QtQuick.Window
 import QtQuick.Shapes
+import QtQuick3D
 import "./Apps"
 import "./Bar"
 
 ShellRoot {
     // бар
+    
+
     PanelWindow {
+        
         id: shellRoot
         anchors {
             top: true
@@ -115,6 +119,38 @@ ShellRoot {
         }
     }
 
+    PanelWindow {
+        anchors {
+            top: true
+            bottom: true
+            right: true
+            left: true
+        }
+
+        exclusiveZone: -1
+        WlrLayershell.layer: WlrLayer.Overlay
+        color: "transparent"
+        
+        View3D {
+            anchors.fill: parent
+            
+            PerspectiveCamera { id: camera; z: 500 }
+
+            DirectionalLight {}
+
+            Model {
+                source: "#Cube"
+
+                materials: [
+                    PrincipledMaterial {
+                        baseColorMap: Texture {
+                            source: "applecat.jpg"
+                        }
+                    }
+                ]
+            }
+        }
+    }
     PanelWindow {
         id: notificationScreen
 

@@ -442,7 +442,17 @@ Item {
             }
         }
     }
-
+    Timer {
+        id: delayTimer
+        interval: 200
+        running: true
+        repeat: false
+        
+        onTriggered: {
+            glyphGen.clearCache()
+            svgPath.path = glyphGen.pathForChar(pc.ch)
+        }
+    }
     Behavior on color {
         ColorAnimation {
             duration: 250
