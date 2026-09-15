@@ -294,7 +294,6 @@ PanelWindow {
 
                 border.color: Settings.c2
 
-                layer.enabled: true
             }
             SRectangle {
                 anchors.fill: parent
@@ -304,7 +303,6 @@ PanelWindow {
 
                 border.color: Settings.c1
 
-                layer.enabled: true
             }
             SRectangle {
                 anchors.fill: parent
@@ -325,7 +323,6 @@ PanelWindow {
 
                 border.color: Settings.c2
 
-                layer.enabled: true
             }
 
 
