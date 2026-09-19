@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Shapes
 import Quickshell
 import "../Fonts" 
-import "../SmoothColorElements"
+import "../Components"
 import "../"
 Item {
     id: r

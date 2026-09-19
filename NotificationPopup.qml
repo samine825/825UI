@@ -6,9 +6,9 @@ import Qt5Compat.GraphicalEffects
 
 Rectangle {
     id: popupWindow
-
+    signal popupClosed
     property var maxWidth: 400
-    property var startSize: 80
+    property var startSize: Settings.barHeight*2
     property var line: 5
 
     // ── стек уведомлений ──
@@ -28,11 +28,6 @@ Rectangle {
     // уходящее уведомление всегда должно быть позади остальных
     z: (uhod || closeClicked) ? 0 : 1
 
-    FontLoader { 
-        id: notifFont 
-        source: "fonts/infex-main-150.ttf" 
-    }
-    
     property var currentNotification: null
     property var screenX: 0
     property real progress: 1.0
@@ -373,9 +368,13 @@ Rectangle {
         easing.type: Easing.InQuad
         onFinished: {
             if (popupWindow.currentNotification) {
-                Notifications.dismissNotification(popupWindow.currentNotification.notificationId)
-                popupWindow.destroy()
+                Notifications.dismissNotification(
+                    popupWindow.currentNotification.notificationId
+                )
             }
+
+            popupWindow.popupClosed()
+            popupWindow.destroy()
         }
     }
 

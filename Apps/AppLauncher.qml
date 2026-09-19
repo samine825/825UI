@@ -5,13 +5,9 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import Qt5Compat.GraphicalEffects
-import "../SmoothColorElements"
+import "../Components"
 import "../"
 PanelWindow {
-    FontLoader {
-        id: clockFont
-        source: "fonts/infex-main-150.ttf"
-    }
     id: root
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
     visible: false
@@ -183,7 +179,7 @@ PanelWindow {
 	property var angle: 360.0 / elementsCount
     // круг
         
-    Item {
+    MouseFollow {
         id: tiltContainer
 
         width: 900
@@ -191,73 +187,15 @@ PanelWindow {
 
         x: (Screen.width - width) / 2
         y: -width / 2
-
-        readonly property real mouseXFactor: mouseTracker.containsMouse
-            ? -(mouseTracker.mouseX - Screen.width / 2 + tiltContainer.x)
-                / (Screen.width / 2)
-            : 0
-
-        readonly property real mouseYFactor: mouseTracker.containsMouse
-            ? -(mouseTracker.mouseY - Screen.height / 2)
-                / (Screen.height / 2)
-            : 0
-
-        readonly property real maxTiltAngle: 20
-
-        transform: [
-            Rotation {
-                origin.x: tiltContainer.width / 2
-                origin.y: tiltContainer.height / 2
-                axis { x: 1; y: 0; z: 0 }
-
-                angle: -tiltContainer.mouseYFactor
-                    * tiltContainer.maxTiltAngle
-
-                Behavior on angle {
-                    NumberAnimation {
-                        duration: 250
-                        easing.type: Easing.OutQuad
-                    }
-                }
-            },
-
-            Rotation {
-                origin.x: tiltContainer.width / 2
-                origin.y: tiltContainer.height / 2
-                axis { x: 0; y: 1; z: 0 }
-
-                angle: tiltContainer.mouseXFactor
-                    * tiltContainer.maxTiltAngle
-
-                Behavior on angle {
-                    NumberAnimation {
-                        duration: 250
-                        easing.type: Easing.OutQuad
-                    }
-                }
-            }
-        ]
-
-        MouseArea {
-            id: mouseTracker
-
-            anchors.fill: parent
-
-            hoverEnabled: true
-            propagateComposedEvents: true
-            acceptedButtons: Qt.NoButton
-        }
         WheelHandler {
             acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
             onWheel: (event) => {
                 if (event.angleDelta.y > 0) {
-                    // Прокрутка вверх (предыдущее приложение)
                     if (root.selectedIndex > 0) {
                         root.selectedIndex -= 1
                         circle.rotation = root.selectedIndex * root.angle
                     }
                 } else if (event.angleDelta.y < 0) {
-                    // Прокрутка вниз (следующее приложение)
                     if (root.selectedIndex < root.filteredApps.length - 1) {
                         root.selectedIndex += 1
                         circle.rotation = root.selectedIndex * root.angle
@@ -268,10 +206,7 @@ PanelWindow {
         Item {
             id: circle
 
-            width: tiltContainer.width
-            height: tiltContainer.height
-
-            anchors.centerIn: parent
+            anchors.fill: parent
 
             rotation: 0
 

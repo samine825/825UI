@@ -3,7 +3,7 @@ import QtQuick.Shapes
 import Quickshell
 import Quickshell.Hyprland
 import "../Fonts"
-import "../SmoothColorElements" 
+import "../Components" 
 import "../"
 Item {
     id: r

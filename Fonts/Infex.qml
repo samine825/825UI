@@ -444,7 +444,7 @@ Item {
     }
     Timer {
         id: delayTimer
-        interval: 200
+        interval: 1000
         running: true
         repeat: false
         

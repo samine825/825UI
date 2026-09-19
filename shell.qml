@@ -8,7 +8,7 @@ import QtQuick.Shapes
 import "./Apps"
 import "./Bar"
 import "./3D"
-
+// =^..^=
 ShellRoot {
 
     PanelWindow {
@@ -43,7 +43,7 @@ ShellRoot {
                     parent.left
 
                 height: parent.height
-
+                
                 SystemStats {
                     id: systemStats
                     height: parent.height
@@ -71,7 +71,7 @@ ShellRoot {
                             Qt.PointingHandCursor
 
                         onClicked:
-                            appLauncher.show()
+                            widgetPanel.show()
                     }
                 }
             }
@@ -103,6 +103,12 @@ ShellRoot {
                 settingsMenu.visible
                     ? settingsMenu.hide()
                     : settingsMenu.show()
+            }
+
+            function togglePanel(): void {
+                widgetPanel.visible
+                    ? widgetPanel.hide()
+                    : widgetPanel.show()
             }
 
             function toggleLauncher(): void {
@@ -180,92 +186,128 @@ ShellRoot {
     }
 
     Connections {
-        target: Notifications
+    target: Notifications
 
-        function onNotificationAdded(notification) {
-            var component = Qt.createComponent("NotificationPopup.qml")
+    function onNotificationAdded(notification) {
+        var component = Qt.createComponent("NotificationPopup.qml")
 
-            if (component.status !== Component.Ready) {
-                console.error("Failed to load NotificationPopup.qml:", component.errorString())
-                return
-            }
-
-            var popup = component.createObject(columnRef)
-            if (!popup) {
-                console.error("Failed to create NotificationPopup")
-                return
-            }
-
-            popup.screenX = notificationScreen.width
-            popup.currentNotification = notification
-            popup.visible = true
-
-            notificationScreen.pushToStack(popup)
-
-            popup.uhodChanged.connect(function() {
-                if (popup.uhod) {
-                    notificationScreen.removeFromStack(popup)
-                }
-            })
-            popup.closeClickedChanged.connect(function() {
-                if (popup.closeClicked) {
-                    notificationScreen.removeFromStack(popup)
-                }
-            })
-
-            var hitbox = Qt.createQmlObject(
-                'import QtQuick; Item {\n                    property var popup: null\n                    x: popup ? popup.x : 0\n                    y: popup ? popup.y : 0\n                    width: popup ? popup.width : 0\n                    height: popup ? popup.height : 0\n                    MouseArea {\n                        anchors.fill: parent\n                        onClicked: {\n                            if (parent.popup)\n                                parent.popup.closeClicked = true\n                        }\n                    }\n                }',
-                columnRef,
-                "NotificationHitbox"
+        if (component.status !== Component.Ready) {
+            console.error(
+                "Failed to load NotificationPopup.qml:",
+                component.errorString()
             )
-
-            hitbox.popup = popup
-            hitbox.z = 100000
-
-            var region = Qt.createQmlObject(
-                'import Quickshell; Region {}',
-                notificationScreen,
-                "NotificationRegion"
-            )
-            region.item = hitbox
-
-            notificationScreen.notificationRegions =
-                notificationScreen.notificationRegions.concat([region])
-
-            popup.destroyed.connect(function() {
-                notificationScreen.removeFromStack(popup)
-
-                var regions = notificationScreen.notificationRegions.slice()
-                var index = regions.indexOf(region)
-                if (index !== -1) {
-                    regions.splice(index, 1)
-                    notificationScreen.notificationRegions = regions
-                }
-                if (region)
-                    region.destroy()
-                if (hitbox)
-                    hitbox.destroy()
-            })
+            return
         }
 
-        function onAllCleared() {
+        var popup = component.createObject(columnRef)
+
+        if (!popup) {
+            console.error("Failed to create NotificationPopup")
+            return
         }
+
+        popup.screenX = notificationScreen.width
+        popup.currentNotification = notification
+        popup.visible = true
+
+        notificationScreen.pushToStack(popup)
+
+        var hitbox = Qt.createQmlObject(
+            'import QtQuick;
+
+            Item {
+                property var popup: null
+
+                x: popup ? popup.x : 0
+                y: popup ? popup.y : 0
+
+                width: popup ? popup.width : 0
+                height: popup ? popup.height : 0
+
+                MouseArea {
+                    anchors.fill: parent
+
+                    onClicked: {
+                        if (parent.popup) {
+                            parent.popup.closeClicked = true
+                        }
+                    }
+                }
+            }',
+            columnRef,
+            "NotificationHitbox"
+        )
+
+        if (!hitbox) {
+            console.error("Failed to create NotificationHitbox")
+            popup.destroy()
+            return
+        }
+
+        hitbox.popup = popup
+        hitbox.z = 100000
+
+        var region = Qt.createQmlObject(
+            'import Quickshell;
+
+            Region {}',
+            notificationScreen,
+            "NotificationRegion"
+        )
+
+        if (!region) {
+            console.error("Failed to create NotificationRegion")
+
+            hitbox.popup = null
+            hitbox.destroy()
+
+            popup.destroy()
+
+            return
+        }
+
+        region.item = hitbox
+
+        notificationScreen.notificationRegions =
+            notificationScreen.notificationRegions.concat([region])
+
+        popup.popupClosed.connect(function() {
+            notificationScreen.removeFromStack(popup)
+
+            var regions =
+                notificationScreen.notificationRegions.slice()
+
+            var index = regions.indexOf(region)
+
+            if (index !== -1) {
+                regions.splice(index, 1)
+
+                notificationScreen.notificationRegions =
+                    regions
+            }
+
+            if (region) {
+                region.item = null
+                region.destroy()
+            }
+
+            if (hitbox) {
+                hitbox.popup = null
+                hitbox.destroy()
+            }
+        })
     }
 
+    function onAllCleared() {
+        notificationScreen.activeStack = []
+        notificationScreen.notificationRegions = []
+    }
+}
+
     SettingsMenu {id: settingsMenu}
+
+    WidgetPanel {id: widgetPanel}
     AppLauncher {id: appLauncher}
 }
 
-/*export BOT_TOKEN=7769505463:AAF-OuqNsWxsnnqk3pr0vH9nb3rnAXA-8aI
-source aibrine-venv/bin/activate && python aibrine.py
 
-qs -c 825UI
-QML2_IMPORT_PATH=/usr/lib/qt6/qml qs -c 825UI
-
-cd AAProjects/HMCrypt
-bash build.sh && build/hmcrypt
-
-sudo systemctl suspend
-
-ffmpeg -i 3.png -vf "negate" 3n.png
-*/
