@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/home/samine/AAProjects/825UI/build",
+  "command": "/usr/sbin/c++  -I/home/samine/AAProjects/825UI/build -std=gnu++20 -o CMakeFiles/825ctl.dir/main.cpp.o -c /home/samine/AAProjects/825UI/main.cpp",
+  "file": "/home/samine/AAProjects/825UI/main.cpp",
+  "output": "CMakeFiles/825ctl.dir/main.cpp.o"
+}
+]

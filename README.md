@@ -1,2 +1,4 @@
 # 825UI
-WIP
+```
+bash install.sh
+```
