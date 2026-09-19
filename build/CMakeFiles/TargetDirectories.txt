@@ -1,3 +1,0 @@
-/home/samine/AAProjects/825UI/build/CMakeFiles/825ctl.dir
-/home/samine/AAProjects/825UI/build/CMakeFiles/edit_cache.dir
-/home/samine/AAProjects/825UI/build/CMakeFiles/rebuild_cache.dir
