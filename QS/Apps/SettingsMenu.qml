@@ -226,12 +226,12 @@ PanelWindow {
 
             Column {
                 anchors.fill: parent
-                spacing: Settings.line * 3.5
+                spacing: Settings.line * 4
 
                 // --- Tabs ---
                 Item {
                     id: tabBar
-                    width: parent.width - ((403.16 / 313.856) * 10)
+                    width: parent.width - ((313.856 / 150) * Settings.line/2)
                     height: Settings.barHeight - Settings.line
                     anchors.horizontalCenter: parent.horizontalCenter
 

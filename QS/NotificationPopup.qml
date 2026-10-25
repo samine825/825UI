@@ -107,34 +107,56 @@ Rectangle {
                     }
 
                     Column {
-                        id: contentColumn
-                        width: parent.width - (notifImage.visible ? (notifImage.width + parent.spacing) : 0) - 40 
-                        spacing: 5
-                        anchors.verticalCenter: parent.verticalCenter
+    id: contentColumn
+    width: parent.width - (notifImage.visible ? (notifImage.width + parent.spacing) : 0) - 40 
+    spacing: 2
+    
+    // Привязываем к верху и низу для равномерного распределения по высоте
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
 
-                        Text {
-                            text: popupWindow.currentNotification ? popupWindow.currentNotification.appName : ""
-                            font.pixelSize: 10
-                            color: contentRoot.currentTextColor
-                            width: parent.width
-                        }
-                        Text {
-                            text: popupWindow.currentNotification ? popupWindow.currentNotification.summary : ""
-                            font.pixelSize: 15
-                            font.bold: true
-                            color: contentRoot.currentTextColor
-                            wrapMode: Text.Wrap
-                            width: parent.width
-                        }
-                        Text {
-                            text: popupWindow.currentNotification ? popupWindow.currentNotification.body : ""
-                            font.pixelSize: 10
-                            color: contentRoot.currentTextColor
-                            wrapMode: Text.Wrap
-                            width: parent.width
-                            visible: text.length > 0
-                        }
-                    }
+    // 1. Имя приложения (одна строка)
+    Text {
+        text: popupWindow.currentNotification ? popupWindow.currentNotification.appName : ""
+        font.pixelSize: 10
+        color: contentRoot.currentTextColor
+        width: parent.width
+        elide: Text.ElideRight
+        maximumLineCount: 1
+    }
+
+    // 2. Заголовок уведомления (summary)
+    Text {
+        text: popupWindow.currentNotification ? popupWindow.currentNotification.summary : ""
+        font.pixelSize: 15
+        font.bold: true
+        color: contentRoot.currentTextColor
+        width: parent.width
+
+        elide: Text.ElideRight 
+    }
+
+    // 3. Тело уведомления (body) — занимает всё оставшееся пространство
+    Item {
+        width: parent.width
+        // Расчитываем высоту динамически, чтобы заполнить контейнер
+        height: parent.height - parent.children[0].height - parent.children[1].height - (parent.spacing * 2)
+        visible: bodyText.text.length > 0
+
+        Text {
+            id: bodyText
+            text: popupWindow.currentNotification ? popupWindow.currentNotification.body : ""
+            font.pixelSize: 11
+            color: contentRoot.currentTextColor
+            anchors.fill: parent
+            
+            // Заполняет текстом выделенную область, при выходе за границы — троеточие
+            wrapMode: Text.Wrap
+            elide: Text.ElideRight
+        }
+    }
+}
+
                 }
             }
 

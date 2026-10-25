@@ -6,7 +6,7 @@ import "../Components"
 import "../"
 Item {
     id: r
-    width: textContainer.width + Settings.line * (313.857/150) * 3 - 1
+    width: textContainer.width + Settings.line * (313.857/150) * 3 + 1
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
@@ -99,9 +99,12 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
 
                 Repeater {
-                    model: textContainer.mainStr.split("")
+                    // Делегаты создаются один раз и живут постоянно:
+                    // смена цифры меняет ch на месте, Infex морфит форму.
+                    model: 4
                     delegate: Infex {
-                        ch: modelData
+                        ch: textContainer.mainStr.length > index
+                            ? textContainer.mainStr[index] : "0"
                         pixelSize: Settings.barHeight - Settings.line * 4
                         referencePixelSize: Settings.barHeight - Settings.line * 4
                         line: Settings.line
@@ -130,9 +133,10 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
 
                     Repeater {
-                        model: textContainer.secStr.split("")
+                        model: 3
                         delegate: Infex {
-                            ch: modelData
+                            ch: textContainer.secStr.length > index
+                                ? textContainer.secStr[index] : "0"
                             pixelSize: Settings.barHeight - Settings.line * 4
                             referencePixelSize: Settings.barHeight - Settings.line * 4
                             line: Settings.line

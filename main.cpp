@@ -28,7 +28,7 @@ int main(int argc, char* argv[]) {
             int result = std::system(command.c_str());
         }
         else if (args[0] == "restart") {
-            std::string command = "qs -p ~/.825UI ipc call main forceReload && notify-send -t 10000 -a '825' 'Reloaded' ':3' -i ~/Pictures/photo_2026-04-11_22-51-18.jpg";
+            std::string command = "qs -p ~/.825UI ipc call main forceReload && notify-send -t 10000 -a '825' 'Reloaded' ':3' -i ~/.825UI/Textures/4.jpg";
             int result = std::system(command.c_str());
         }
         else if (args[0] == "stop") {
@@ -53,12 +53,20 @@ int main(int argc, char* argv[]) {
         }
         else if (args[0] == "labudabudabdab") {
             if (argc > 2) {
-                if (args[1] == "sc") {
+                if (args[1] == "scubes") {
                     std::string command = "qs -p ~/.825UI ipc call main spawnCube";
                     int result = std::system(command.c_str());
                 }
-                else if (args[1] == "cc") {
+                else if (args[1] == "сcubes") {
                     std::string command = "qs -p ~/.825UI ipc call main clearCubes";
+                    int result = std::system(command.c_str());
+                }
+                else if (args[1] == "pconway") {
+                    std::string command = "qs -p ~/.825UI ipc call main toggleConwayPause";
+                    int result = std::system(command.c_str());
+                }
+                else if (args[1] == "cconway") {
+                    std::string command = "qs -p ~/.825UI ipc call main clearConway";
                     int result = std::system(command.c_str());
                 }
             }

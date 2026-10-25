@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Io
 import QtQuick3D
 import QtQuick3D.Physics
 
@@ -38,12 +39,30 @@ PanelWindow {
     property real worldDepth: 99999
 
 
-    /* ============================================
-     * ПУБЛИЧНЫЙ API
-     * ============================================ */
+    property string targetPath: Quickshell.shellDir + "/Textures"
+    property var filesList: []
+    Process {
+        id: dirReader
+        command: ["find", targetPath, "-maxdepth", "1", "-printf", "%P\n"]
+        running: true
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                filesList = text.split("\n").filter(file => file.trim().length > 0);
+            }
+        }
+
+        onExited: (code) => {
+            if (code === 0) {
+                console.log("textures:", JSON.stringify(filesList));
+            }
+        }
+    }
 
     function addCube(options) {
-
+        const textures = physicsScene.filesList
+        console.log(textures)
+        
         options = options || {}
 
         cubesModel.append({
@@ -55,7 +74,7 @@ PanelWindow {
             texture:
                 options.texture !== undefined
                     ? "" + options.texture
-                    : "applecat.jpg",
+                    : "textures/" + textures[Math.floor(Math.random() * textures.length)],
 
             startX:
                 options.x !== undefined

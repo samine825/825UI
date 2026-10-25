@@ -17,7 +17,7 @@ DynamicRigidBody {
 
     property real cubeSize: 84
 
-    property url textureSource: "applecat.jpg"
+    property url textureSource: "../Textures/applecat.jpg"
 
     /*
      * Ссылка на View3D, в котором живёт куб.
