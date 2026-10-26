@@ -101,7 +101,7 @@ Item {
                 Repeater {
                     // Делегаты создаются один раз и живут постоянно:
                     // смена цифры меняет ch на месте, Infex морфит форму.
-                    model: 4
+                    model: 5
                     delegate: Infex {
                         ch: textContainer.mainStr.length > index
                             ? textContainer.mainStr[index] : "0"

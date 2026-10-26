@@ -803,27 +803,18 @@ Item {
             return pairs
         }
 
-        function pairT(pr, t) {
-            if (pr[2])
-                return t * t
-            if (pr[3])
-                return 1 - (1 - t) * (1 - t)
-            return t
-        }
-
         function interpContours(prs, t) {
             const out = []
 
             for (let k = 0; k < prs.length; k++) {
                 const a = prs[k][0]
                 const b = prs[k][1]
-                const tt = pairT(prs[k], t)
                 const c = []
 
                 for (let i = 0; i < a.length; i++) {
                     c.push([
-                        a[i][0] + (b[i][0] - a[i][0]) * tt,
-                        a[i][1] + (b[i][1] - a[i][1]) * tt
+                        a[i][0] + (b[i][0] - a[i][0]) * t,
+                        a[i][1] + (b[i][1] - a[i][1]) * t
                     ])
                 }
 
@@ -898,13 +889,12 @@ Item {
             for (let k = 0; k < prs.length; k++) {
                 const a = prs[k][0]
                 const b = prs[k][1]
-                const tt = pairT(prs[k], t)
                 const c = []
 
                 for (let i = 0; i < a.length; i++) {
                     c.push([
-                        a[i][0] + (b[i][0] - a[i][0]) * tt,
-                        a[i][1] + (b[i][1] - a[i][1]) * tt
+                        a[i][0] + (b[i][0] - a[i][0]) * t,
+                        a[i][1] + (b[i][1] - a[i][1]) * t
                     ])
                 }
 
