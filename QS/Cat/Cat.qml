@@ -13,8 +13,9 @@ import "CatData.js" as CatData
 PanelWindow {
     id: cat
 
-    readonly property int winSize: 400
-    readonly property real svgScale: winSize / 1000
+    readonly property int winW: 520
+    readonly property int winH: 430
+    readonly property real svgScale: 0.4
 
     visible: true
     exclusiveZone: -1
@@ -26,8 +27,8 @@ PanelWindow {
         right: true
     }
 
-    implicitWidth: winSize
-    implicitHeight: winSize
+    implicitWidth: winW
+    implicitHeight: winH
 
     // === КУРСОР ===
     // глобальные экранные координаты (Hyprland IPC) и локальные (hover)
@@ -40,9 +41,9 @@ PanelWindow {
 
     // курсор в координатах SVG
     readonly property real curSvgX: (cursorX - Screen.virtualX
-        - (Screen.width - winSize)) / svgScale
+        - (Screen.width - winW)) / svgScale
     readonly property real curSvgY: (cursorY - Screen.virtualY
-        - (Screen.height - winSize)) / svgScale
+        - (Screen.height - winH)) / svgScale
 
     // === СОСТОЯНИЕ ===
     property real idleTime: 0
@@ -213,7 +214,7 @@ PanelWindow {
                 : Math.max(-55, Math.min(55,
                     (cat.curSvgX - CatData.pivots.eyeCenterL.x) * 0.12))
             const tY = cat.asleep ? 0
-                : Math.max(-26, Math.min(30,
+                : Math.max(-6, Math.min(26,
                     (cat.curSvgY - CatData.pivots.eyeCenterL.y) * 0.12))
 
             const lookLerp = Math.min(1, dt * (cat.asleep ? 2 : 9))
@@ -321,6 +322,25 @@ PanelWindow {
                 - cat.earRVel * 5.5) * dt
             cat.earRAngle += cat.earRVel * dt
 
+            // угол ограничен жёстко: перелёт пружины не должен
+            // выносить ухо за границу рендера
+            if (cat.earLAngle > 38) {
+                cat.earLAngle = 38
+                cat.earLVel *= -0.3
+            }
+            if (cat.earLAngle < -38) {
+                cat.earLAngle = -38
+                cat.earLVel *= -0.3
+            }
+            if (cat.earRAngle > 38) {
+                cat.earRAngle = 38
+                cat.earRVel *= -0.3
+            }
+            if (cat.earRAngle < -38) {
+                cat.earRAngle = -38
+                cat.earRVel *= -0.3
+            }
+
             // === голова: наклон к курсору ===
             let tiltTarget = cat.asleep ? 0
                 : clamp((cat.curSvgX - CatData.pivots.headCenter.x) * 0.004,
@@ -420,9 +440,8 @@ PanelWindow {
             const tipY = q(815 + Math.sin(cat.tailPhase * 0.9) * 16)
             const mx = q(Math.sin(cat.tailPhase))
 
-            const nextPath = "M 655,1005 C "
-                + (720 + mx * 8) + "," + (983 - mx * 4) + " "
-                + (762 + mx * 22) + "," + (930 + mx * 10) + " "
+            const nextPath = "M 655,1005 C 720,983 "
+                + (762 + mx * 14) + "," + (930 + mx * 10) + " "
                 + tipX + "," + tipY
 
             if (nextPath !== cat.tailPath)
@@ -490,7 +509,7 @@ PanelWindow {
         Item {
             id: catSpace
 
-            x: root.width - 1000 * cat.svgScale
+            x: (root.width - 1000 * cat.svgScale) / 2
             y: root.height - 1000 * cat.svgScale
             width: 1000
             height: 1000
@@ -644,9 +663,9 @@ PanelWindow {
 
                         transform: [
                             Translate {
-                                // зрачок не покидает белок своего глаза
-                                x: Math.max(322, Math.min(442,
-                                    CatData.pivots.pupilBaseL.x + cat.lookX))
+                                // смещение от базы, ограниченное толстой
+                                // частью белка — зрачок всегда виден
+                                x: Math.max(-78, Math.min(9, cat.lookX))
                                 y: cat.lookY
                             },
                             Scale {
@@ -693,8 +712,7 @@ PanelWindow {
 
                         transform: [
                             Translate {
-                                x: Math.max(557, Math.min(677,
-                                    CatData.pivots.pupilBaseR.x + cat.lookX))
+                                x: Math.max(-9, Math.min(105, cat.lookX))
                                 y: cat.lookY
                             },
                             Scale {
@@ -728,30 +746,37 @@ PanelWindow {
                 }
             }
 
-            // === Zzz во сне ===
+            // === Zzz во сне: чёрные Z летят вправо-вверх, вырастая
+            // из нуля и снова уменьшаясь в никуда; две штуки меняют
+            // друг друга циклично ===
             SText {
                 visible: cat.asleep
                 text: "z"
-                color: Settings.c1
+                color: Settings.c2
                 font.bold: true
-                font.pixelSize: 30
 
-                x: 820
-                y: 320 - 14 * Math.abs(Math.sin(cat.zzzPhase * 1.4))
-                opacity: 0.35 + 0.45 * Math.abs(Math.sin(cat.zzzPhase * 1.4))
+                readonly property real p: (cat.zzzPhase / 2.4) % 1
+
+                font.pixelSize: Math.max(2, 36 * Math.sin(p * Math.PI))
+                x: 700 + 190 * p
+                y: 520 - 190 * p
+                opacity: Math.min(1, 2.5 * Math.sin(p * Math.PI))
+                rotation: 14
             }
 
             SText {
                 visible: cat.asleep
                 text: "z"
-                color: Settings.c1
+                color: Settings.c2
                 font.bold: true
-                font.pixelSize: 20
 
-                x: 862
-                y: 250 - 11 * Math.abs(Math.sin(cat.zzzPhase * 1.4 + 1.2))
-                opacity: 0.25
-                    + 0.4 * Math.abs(Math.sin(cat.zzzPhase * 1.4 + 1.2))
+                readonly property real p: (cat.zzzPhase / 2.4 + 0.5) % 1
+
+                font.pixelSize: Math.max(2, 28 * Math.sin(p * Math.PI))
+                x: 700 + 190 * p
+                y: 520 - 190 * p
+                opacity: Math.min(1, 2.5 * Math.sin(p * Math.PI))
+                rotation: 14
             }
         }
     }
