@@ -17,6 +17,11 @@ PanelWindow {
     readonly property int winH: 430
     readonly property real svgScale: 0.4
 
+    // catSpace центрирован по ширине окна — курсор и хитбокс
+    // обязаны учитывать этот сдвиг
+    readonly property real catOffsetX: (winW - 1000 * svgScale) / 2
+    readonly property real catOffsetY: winH - 1000 * svgScale
+
     visible: true
     exclusiveZone: -1
     WlrLayershell.layer: WlrLayer.Top
@@ -41,9 +46,9 @@ PanelWindow {
 
     // курсор в координатах SVG
     readonly property real curSvgX: (cursorX - Screen.virtualX
-        - (Screen.width - winW)) / svgScale
+        - (Screen.width - winW) - catOffsetX) / svgScale
     readonly property real curSvgY: (cursorY - Screen.virtualY
-        - (Screen.height - winH)) / svgScale
+        - (Screen.height - winH) - catOffsetY) / svgScale
 
     // === СОСТОЯНИЕ ===
     property real idleTime: 0
@@ -439,11 +444,11 @@ PanelWindow {
             const tipX = q(790 + Math.sin(cat.tailPhase) * amp
                 + clamp(cat.whipX, -60, 60))
             const tipY = q(815 + Math.sin(cat.tailPhase * 0.9) * 16)
-            const p2x = q(762 + Math.sin(cat.tailPhase) * 14)
-            const p2y = q(930 + Math.sin(cat.tailPhase) * 10)
-
-            const nextPath = "M 655,1005 C 720,983 "
-                + p2x + "," + p2y + " " + tipX + "," + tipY
+            // базовая часть кривой до колена — константа: основание
+            // хвоста гарантированно неподвижно
+            const nextPath = "M 655,1005 C 700,995 745,965 768,940 "
+                + "C 786,920 " + (tipX - 12) + "," + (tipY + 45) + " "
+                + tipX + "," + tipY
 
             if (nextPath !== cat.tailPath)
                 cat.tailPath = nextPath
@@ -490,8 +495,8 @@ PanelWindow {
             cursorShape: Qt.PointingHandCursor
 
             onPressed: (mouse) => {
-                const sx = mouse.x / cat.svgScale
-                const sy = mouse.y / cat.svgScale
+                const sx = (mouse.x - cat.catOffsetX) / cat.svgScale
+                const sy = (mouse.y - cat.catOffsetY) / cat.svgScale
                 const dh = Math.sqrt(
                     (sx - CatData.pivots.headCenter.x)
                     * (sx - CatData.pivots.headCenter.x)
@@ -512,8 +517,8 @@ PanelWindow {
         Item {
             id: catSpace
 
-            x: (root.width - 1000 * cat.svgScale) / 2
-            y: root.height - 1000 * cat.svgScale
+            x: cat.catOffsetX
+            y: cat.catOffsetY
             width: 1000
             height: 1000
 
@@ -762,7 +767,7 @@ PanelWindow {
 
                 readonly property real p: (cat.zzzPhase / 2.4) % 1
 
-                font.pixelSize: Math.max(2, 54 * Math.sin(p * Math.PI))
+                font.pixelSize: Math.max(2, 162 * Math.sin(p * Math.PI))
                 x: 730 + 190 * p
                 y: 520 - 190 * p
                 opacity: Math.min(1, 2.5 * Math.sin(p * Math.PI))
@@ -777,7 +782,7 @@ PanelWindow {
 
                 readonly property real p: (cat.zzzPhase / 2.4 + 0.5) % 1
 
-                font.pixelSize: Math.max(2, 42 * Math.sin(p * Math.PI))
+                font.pixelSize: Math.max(2, 126 * Math.sin(p * Math.PI))
                 x: 730 + 190 * p
                 y: 520 - 190 * p
                 opacity: Math.min(1, 2.5 * Math.sin(p * Math.PI))
