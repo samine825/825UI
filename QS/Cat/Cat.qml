@@ -96,6 +96,7 @@ PanelWindow {
 
     // zzz
     property real zzzPhase: 0
+    property real eyeOpacity: 1
     property real lastHeadX: -10000
 
     function poke() {
@@ -212,7 +213,7 @@ PanelWindow {
             // === глаза: следят за курсором ===
             const tX = cat.asleep ? 0
                 : Math.max(-55, Math.min(55,
-                    (cat.curSvgX - CatData.pivots.eyeCenterL.x) * 0.12))
+                    (cat.curSvgX - CatData.pivots.headCenter.x) * 0.12))
             const tY = cat.asleep ? 0
                 : Math.max(-6, Math.min(26,
                     (cat.curSvgY - CatData.pivots.eyeCenterL.y) * 0.12))
@@ -237,7 +238,7 @@ PanelWindow {
 
             // === моргание ===
             if (cat.asleep) {
-                cat.blinkY += (0.05 - cat.blinkY) * Math.min(1, dt * 4)
+                cat.blinkY += (0.02 - cat.blinkY) * Math.min(1, dt * 4)
                 cat.blinkPhase = -1
             } else if (cat.drowsy) {
                 cat.blinkY += (0.35 - cat.blinkY) * Math.min(1, dt * 2)
@@ -433,16 +434,16 @@ PanelWindow {
             const amp = cat.asleep ? 6 : cat.petting ? 52
                 : cat.near ? 42 : 30
 
-            const q = v => Math.round(v * 2) / 2
+            const q = v => Math.round(v * 4) / 4
 
             const tipX = q(790 + Math.sin(cat.tailPhase) * amp
                 + clamp(cat.whipX, -60, 60))
             const tipY = q(815 + Math.sin(cat.tailPhase * 0.9) * 16)
-            const mx = q(Math.sin(cat.tailPhase))
+            const p2x = q(762 + Math.sin(cat.tailPhase) * 14)
+            const p2y = q(930 + Math.sin(cat.tailPhase) * 10)
 
             const nextPath = "M 655,1005 C 720,983 "
-                + (762 + mx * 14) + "," + (930 + mx * 10) + " "
-                + tipX + "," + tipY
+                + p2x + "," + p2y + " " + tipX + "," + tipY
 
             if (nextPath !== cat.tailPath)
                 cat.tailPath = nextPath
@@ -452,6 +453,8 @@ PanelWindow {
 
             // === zzz ===
             cat.zzzPhase += dt
+            cat.eyeOpacity += ((cat.asleep ? 0 : 1) - cat.eyeOpacity)
+                * Math.min(1, dt * 5)
         }
 
     }
@@ -638,6 +641,7 @@ PanelWindow {
                 Item {
                     width: 1000
                     height: 1000
+                    opacity: cat.eyeOpacity
 
                     transform: Scale {
                         origin.x: CatData.pivots.eyeCenterL.x
@@ -687,6 +691,7 @@ PanelWindow {
 
                 Item {
                     anchors.fill: parent
+                    opacity: cat.eyeOpacity
 
                     transform: Scale {
                         origin.x: CatData.pivots.eyeCenterR.x
@@ -757,8 +762,8 @@ PanelWindow {
 
                 readonly property real p: (cat.zzzPhase / 2.4) % 1
 
-                font.pixelSize: Math.max(2, 36 * Math.sin(p * Math.PI))
-                x: 700 + 190 * p
+                font.pixelSize: Math.max(2, 54 * Math.sin(p * Math.PI))
+                x: 730 + 190 * p
                 y: 520 - 190 * p
                 opacity: Math.min(1, 2.5 * Math.sin(p * Math.PI))
                 rotation: 14
@@ -772,8 +777,8 @@ PanelWindow {
 
                 readonly property real p: (cat.zzzPhase / 2.4 + 0.5) % 1
 
-                font.pixelSize: Math.max(2, 28 * Math.sin(p * Math.PI))
-                x: 700 + 190 * p
+                font.pixelSize: Math.max(2, 42 * Math.sin(p * Math.PI))
+                x: 730 + 190 * p
                 y: 520 - 190 * p
                 opacity: Math.min(1, 2.5 * Math.sin(p * Math.PI))
                 rotation: 14
