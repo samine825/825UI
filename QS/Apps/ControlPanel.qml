@@ -4,6 +4,8 @@ import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Services.Pipewire
+import Quickshell.Services.Mpris
 import Qt5Compat.GraphicalEffects
 import "../Components"
 import "../"
@@ -22,6 +24,420 @@ PanelWindow {
     }
     color: "transparent"
 
+    // === ГЛИФЫ ИКОНОК (координатное поле 24x24) ===
+    readonly property string iconVolumeBody:
+        "M 3,9 L 7,9 L 12,4.5 L 12,19.5 L 7,15 L 3,15 Z"
+    readonly property string iconVolumeWaves:
+        "M 15,9.5 C 16.5,10.8 16.5,13.2 15,14.5 M 17.6,7 C 20.3,9.6 20.3,14.4 17.6,17"
+    readonly property string iconVolumeMuted:
+        "M 15.5,9.5 L 20.5,14.5 M 20.5,9.5 L 15.5,14.5"
+    readonly property string iconBrightness:
+        "M 12,7.6 A 4.4,4.4 0 1,0 12,16.4 A 4.4,4.4 0 1,0 12,7.6 Z"
+        + " M 12,1.8 L 12,4.4 M 12,19.6 L 12,22.2 M 1.8,12 L 4.4,12 M 19.6,12 L 22.2,12"
+        + " M 4.6,4.6 L 6.5,6.5 M 17.5,17.5 L 19.4,19.4 M 4.6,19.4 L 6.5,17.5 M 17.5,6.5 L 19.4,4.6"
+    readonly property string iconNote:
+        "M 6,18.6 A 2.6,2.6 0 1,0 11.2,18.6 A 2.6,2.6 0 1,0 6,18.6 Z"
+        + " M 11.2,18.6 L 11.2,5.2 L 19.5,3.5 L 19.5,7.6 L 11.2,9.3 Z"
+    readonly property string iconPlay: "M 7.5,4.5 L 19.5,12 L 7.5,19.5 Z"
+    readonly property string iconPause:
+        "M 6.5,5 L 10,5 L 10,19 L 6.5,19 Z M 14,5 L 17.5,5 L 17.5,19 L 14,19 Z"
+    readonly property string iconPrev:
+        "M 18.5,5 L 18.5,19 L 7.5,12 Z M 5,5 L 7.6,5 L 7.6,19 L 5,19 Z"
+    readonly property string iconNext:
+        "M 5.5,5 L 5.5,19 L 16.5,12 Z M 16.4,5 L 19,5 L 19,19 L 16.4,19 Z"
+    readonly property string iconPowerStroke:
+        "M 18.36,6.64 A 9,9 0 1,1 5.64,6.64 M 12,2 L 12,10"
+    readonly property string iconRebootStroke:
+        "M 22.4,4.6 L 22.4,10 L 17,10 M 20.1,14.6 A 8.4,8.4 0 1,1 18.1,6.1 L 22.4,10"
+    readonly property string iconMoonFill:
+        "M 21,12.79 A 9,9 0 1,1 11.21,3 A 7,7 0 0,0 21,12.79 Z"
+    readonly property string iconHibernateStroke:
+        "M 4,5 L 11.5,5 L 4,13 L 11.5,13 M 14,12 L 19.5,12 L 14,18.5 L 19.5,18.5"
+    readonly property string iconLockFill:
+        "M 5.5,10.5 L 18.5,10.5 L 18.5,20.5 L 5.5,20.5 Z"
+    readonly property string iconLockStroke:
+        "M 8.5,10.5 L 8.5,7.5 A 3.5,3.5 0 0,1 15.5,7.5 L 15.5,10.5"
+
+    // === АУДИО (PipeWire) ===
+    PwObjectTracker { objects: [Pipewire.defaultAudioSink] }
+
+    readonly property var sinkAudio:
+        Pipewire.defaultAudioSink && Pipewire.defaultAudioSink.ready
+            ? Pipewire.defaultAudioSink.audio : null
+
+    readonly property real volumeLevel: sinkAudio ? sinkAudio.volume : 0
+    readonly property bool volumeMuted: sinkAudio ? sinkAudio.muted : false
+
+    function setVolume(v) {
+        if (sinkAudio)
+            sinkAudio.volume = Math.max(0, Math.min(1, v))
+    }
+
+    function toggleMute() {
+        if (sinkAudio)
+            sinkAudio.muted = !sinkAudio.muted
+    }
+
+    // === ЯРКОСТЬ (brightnessctl, fallback — ddcutil) ===
+    QtObject {
+        id: brightnessCtl
+
+        // 0 — недоступно, 1 — brightnessctl, 2 — ddcutil
+        property int mode: 0
+        property string device: ""
+        property real max: 1
+        property real current: 1
+        property real hold: -1
+        property real pending: -1
+
+        readonly property bool available: mode > 0
+        readonly property real ratio: hold >= 0
+            ? hold
+            : (max > 0 ? current / max : 0)
+
+        function refresh() {
+            brightGet.running = false
+            brightGet.running = true
+        }
+
+        function request(v) {
+            hold = v
+            pending = Math.max(0, Math.min(1, v))
+            brightThrottle.restart()
+        }
+    }
+
+    Process {
+        id: brightGet
+        command: ["brightnessctl", "-m"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const lines = this.text.trim().split("\n")
+                let dev = null
+
+                for (let i = 0; i < lines.length; i++) {
+                    const f = lines[i].split(",")
+
+                    if (f.length >= 5 && f[1] === "backlight") {
+                        dev = f
+                        break
+                    }
+                }
+
+                if (dev) {
+                    brightnessCtl.mode = 1
+                    brightnessCtl.device = dev[0]
+                    brightnessCtl.current = parseFloat(dev[2]) || 0
+                    brightnessCtl.max = parseFloat(dev[4]) || 1
+                    brightnessCtl.hold = -1
+                    return
+                }
+
+                // Нет backlight — пробуем ddcutil (внешние мониторы).
+                brightProbe.running = true
+            }
+        }
+    }
+
+    Process {
+        id: brightProbe
+        command: ["sh", "-c", "command -v ddcutil"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (this.text.trim() !== "") {
+                    brightnessCtl.mode = 2
+                    brightDdcGet.running = true
+                } else {
+                    brightnessCtl.mode = 0
+                }
+            }
+        }
+    }
+
+    Process {
+        id: brightDdcGet
+        command: ["ddcutil", "getvcp", "10", "--brief"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const t = this.text.trim().split(/\s+/)
+                const cur = parseFloat(t[t.length - 2])
+                const max = parseFloat(t[t.length - 1])
+
+                if (!isNaN(cur) && !isNaN(max) && max > 0) {
+                    brightnessCtl.current = cur
+                    brightnessCtl.max = max
+                    brightnessCtl.hold = -1
+                }
+            }
+        }
+    }
+
+    Timer {
+        id: brightThrottle
+        interval: 150
+        onTriggered: {
+            const v = brightnessCtl.pending
+
+            if (v < 0 || brightnessCtl.mode === 0)
+                return
+
+            // ddcutil медленный: не наслаиваем процессы при драге
+            if (brightSet.running) {
+                brightThrottle.restart()
+                return
+            }
+
+            const abs = String(Math.round(v * brightnessCtl.max))
+
+            if (brightnessCtl.mode === 1)
+                brightSet.command = ["brightnessctl", "-q", "-d",
+                    brightnessCtl.device, "set", abs]
+            else
+                brightSet.command = ["ddcutil", "setvcp", "10", abs]
+
+            brightSet.running = true
+        }
+    }
+
+    Process {
+        id: brightSet
+        onExited: if (brightnessCtl.mode === 1) brightnessCtl.refresh()
+    }
+
+    // === МЕДИА (MPRIS) ===
+    readonly property var mprisPlayer: {
+        const list = Mpris.players.values
+
+        for (let i = 0; i < list.length; i++) {
+            if (list[i].isPlaying)
+                return list[i]
+        }
+
+        return list.length > 0 ? list[0] : null
+    }
+
+    // === ПИТАНИЕ ===
+    Process {
+        id: powerProcess
+    }
+
+    function powerAction(action) {
+        if (action === "")
+            return
+
+        root.hide()
+        powerProcess.command = ["systemctl", action]
+        powerProcess.running = true
+    }
+
+    onVisibleChanged: if (visible) brightnessCtl.refresh()
+
+    // === ИНЛАЙН-КОМПОНЕНТЫ ===
+
+    // Форма элементов бара: шестиугольник с заострениями-насечками
+    // на серединах левой и правой стороны (как дата-бар и часы).
+    component NotchShape: Shape {
+        id: notchShape
+
+        property color fillColor: "transparent"
+        property color strokeColor: "transparent"
+        property real strokeWidth: Settings.line
+        property real pointRatio: 403.16 / 1000
+
+        readonly property real notchPt: height * pointRatio
+
+        preferredRendererType: Shape.CurveRenderer
+
+        SShapePath {
+            joinStyle: ShapePath.MiterJoin
+            capStyle: ShapePath.FlatCap
+            strokeColor: notchShape.strokeColor
+            strokeWidth: notchShape.strokeWidth
+            fillColor: notchShape.fillColor
+
+            startX: 0
+            startY: 0
+            PathLine { x: notchShape.width; y: 0 }
+            PathLine { x: notchShape.width - notchShape.notchPt; y: notchShape.height / 2 }
+            PathLine { x: notchShape.width; y: notchShape.height }
+            PathLine { x: 0; y: notchShape.height }
+            PathLine { x: notchShape.notchPt; y: notchShape.height / 2 }
+            PathLine { x: 0; y: 0 }
+        }
+    }
+
+    // Векторная иконка: PathSvg в поле 24x24, масштабируется в размер.
+    component VIcon: Shape {
+        id: vIcon
+
+        property color lineColor: Settings.c1
+        property real strokeWidth: Settings.line
+        property string fillPath: ""
+        property string strokePath: ""
+
+        preferredRendererType: Shape.CurveRenderer
+
+        transform: Scale {
+            xScale: vIcon.width / 24
+            yScale: vIcon.height / 24
+        }
+
+        SShapePath {
+            fillColor: vIcon.lineColor
+            strokeColor: "transparent"
+
+            PathSvg { path: vIcon.fillPath }
+        }
+
+        SShapePath {
+            fillColor: "transparent"
+            strokeColor: vIcon.lineColor
+            strokeWidth: vIcon.strokeWidth * 24 / Math.max(1, vIcon.width)
+            capStyle: ShapePath.RoundCap
+            joinStyle: ShapePath.RoundJoin
+
+            PathSvg { path: vIcon.strokePath }
+        }
+    }
+
+    // Слайдр в стиле уведомлений: два слоя одного контента, верхний
+    // обрезан по уровню заполнения, цвета внутри заполнения инвертированы.
+    component SliderTile: Item {
+        id: sliderTile
+
+        property real value: 1
+        property bool available: true
+        property string iconFill: ""
+        property string iconStroke: ""
+        property bool showIcon: true
+        property real iconScale: 0.5
+
+        signal valueRequested(real v)
+        signal dragEnded()
+        signal iconActivated()
+
+        opacity: available ? 1 : 0.35
+
+        Behavior on opacity {
+            NumberAnimation { duration: 200 }
+        }
+
+        // базовый слой
+        NotchShape {
+            anchors.fill: parent
+            fillColor: Settings.c2
+            strokeColor: Settings.c1
+        }
+
+        VIcon {
+            visible: sliderTile.showIcon
+            anchors.centerIn: parent
+            width: parent.height * sliderTile.iconScale
+            height: width
+            lineColor: Settings.c1
+            fillPath: sliderTile.iconFill
+            strokePath: sliderTile.iconStroke
+        }
+
+        // слой заполнения (клип по уровню, инвертированные цвета)
+        Item {
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: parent.left
+            height: parent.height
+            width: parent.width * Math.max(0, Math.min(1, sliderTile.value))
+            clip: true
+
+            Behavior on width {
+                NumberAnimation { duration: 60 }
+            }
+
+            Item {
+                width: sliderTile.width
+                height: sliderTile.height
+
+                NotchShape {
+                    anchors.fill: parent
+                    fillColor: Settings.c1
+                    strokeColor: "transparent"
+                }
+
+                VIcon {
+                    visible: sliderTile.showIcon
+                    anchors.centerIn: parent
+                    width: parent.height * sliderTile.iconScale
+                    height: width
+                    lineColor: Settings.c2
+                    fillPath: sliderTile.iconFill
+                    strokePath: sliderTile.iconStroke
+                }
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+
+            function apply(mouse) {
+                sliderTile.valueRequested(
+                    Math.max(0, Math.min(1, mouse.x / sliderTile.width)))
+            }
+
+            onPressed: (mouse) => apply(mouse)
+            onPositionChanged: (mouse) => apply(mouse)
+            onReleased: sliderTile.dragEnded()
+        }
+
+        // клик по зоне иконки — доп. действие (например mute)
+        MouseArea {
+            anchors.centerIn: parent
+            width: parent.height * 0.7
+            height: parent.height * 0.7
+            z: 2
+            cursorShape: Qt.PointingHandCursor
+
+            onClicked: sliderTile.iconActivated()
+        }
+    }
+
+    // Кнопка в форме элемента бара.
+    component ButtonTile: Item {
+        id: btnTile
+
+        property string iconFill: ""
+        property string iconStroke: ""
+        property bool btnEnabled: true
+
+        signal activated()
+
+        opacity: btnEnabled ? 1 : 0.35
+
+        Behavior on opacity {
+            NumberAnimation { duration: 200 }
+        }
+
+        NotchShape {
+            anchors.fill: parent
+            fillColor: Settings.c2
+            strokeColor: Settings.c1
+        }
+
+        VIcon {
+            anchors.centerIn: parent
+            width: parent.height * 0.62
+            height: width
+            fillPath: btnTile.iconFill
+            strokePath: btnTile.iconStroke
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            enabled: btnTile.btnEnabled
+
+            onClicked: btnTile.activated()
+        }
+    }
+
     MouseArea {
         anchors.fill: parent
         onClicked: root.hide()
@@ -34,12 +450,12 @@ PanelWindow {
     function hide() {
         root.visible = false
     }
-    
+
     MouseFollow {
         id: tiltContainer
 
         width: 800
-        height: 500
+        height: 560
 
         x: (Screen.width - width) / 2
         y: Settings.barGap * 2 + Settings.barHeight
@@ -84,7 +500,7 @@ PanelWindow {
                             PathLine { x: dateBar.width;                y: dateBar.height }
                             PathLine { x: 0;                             y: dateBar.height }
                             PathLine { x: dateBar.point;                  y: dateBar.height / 2 }
-                            PathLine { x: 0;                             y: 0 }
+                            PathLine { x: 0; y: 0 }
                         }
                     }
 
@@ -108,7 +524,7 @@ PanelWindow {
                             PathLine { x: dateBar.width;                y: dateBar.height }
                             PathLine { x: 0;                             y: dateBar.height }
                             PathLine { x: dateBar.point;                  y: dateBar.height / 2 }
-                            PathLine { x: 0;                             y: 0 }
+                            PathLine { x: 0; y: 0 }
                         }
                     }
 
@@ -151,40 +567,487 @@ PanelWindow {
                         Row {
                             anchors.fill: parent
 
-                            // Левая часть: Виджеты
+                            // Левая часть: грид 6xN виджетов. Ширина — ровно
+                            // на 6 клеток с gaps, клетка квадратная с высотой
+                            // заголовка/бара из конфига. Отступы ровные:
+                            // margin = gap = line * 2.
                             Item {
-                                width: (parent.width - Settings.line) / 2
+                                id: leftPart
+                                width: margin * 2
+                                    + columns * cell + (columns - 1) * gap
                                 height: parent.height
 
-                                Column {
-                                    x: Settings.line*1.5
-                                    y: Settings.line*1.5
-                                    width: parent.width
-                                    height: parent.height
-                                    spacing: Settings.line
-                                    Row {
+                                property real margin: Settings.line * 2
+                                property real gap: Settings.line * 2
+                                property int columns: 6
+
+                                property real cell:
+                                    Settings.barHeight - Settings.line
+
+                                function cellX(col) {
+                                    return margin + col * (cell + gap)
+                                }
+
+                                function cellY(row) {
+                                    return margin + row * (cell + gap)
+                                }
+
+                                // Громкость 0x0, размер 3x1
+                                SliderTile {
+                                    x: leftPart.cellX(0)
+                                    y: leftPart.cellY(0)
+                                    width: leftPart.cell * 3 + leftPart.gap * 2
+                                    height: leftPart.cell
+
+                                    value: root.volumeMuted
+                                        ? 0 : root.volumeLevel
+                                    iconFill: root.iconVolumeBody
+                                    iconStroke: root.volumeMuted
+                                        || root.volumeLevel <= 0.001
+                                        ? root.iconVolumeMuted
+                                        : root.iconVolumeWaves
+
+                                    onValueRequested: (v) => root.setVolume(v)
+                                    onIconActivated: root.toggleMute()
+                                }
+
+                                // Яркость 0x1, размер 3x1
+                                SliderTile {
+                                    x: leftPart.cellX(0)
+                                    y: leftPart.cellY(1)
+                                    width: leftPart.cell * 3 + leftPart.gap * 2
+                                    height: leftPart.cell
+
+                                    available: brightnessCtl.available
+                                    value: brightnessCtl.ratio
+                                    iconFill: ""
+                                    iconStroke: root.iconBrightness
+
+                                    onValueRequested: (v) => brightnessCtl.request(v)
+                                    onIconActivated: brightnessCtl.refresh()
+                                }
+
+                                // Плеер 3x3 у правого края верхней зоны
+                                Item {
+                                    id: playerTile
+                                    x: leftPart.cellX(3)
+                                    y: leftPart.cellY(0)
+                                    width: leftPart.cell * 3 + leftPart.gap * 2
+                                    height: leftPart.cell * 3 + leftPart.gap * 2
+
+                                    property var player: root.mprisPlayer
+                                    property bool hasTrack:
+                                        player !== null && player.trackTitle !== ""
+
+                                    property real polledPos: 0
+                                    property real seekHold: -1
+
+                                    readonly property real cornerCut:
+                                        Settings.line * 2
+
+                                    opacity: hasTrack ? 1 : 0.45
+
+                                    Behavior on opacity {
+                                        NumberAnimation { duration: 200 }
+                                    }
+
+                                    // опрос позиции трека
+                                    Timer {
+                                        interval: 500
+                                        repeat: true
+                                        running: playerTile.player !== null
+                                            && playerTile.player.positionSupported
+
+                                        onTriggered: {
+                                            if (playerTile.seekHold < 0
+                                                    && playerTile.player)
+                                                playerTile.polledPos =
+                                                    playerTile.player.position
+                                        }
+                                    }
+
+                                    Timer {
+                                        id: seekHoldReset
+                                        interval: 500
+                                        onTriggered: playerTile.seekHold = -1
+                                    }
+
+                                    // фон и рамка карточки (стиль обоев)
+                                    Panel {
+                                        anchors.fill: parent
+                                        cornerCut: playerTile.cornerCut
+                                        strokeColor: Settings.c1
+                                        fillColor: Settings.c2
+                                        strokeWidth: Settings.line
+                                    }
+
+                                    // обложка
+                                    Image {
+                                        anchors.fill: parent
+                                        asynchronous: true
+                                        cache: false
+                                        smooth: true
+                                        fillMode: Image.PreserveAspectCrop
+                                        visible: playerTile.hasTrack
+                                            && playerTile.player.trackArtUrl !== ""
+
+                                        source: {
+                                            const p = playerTile.player
+                                            if (!p)
+                                                return ""
+
+                                            const u = p.trackArtUrl
+                                            if (u === "")
+                                                return ""
+
+                                            return (u.startsWith("file://")
+                                                    || u.startsWith("http"))
+                                                ? u : "file://" + u
+                                        }
+                                    }
+
+                                    // иконка-заглушка без обложки —
+                                    // в зоне над кнопками
+                                    VIcon {
+                                        anchors.centerIn: fallbackArea
+                                        visible: !playerTile.hasTrack
+                                            || playerTile.player.trackArtUrl === ""
+                                        width: playerTile.width * 0.26
+                                        height: width
+                                        fillPath: root.iconNote
+                                        lineColor: Settings.c1
+                                    }
+
+                                    Item {
+                                        id: fallbackArea
+                                        x: 0
+                                        y: 0
                                         width: parent.width
-                                        height: parent.width/2
-                                        spacing: Settings.line
-                                        Column {
-                                            width: parent.width/2
-                                            height: parent.width/2
-                                            spacing: Settings.line
-                                            SRectangle{
-                                                width: parent.width
-                                                height: parent.width/2
-                                                color:"#33ffffff"
-                                            }
-                                            SRectangle{
-                                                width: parent.width
-                                                height: parent.width/2
-                                                color:"#33ffffff"
+                                        height: controls.y
+                                    }
+
+                                    // кнопки: prev / play-pause / next
+                                    Item {
+                                        id: controls
+                                        z: 3
+                                        width: btnPrev.width + btnPlay.width
+                                            + btnNext.width + Settings.line * 4
+                                        height: Math.max(
+                                            btnPrev.height, btnPlay.height)
+                                        x: (parent.width - width) / 2
+                                        y: seekBar.y - height
+                                            - Settings.line * 2
+
+                                        ButtonTile {
+                                            id: btnPrev
+                                            x: 0
+                                            width: playerTile.width * 0.17
+                                            height: playerTile.height * 0.13
+                                            iconFill: root.iconPrev
+                                            btnEnabled: playerTile.hasTrack
+                                                && playerTile.player.canGoPrevious
+
+                                            onActivated: {
+                                                if (playerTile.player)
+                                                    playerTile.player.previous()
                                             }
                                         }
-                                        SRectangle{
-                                            width: parent.width/2
-                                            height: parent.width/2
-                                            color:"#33ffffff"
+
+                                        ButtonTile {
+                                            id: btnPlay
+                                            x: btnPrev.width
+                                                + Settings.line * 2
+                                            width: playerTile.width * 0.22
+                                            height: playerTile.height * 0.13
+                                            iconFill: playerTile.hasTrack
+                                                && playerTile.player.isPlaying
+                                                ? root.iconPause : root.iconPlay
+                                            btnEnabled: playerTile.hasTrack
+                                                && playerTile.player.canTogglePlaying
+
+                                            onActivated: {
+                                                if (playerTile.player)
+                                                    playerTile.player.togglePlaying()
+                                            }
+                                        }
+
+                                        ButtonTile {
+                                            id: btnNext
+                                            x: btnPrev.width + btnPlay.width
+                                                + Settings.line * 4
+                                            width: playerTile.width * 0.17
+                                            height: playerTile.height * 0.13
+                                            iconFill: root.iconNext
+                                            btnEnabled: playerTile.hasTrack
+                                                && playerTile.player.canGoNext
+
+                                            onActivated: {
+                                                if (playerTile.player)
+                                                    playerTile.player.next()
+                                            }
+                                        }
+                                    }
+
+                                    // слайдер позиции трека
+                                    SliderTile {
+                                        id: seekBar
+                                        z: 3
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.bottom: captionStrip.top
+                                        anchors.bottomMargin: Settings.line
+                                        anchors.leftMargin: Settings.line * 2
+                                        anchors.rightMargin: Settings.line * 2
+                                        height: Settings.line * 4
+
+                                        showIcon: false
+                                        iconScale: 0
+
+                                        available: playerTile.hasTrack
+                                            && playerTile.player.canSeek
+
+                                        value: playerTile.seekHold >= 0
+                                            ? playerTile.seekHold
+                                            : (playerTile.player
+                                                && playerTile.player.length > 0
+                                                ? playerTile.polledPos
+                                                    / playerTile.player.length
+                                                : 0)
+
+                                        onValueRequested: (v) => {
+                                            playerTile.seekHold = v
+                                        }
+
+                                        onDragEnded: {
+                                            if (playerTile.player
+                                                    && playerTile.seekHold >= 0) {
+                                                playerTile.player.position =
+                                                    playerTile.seekHold
+                                                        * playerTile.player.length
+                                            }
+
+                                            seekHoldReset.restart()
+                                        }
+                                    }
+
+                                    // уголки
+                                    Shape {
+                                        anchors.fill: parent
+                                        z: 4
+
+                                        // ВЛ
+                                        SShapePath {
+                                            joinStyle: ShapePath.MiterJoin
+                                            capStyle: ShapePath.FlatCap
+                                            strokeColor: "transparent"
+                                            fillColor: Settings.c2
+
+                                            startX: 0
+                                            startY: 0
+                                            PathLine { x: playerTile.cornerCut; y: 0 }
+                                            PathLine { x: 0; y: playerTile.cornerCut }
+                                            PathLine { x: 0; y: 0 }
+                                        }
+
+                                        // ВП
+                                        SShapePath {
+                                            joinStyle: ShapePath.MiterJoin
+                                            capStyle: ShapePath.FlatCap
+                                            strokeColor: "transparent"
+                                            fillColor: Settings.c2
+
+                                            startX: playerTile.width - playerTile.cornerCut
+                                            startY: 0
+                                            PathLine { x: playerTile.width; y: 0 }
+                                            PathLine { x: playerTile.width; y: playerTile.cornerCut }
+                                            PathLine { x: playerTile.width - playerTile.cornerCut; y: 0 }
+                                        }
+
+                                        // НП
+                                        SShapePath {
+                                            joinStyle: ShapePath.MiterJoin
+                                            capStyle: ShapePath.FlatCap
+                                            strokeColor: "transparent"
+                                            fillColor: Settings.c2
+
+                                            startX: playerTile.width
+                                            startY: playerTile.height - playerTile.cornerCut
+                                            PathLine { x: playerTile.width; y: playerTile.height }
+                                            PathLine { x: playerTile.width - playerTile.cornerCut; y: playerTile.height }
+                                            PathLine { x: playerTile.width; y: playerTile.height - playerTile.cornerCut }
+                                        }
+
+                                        // НЛ
+                                        SShapePath {
+                                            joinStyle: ShapePath.MiterJoin
+                                            capStyle: ShapePath.FlatCap
+                                            strokeColor: "transparent"
+                                            fillColor: Settings.c2
+
+                                            startX: playerTile.cornerCut
+                                            startY: playerTile.height
+                                            PathLine { x: 0; y: playerTile.height }
+                                            PathLine { x: 0; y: playerTile.height - playerTile.cornerCut }
+                                            PathLine { x: playerTile.cornerCut; y: playerTile.height }
+                                        }
+                                    }
+
+                                    // белая рамка
+                                    Shape {
+                                        preferredRendererType: Shape.CurveRenderer
+                                        anchors.fill: parent
+                                        z: 5
+
+                                        SShapePath {
+                                            joinStyle: ShapePath.MiterJoin
+                                            capStyle: ShapePath.FlatCap
+                                            strokeColor: Settings.c1
+                                            strokeWidth: Settings.line
+                                            fillColor: "transparent"
+
+                                            startX: playerTile.cornerCut
+                                            startY: 0
+                                            PathLine { x: playerTile.width - playerTile.cornerCut; y: 0 }
+                                            PathLine { x: playerTile.width; y: playerTile.cornerCut }
+                                            PathLine { x: playerTile.width; y: playerTile.height - playerTile.cornerCut }
+                                            PathLine { x: playerTile.width - playerTile.cornerCut; y: playerTile.height }
+                                            PathLine { x: playerTile.cornerCut; y: playerTile.height }
+                                            PathLine { x: 0; y: playerTile.height - playerTile.cornerCut }
+                                            PathLine { x: 0; y: playerTile.cornerCut }
+                                            PathLine { x: playerTile.cornerCut; y: 0 }
+                                        }
+                                    }
+
+                                    // подпись (как у плиток обоев)
+                                    SRectangle {
+                                        id: captionStrip
+                                        z: 4
+                                        anchors.bottom: parent.bottom
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.margins: Settings.line / 2
+                                        height: 20
+                                        color: '#77' + Settings.c2.slice(1)
+
+                                        SText {
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.leftMargin: 10
+                                            anchors.rightMargin: 10
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: playerTile.hasTrack
+                                                ? (playerTile.player.trackArtist !== ""
+                                                    ? playerTile.player.trackArtist
+                                                        + " — " + playerTile.player.trackTitle
+                                                    : playerTile.player.trackTitle)
+                                                : "Нет медиа"
+                                            color: "white"
+                                            elide: Text.ElideMiddle
+                                            font.pixelSize: 10
+                                            horizontalAlignment: Text.AlignHCenter
+                                        }
+                                    }
+                                }
+
+                                // Пустышки 1x1 (стиль плиток обоев), ниже плеера
+                                Repeater {
+                                    model: 8
+
+                                    delegate: Panel {
+                                        property int tileCol: index % leftPart.columns
+                                        property int tileRow: 3 + Math.floor(index / leftPart.columns)
+
+                                        x: leftPart.cellX(tileCol)
+                                        y: leftPart.cellY(tileRow)
+                                        width: leftPart.cell
+                                        height: leftPart.cell
+
+                                        cornerCut: Settings.line * 2
+                                        strokeColor: Settings.c1
+                                        fillColor: "transparent"
+                                        strokeWidth: Settings.line
+                                    }
+                                }
+
+                                // Нижняя панель питания: скосы, разбита
+                                // перегородками на 5 секторов
+                                Item {
+                                    id: powerRow
+                                    x: leftPart.margin
+                                    y: leftPart.height - leftPart.margin
+                                        - leftPart.cell
+                                    width: leftPart.width - leftPart.margin * 2
+                                    height: leftPart.cell
+
+                                    readonly property int btnCount: 5
+                                    readonly property real btnW: width / btnCount
+
+                                    // коробка секции
+                                    Panel {
+                                        anchors.fill: parent
+                                        cornerCut: Settings.line * 2
+                                        strokeColor: Settings.c1
+                                        fillColor: Settings.c2
+                                        strokeWidth: Settings.line
+                                    }
+
+                                    // вертикальные перегородки между секторами
+                                    Repeater {
+                                        model: powerRow.btnCount - 1
+
+                                        delegate: Shape {
+                                            x: (index + 1)
+                                                * powerRow.btnW
+                                                - Settings.line / 2
+                                            width: Settings.line
+                                            height: parent.height
+
+                                            preferredRendererType: Shape.CurveRenderer
+
+                                            SShapePath {
+                                                joinStyle: ShapePath.MiterJoin
+                                                capStyle: ShapePath.FlatCap
+                                                strokeColor: Settings.c1
+                                                strokeWidth: Settings.line
+                                                startX: Settings.line / 2
+                                                startY: 0
+                                                PathLine {
+                                                    x: Settings.line / 2
+                                                    y: parent.height
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // иконки и клики по секциям
+                                    Repeater {
+                                        model: [
+                                            { fill: "", stroke: root.iconPowerStroke, cmd: "poweroff" },
+                                            { fill: "", stroke: root.iconRebootStroke, cmd: "reboot" },
+                                            { fill: root.iconMoonFill, stroke: "", cmd: "suspend" },
+                                            { fill: "", stroke: root.iconHibernateStroke, cmd: "hibernate" },
+                                            { fill: root.iconLockFill, stroke: root.iconLockStroke, cmd: "" }
+                                        ]
+
+                                        delegate: Item {
+                                            x: index * powerRow.btnW
+                                            width: powerRow.btnW
+                                            height: parent.height
+
+                                            VIcon {
+                                                anchors.centerIn: parent
+                                                width: parent.height * 0.55
+                                                height: width
+                                                fillPath: modelData.fill
+                                                strokePath: modelData.stroke
+                                            }
+
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+
+                                                onClicked: root.powerAction(modelData.cmd)
+                                            }
                                         }
                                     }
                                 }
@@ -208,9 +1071,10 @@ PanelWindow {
                                 }
                             }
 
-                            // Правая часть: Уведомления
+                            // Правая часть: Уведомления (остаток ширины)
                             Item {
-                                width: (parent.width - Settings.line) / 2
+                                width: parent.width - leftPart.width
+                                    - Settings.line
                                 height: parent.height
 
                                 SText {
