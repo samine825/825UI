@@ -272,20 +272,49 @@ PanelWindow {
 
                     property real pointCoef: (403.16 / 1000)
 
-                    // Перегородка j лежит между приложениями i и i + 1,
-                    // где i = (6 - j) mod elementsCount. Видима между
-                    // соседними приложениями и на границах списка:
-                    // по одной перед первым (d = 12) и после последнего
-                    // (d = N - 1) приложением. Пустые сектора дальше
-                    // границ — без перегородок.
+                    // Перегородка j лежит между секторами d = (6 - j) mod N
+                    // и d + 1. В секторе r показывается клетка приложения
+                    // rep(r) — единственный индекс с таким остатком в окне
+                    // видимости |i - selectedIndex| <= 6. Перегородка
+                    // видима, когда обе клетки по бокам реальны, плюс
+                    // по одной на границах списка (перед первым и после
+                    // последнего приложения), если граница в окне.
                     readonly property int pairIndex:
                         ((6 - index) % root.elementsCount
                         + root.elementsCount) % root.elementsCount
 
-                    visible: root.filteredApps.length > 0
-                        && (pairIndex <= root.filteredApps.length - 2
-                            || pairIndex === root.filteredApps.length - 1
-                            || pairIndex === root.elementsCount - 1)
+                    function sectorApp(r) {
+                        return r + root.elementsCount * Math.floor(
+                            (root.selectedIndex + 6 - r) / root.elementsCount)
+                    }
+
+                    visible: {
+                        const n = root.filteredApps.length
+
+                        if (n === 0)
+                            return false
+
+                        const a = sectorApp(pairIndex)
+                        const b = sectorApp((pairIndex + 1) % root.elementsCount)
+
+                        const aReal = a >= 0 && a <= n - 1
+                        const bReal = b >= 0 && b <= n - 1
+
+                        // между двумя заполненными секторами
+                        if (aReal && bReal)
+                            return true
+
+                        // ровно по одной перегородке на границах списка:
+                        // пустой сосед у первого приложения (b === 0)
+                        // или у последнего (a === n - 1)
+                        if (b === 0 && !aReal)
+                            return true
+
+                        if (a === n - 1 && !bReal)
+                            return true
+
+                        return false
+                    }
 
                     rotation: index * angle
 
