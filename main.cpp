@@ -4,6 +4,9 @@
 #include <cstdlib>
 #include <vector>
 #include <format>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
 
 int main(int argc, char* argv[]) {
     #ifndef VERSION_STR
@@ -49,6 +52,42 @@ int main(int argc, char* argv[]) {
                     std::string command = "qs -p ~/.825UI ipc call main toggleSettings";
                     int result = std::system(command.c_str());
                 }
+            }
+        }
+        else if (args[0] == "cursor") {
+            // демон позиции курсора для кота: строки "X Y" в stdout, ~60 Гц.
+            // Hyprland IPC отвечает на "cursorpos" (без перевода строки)
+            // и закрывает соединение — на каждый тик новое соединение.
+            const char* sig = std::getenv("HYPRLAND_INSTANCE_SIGNATURE");
+            if (!sig) return 1;
+
+            std::string path = std::string("/run/user/1000/hypr/") + sig + "/.socket.sock";
+            if (const char* xdg = std::getenv("XDG_RUNTIME_DIR"))
+                path = std::string(xdg) + "/hypr/" + sig + "/.socket.sock";
+
+            while (true) {
+                int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+                if (fd >= 0) {
+                    sockaddr_un addr {};
+                    addr.sun_family = AF_UNIX;
+                    strncpy(addr.sun_path, path.c_str(), sizeof(addr.sun_path) - 1);
+
+                    if (connect(fd, (sockaddr*)&addr, sizeof(addr)) == 0) {
+                        if (write(fd, "cursorpos", 9) > 0) {
+                            char buf[128];
+                            ssize_t r = read(fd, buf, sizeof(buf) - 1);
+                            if (r > 0) {
+                                buf[r] = 0;
+                                for (char* p = buf; *p; ++p)
+                                    if (*p == ',') *p = ' ';
+                                std::cout << buf << "\n";
+                                std::cout.flush();
+                            }
+                        }
+                    }
+                    close(fd);
+                }
+                usleep(33000);
             }
         }
         else if (args[0] == "labudabudabdab") {

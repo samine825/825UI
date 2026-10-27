@@ -8,6 +8,7 @@ import QtQuick.Shapes
 import "./3D"
 import "./Apps"
 import "./Bar"
+import "./Cat"
 import "./Components"
 
 // =^..^=
@@ -340,4 +341,5 @@ ShellRoot {
 
     ControlPanel {id: controlPanel}
     AppLauncher {id: appLauncher}
+    Cat {id: cat}
 }
