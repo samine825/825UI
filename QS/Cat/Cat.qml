@@ -23,7 +23,7 @@ PanelWindow {
     readonly property real catOffsetX: (winW - 1000 * svgScale) / 2
     readonly property real catOffsetY: winH - 1000 * svgScale
 
-    visible: true
+    visible: shown || slideY < winH + 55
     exclusiveZone: -1
     WlrLayershell.layer: WlrLayer.Top
     color: "transparent"
@@ -50,6 +50,82 @@ PanelWindow {
         - (Screen.width - winW) - catOffsetX) / svgScale
     readonly property real curSvgY: (cursorY - Screen.virtualY
         - (Screen.height - winH) - catOffsetY) / svgScale
+
+    // ховер над силуэтом (для E-хотспота)
+    readonly property bool hovering: pokeArea.containsMouse
+        && silhouetteHit(
+            (hoverPos.x - catOffsetX) / svgScale,
+            (hoverPos.y - catOffsetY) / svgScale)
+
+    // === ПОКАЗ/ПРЯТАНИЕ ===
+    property bool shown: false
+    property real slideY: winH + 70
+
+    function toggle() {
+        shown = !shown
+
+        if (!shown) {
+            chatState = "none"
+            aiProc.running = false
+        }
+    }
+
+    // === ЧАТ ===
+    property string chatState: "none"   // none | input | response
+    property bool thinking: false
+    property bool thinkSkip: false
+    property string responseText: ""
+    property point hoverPos: Qt.point(-10000, -10000)
+    readonly property string aiModel: "qwen/qwen3.8-27b"
+
+    function openInput() {
+        chatState = "input"
+        inputField.text = ""
+        inputField.forceActiveFocus()
+    }
+
+    function closeChat() {
+        chatState = "none"
+        aiProc.running = false
+    }
+
+    function submit(query) {
+        query = query.trim()
+
+        if (query === "")
+            return
+
+        responseText = ""
+        thinking = true
+        thinkSkip = false
+        chatState = "response"
+        aiProc.command = ["curl", "-s", "-N", "-X", "POST",
+            "http://127.0.0.1:1234/v1/chat/completions",
+            "-H", "Content-Type: application/json",
+            "-d", JSON.stringify({
+                model: aiModel,
+                messages: [
+                    { role: "system", content: "Ты — чёрный кот, живущий "
+                        + "в правом нижнем углу рабочего стола. Отвечай "
+                        + "коротко (1-3 предложения), с кошачьим характером "
+                        + "и юмором, на русском языке." },
+                    { role: "user", content: query }
+                ],
+                stream: true,
+                max_tokens: 300
+            })]
+        aiProc.running = true
+    }
+
+    function silhouetteHit(sx, sy) {
+        const dh = Math.sqrt(
+            (sx - CatData.pivots.headCenter.x)
+            * (sx - CatData.pivots.headCenter.x)
+            + (sy - CatData.pivots.headCenter.y)
+            * (sy - CatData.pivots.headCenter.y))
+
+        return dh < 340 || (Math.abs(sx - 500) < 230 && sy > 690)
+    }
 
     // === СОСТОЯНИЕ ===
     property real idleTime: 0
@@ -485,10 +561,224 @@ PanelWindow {
         return Math.max(lo, Math.min(hi, v))
     }
 
+    // === AI: стриминг ответа локальной модели ===
+    Process {
+        id: aiProc
+
+        stdout: SplitParser {
+            onRead: data => {
+                const line = data.trim()
+
+                if (!line.startsWith("data:"))
+                    return
+
+                const payload = line.slice(5).trim()
+
+                if (payload === "[DONE]") {
+                    cat.thinking = false
+                    return
+                }
+
+                try {
+                    const chunk = JSON.parse(payload)
+                    const delta = chunk.choices && chunk.choices[0]
+                        && chunk.choices[0].delta
+
+                    if (!delta)
+                        return
+
+                    let piece = delta.content ?? ""
+
+                    if (piece === "")
+                        return
+
+                    // <think> reasoning-моделей прячем
+                    if (cat.thinkSkip) {
+                        const end = piece.indexOf("</think>")
+
+                        if (end === -1)
+                            return
+
+                        cat.thinkSkip = false
+                        piece = piece.slice(end + 8)
+                    } else {
+                        const start = piece.indexOf("<think>")
+
+                        if (start !== -1) {
+                            cat.thinkSkip = true
+                            piece = piece.slice(0, start)
+                        }
+                    }
+
+                    if (piece !== "") {
+                        cat.responseText += piece
+                        cat.thinking = false
+                    }
+                } catch (e) {}
+            }
+        }
+    }
+
+    // === ОКНО ЧАТА: E-хотспот, ввод и ответ — над котом ===
+    PanelWindow {
+        id: chatWindow
+
+        readonly property bool chatHover: awayArea.containsMouse
+
+        visible: cat.shown && (cat.hovering || chatHover
+            || cat.chatState !== "none")
+        exclusiveZone: -1
+        color: "transparent"
+        WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.keyboardFocus: cat.chatState === "input"
+            ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+
+        anchors {
+            bottom: true
+            right: true
+        }
+
+        implicitWidth: 520
+        implicitHeight: 850
+
+        // клик мимо панелей — закрыть чат
+        MouseArea {
+            id: awayArea
+
+            anchors.fill: parent
+            hoverEnabled: true
+
+            onClicked: cat.closeChat()
+        }
+
+        // === E-хотспот ===
+        Panel {
+            visible: cat.chatState === "none"
+            x: 224
+            y: 338
+            width: 72
+            height: 72
+            cornerCut: Settings.line * 2
+            strokeColor: Settings.c1
+            fillColor: Settings.c2
+            strokeWidth: Settings.line
+
+            SText {
+                anchors.centerIn: parent
+                text: "E"
+                color: Settings.c1
+                font.bold: true
+                font.pixelSize: 34
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+
+                onClicked: cat.openInput()
+            }
+        }
+
+        // === ввод ===
+        Panel {
+            visible: cat.chatState === "input"
+            x: 100
+            y: 330
+            width: 320
+            height: 80
+            cornerCut: Settings.line * 2
+            strokeColor: Settings.c1
+            fillColor: Settings.c2
+            strokeWidth: Settings.line
+
+            TextInput {
+                id: inputField
+
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                anchors.verticalCenter: parent.verticalCenter
+                color: Settings.c1
+                font.pixelSize: 16
+                clip: true
+
+                onAccepted: cat.submit(text)
+                Keys.onEscapePressed: cat.closeChat()
+            }
+
+            SText {
+                visible: inputField.text === ""
+                anchors.left: parent.left
+                anchors.leftMargin: 16
+                anchors.verticalCenter: parent.verticalCenter
+                text: "спроси кота..."
+                color: Settings.c1
+                opacity: 0.45
+                font.pixelSize: 14
+            }
+        }
+
+        // === ответ: растягивается вверх по мере стриминга ===
+        Panel {
+            id: responsePanel
+
+            visible: cat.chatState === "response"
+            x: 100
+            width: 320
+            height: Math.min(396, responseLabel.implicitHeight + 36)
+            y: 410 - height
+
+            cornerCut: Settings.line * 2
+            strokeColor: Settings.c1
+            fillColor: Settings.c2
+            strokeWidth: Settings.line
+
+            Behavior on height {
+                NumberAnimation { duration: 120 }
+            }
+
+            Item {
+                anchors.fill: parent
+                anchors.margins: 10
+                clip: true
+
+                SText {
+                    id: responseLabel
+
+                    anchors.bottom: parent.bottom
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+
+                    text: cat.thinking
+                        ? ".".repeat(1 + (Math.floor(cat.zzzPhase * 3) % 3))
+                        : cat.responseText
+                    color: Settings.c1
+                    font.pixelSize: 14
+                    wrapMode: Text.Wrap
+                }
+            }
+        }
+    }
+
     Item {
         id: root
 
         anchors.fill: parent
+
+        // слайд показа/прятания: кот выезжает из-под нижней кромки
+        Item {
+            id: catBox
+
+            anchors.fill: parent
+            y: cat.slideY
+
+            Behavior on y {
+                NumberAnimation {
+                    duration: 450
+                    easing.type: Easing.OutCubic
+                }
+            }
 
         // единая белая обводка вокруг всего непрозрачного содержимого:
         // 16 белых копий силуэта, сдвинутых по кругу, под самим котом
@@ -509,31 +799,6 @@ PanelWindow {
                     anchors.fill: parent
                     source: catRender
                     color: Settings.c1
-                }
-            }
-        }
-
-        // клик по силуэту кота — тычок
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-
-            onPressed: (mouse) => {
-                const sx = (mouse.x - cat.catOffsetX) / cat.svgScale
-                const sy = (mouse.y - cat.catOffsetY) / cat.svgScale
-                const dh = Math.sqrt(
-                    (sx - CatData.pivots.headCenter.x)
-                    * (sx - CatData.pivots.headCenter.x)
-                    + (sy - CatData.pivots.headCenter.y)
-                    * (sy - CatData.pivots.headCenter.y))
-
-                const inHead = dh < 340
-                const inBody = Math.abs(sx - 500) < 230 && sy > 690
-
-                if (inHead || inBody) {
-                    cat.poke()
-                } else {
-                    mouse.accepted = false
                 }
             }
         }
@@ -821,5 +1086,29 @@ PanelWindow {
             }
             }
         }
+
+        MouseArea {
+            id: pokeArea
+
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+
+            onPositionChanged: (mouse) => {
+                cat.hoverPos = Qt.point(mouse.x, mouse.y)
+            }
+
+            onPressed: (mouse) => {
+                const sx = (mouse.x - cat.catOffsetX) / cat.svgScale
+                const sy = (mouse.y - cat.catOffsetY) / cat.svgScale
+
+                if (cat.silhouetteHit(sx, sy)) {
+                    cat.poke()
+                } else {
+                    mouse.accepted = false
+                }
+            }
+        }
     }
+}
 }

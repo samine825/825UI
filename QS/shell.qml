@@ -102,6 +102,10 @@ ShellRoot {
                 Quickshell.reload(true)
             }
             //APPS
+            function toggleCat(): void {
+                cat.toggle()
+            }
+
             function toggleSettings(): void {
                 settingsMenu.visible
                     ? settingsMenu.hide()

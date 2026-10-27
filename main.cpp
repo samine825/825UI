@@ -52,6 +52,14 @@ int main(int argc, char* argv[]) {
                     std::string command = "qs -p ~/.825UI ipc call main toggleSettings";
                     int result = std::system(command.c_str());
                 }
+                else if (args[1] == "cat") {
+                    std::string command = "qs -p ~/.825UI ipc call main toggleCat";
+                    int result = std::system(command.c_str());
+                }
+                else if (args[1] == "cat") {
+                    std::string command = "qs -p ~/.825UI ipc call main toggleCat";
+                    int result = std::system(command.c_str());
+                }
             }
         }
         else if (args[0] == "cursor") {
