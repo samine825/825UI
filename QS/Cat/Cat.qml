@@ -3,6 +3,7 @@ import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Qt5Compat.GraphicalEffects
 import "../Components"
 import "../"
 import "CatData.js" as CatData
@@ -489,6 +490,29 @@ PanelWindow {
 
         anchors.fill: parent
 
+        // единая белая обводка вокруг всего непрозрачного содержимого:
+        // 16 белых копий силуэта, сдвинутых по кругу, под самим котом
+        Repeater {
+            model: 16
+
+            delegate: Item {
+                required property int index
+
+                readonly property real ang: index / 16 * Math.PI * 2
+
+                x: catRender.x + 5 * Math.cos(ang)
+                y: catRender.y + 5 * Math.sin(ang)
+                width: catRender.width
+                height: catRender.height
+
+                ColorOverlay {
+                    anchors.fill: parent
+                    source: catRender
+                    color: Settings.c1
+                }
+            }
+        }
+
         // клик по силуэту кота — тычок
         MouseArea {
             anchors.fill: parent
@@ -515,6 +539,13 @@ PanelWindow {
         }
 
         Item {
+            id: catRender
+
+            anchors.fill: parent
+            layer.enabled: true
+            layer.smooth: true
+
+            Item {
             id: catSpace
 
             x: cat.catOffsetX
@@ -787,6 +818,7 @@ PanelWindow {
                 y: 520 - 190 * p
                 opacity: Math.min(1, 2.5 * Math.sin(p * Math.PI))
                 rotation: 14
+            }
             }
         }
     }
