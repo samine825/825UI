@@ -272,6 +272,21 @@ PanelWindow {
 
                     property real pointCoef: (403.16 / 1000)
 
+                    // Перегородка j лежит между приложениями i и i + 1,
+                    // где i = (6 - j) mod elementsCount. Видима между
+                    // соседними приложениями и на границах списка:
+                    // по одной перед первым (d = 12) и после последнего
+                    // (d = N - 1) приложением. Пустые сектора дальше
+                    // границ — без перегородок.
+                    readonly property int pairIndex:
+                        ((6 - index) % root.elementsCount
+                        + root.elementsCount) % root.elementsCount
+
+                    visible: root.filteredApps.length > 0
+                        && (pairIndex <= root.filteredApps.length - 2
+                            || pairIndex === root.filteredApps.length - 1
+                            || pairIndex === root.elementsCount - 1)
+
                     rotation: index * angle
 
                     SShapePath {
@@ -803,12 +818,28 @@ PanelWindow {
                 }
             }
 
+            // searchArea позиционируется своим левым верхним углом в
+            // центре круга (так рисуется арка), поэтому хитбокс
+            // центрируется явно и проверяет попадание в круг.
             MouseArea {
-                anchors.fill: parent
+                x: -width / 2
+                y: -height / 2
+                width: searchArea.width + searchArea.inputHeight
+                    + root.line * 2
+                height: searchArea.height + searchArea.inputHeight
+                    + root.line * 2
                 acceptedButtons: Qt.LeftButton
 
-                onClicked: {
-                    searchInput.forceActiveFocus()
+                onClicked: (mouse) => {
+                    const dx = mouse.x - width / 2
+                    const dy = mouse.y - height / 2
+                    const r = width / 2
+
+                    if (dx * dx + dy * dy <= r * r) {
+                        searchInput.forceActiveFocus()
+                    } else {
+                        mouse.accepted = false
+                    }
                 }
             }
         }
