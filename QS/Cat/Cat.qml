@@ -572,7 +572,7 @@ PanelWindow {
                 // волна строго горизонтальная: центральная линия
                 // остаётся функцией y и не может сложиться сама в себя
                 const grow = t * t
-                const off = Math.sin(cat.tailPhase - t * 1.7) * amp * grow
+                const off = Math.sin(cat.tailPhase + t * 1.1) * amp * grow
                     + clamp(cat.whipX, -60, 60) * grow
 
                 cx.push(bx + off)
@@ -604,7 +604,7 @@ PanelWindow {
                 path += " L " + q(cx[i] + nx[i] * half) + ","
                     + q(cy[i] + ny[i] * half)
 
-            path += " A " + half + "," + half + " 0 0 1 "
+            path += " A " + half + "," + half + " 0 0 0 "
                 + q(cx[N] - nx[N] * half) + "," + q(cy[N] - ny[N] * half)
 
             for (let i = N - 1; i >= 0; i--)
