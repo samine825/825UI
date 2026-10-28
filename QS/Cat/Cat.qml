@@ -546,14 +546,19 @@ PanelWindow {
             const amp = cat.asleep ? 6 : cat.petting ? 52
                 : cat.near ? 42 : 30
 
-            // синусоида вдоль хвоста: отдающие точки лежат на кривой
-            // покоя и гуляют по нормали; амплитуда растёт от нуля у
-            // основания к полной у кончика. Хлыст добавляется так же,
-            // с тем же ростом.
+            // Синусоида вдоль хвоста: центральная линия лежит на кривой
+            // покоя и гуляет по нормали, амплитуда растёт от нуля у
+            // основания к полной у кончика. Хвост рисуется ЗАЛИВКОЙ
+            // силуэта (центральная линия +/- половина толщины по той же
+            // нормали, кончик — полукруг): у заливки нет стыков сегментов,
+            // поэтому нет и трещин CurveRenderer с белыми пикселями.
             const q = v => Math.round(v * 4) / 4
             const N = 14
+            const half = 24
             const p0 = CatData.pivots.tailBase
-            let path = ""
+
+            const cx = []
+            const cy = []
 
             for (let i = 0; i <= N; i++) {
                 const t = i / N
@@ -564,29 +569,55 @@ PanelWindow {
                 const by = it * it * p0.y + 2 * it * t * cat.tailC1Y
                     + t * t * cat.tailC2Y
 
-                let tx = 2 * it * (cat.tailC1X - p0.x)
-                    + 2 * t * (cat.tailC2X - cat.tailC1X)
-                let ty = 2 * it * (cat.tailC1Y - p0.y)
-                    + 2 * t * (cat.tailC2Y - cat.tailC1Y)
-                const tl = Math.sqrt(tx * tx + ty * ty) || 1
-                tx /= tl
-                ty /= tl
-
+                // волна строго горизонтальная: центральная линия
+                // остаётся функцией y и не может сложиться сама в себя
                 const grow = t * t
                 const off = Math.sin(cat.tailPhase - t * 1.7) * amp * grow
                     + clamp(cat.whipX, -60, 60) * grow
 
-                const x = q(bx - ty * off)
-                const y = q(by + tx * off)
-
-                path += (i === 0 ? "M " : "L ") + x + "," + y + " "
+                cx.push(bx + off)
+                cy.push(by)
             }
+
+            // нормали кромок — из фактической (смещённой) полилинии
+            const nx = []
+            const ny = []
+
+            for (let i = 0; i <= N; i++) {
+                const ia = Math.max(0, i - 1)
+                const ib = Math.min(N, i + 1)
+
+                let tx = cx[ib] - cx[ia]
+                let ty = cy[ib] - cy[ia]
+                const tl = Math.sqrt(tx * tx + ty * ty) || 1
+
+                nx.push(-ty / tl)
+                ny.push(tx / tl)
+            }
+
+            // силуэт: левая кромка base->tip, полукруглый кончик,
+            // правая кромка tip->base
+            let path = "M " + q(cx[0] + nx[0] * half) + ","
+                + q(cy[0] + ny[0] * half)
+
+            for (let i = 1; i <= N; i++)
+                path += " L " + q(cx[i] + nx[i] * half) + ","
+                    + q(cy[i] + ny[i] * half)
+
+            path += " A " + half + "," + half + " 0 0 1 "
+                + q(cx[N] - nx[N] * half) + "," + q(cy[N] - ny[N] * half)
+
+            for (let i = N - 1; i >= 0; i--)
+                path += " L " + q(cx[i] - nx[i] * half) + ","
+                    + q(cy[i] - ny[i] * half)
+
+            path += " Z"
 
             if (path !== cat.tailPath)
                 cat.tailPath = path
 
-            cat.tailTipX = q(cat.tailC2X)
-            cat.tailTipY = q(cat.tailC2Y)
+            cat.tailTipX = q(cx[N])
+            cat.tailTipY = q(cy[N])
 
             // === zzz ===
             cat.zzzPhase += dt
@@ -892,11 +923,9 @@ PanelWindow {
                 preferredRendererType: Shape.CurveRenderer
 
                 SShapePath {
-                    strokeColor: Settings.c2
-                    strokeWidth: 48
-                    capStyle: ShapePath.RoundCap
-                    joinStyle: ShapePath.RoundJoin
-                    fillColor: "transparent"
+                    strokeColor: "transparent"
+                    fillColor: Settings.c2
+                    fillRule: ShapePath.WindingFill
 
                     PathSvg { path: cat.tailPath }
                 }
