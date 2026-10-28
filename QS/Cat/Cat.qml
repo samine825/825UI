@@ -102,7 +102,8 @@ PanelWindow {
     property string chatState: "none"   // none | input | response
     property bool thinking: false
     property bool thinkSkip: false
-    property string responseText: ""
+    property string streamText: ""      // ответ, который ещё стримится
+    property real inputScroll: 0        // скролл ввода за курсором
     readonly property string aiModel: "qwen/qwen3.8-27b"
 
     function openInput() {
@@ -122,8 +123,10 @@ PanelWindow {
         if (query === "")
             return
 
+        chatModel.append({ role: "user", mtext: query })
         inputField.text = ""
-        responseText = ""
+        inputScroll = 0
+        streamText = ""
         thinking = true
         thinkSkip = false
         chatState = "response"
@@ -662,6 +665,11 @@ PanelWindow {
 
                 if (payload === "[DONE]") {
                     cat.thinking = false
+
+                    if (cat.streamText !== "")
+                        chatModel.append({ role: "cat", mtext: cat.streamText })
+
+                    cat.streamText = ""
                     return
                 }
 
@@ -697,7 +705,7 @@ PanelWindow {
                     }
 
                     if (piece !== "") {
-                        cat.responseText += piece
+                        cat.streamText += piece
                         cat.thinking = false
                     }
                 } catch (e) {}
@@ -705,13 +713,15 @@ PanelWindow {
         }
     }
 
-    // === ЧАТ: ввод снизу и ответ над котом, в том же окне ===
-    // Второе окно-слой здесь не годится: два слоя перехватывают
-    // ховер друг у друга, а клики в нижний слой не доходят
+    // === ЧАТ: диалог (мои справа, кота слева) + ввод снизу ===
+    // Диалог открывается кликом по коту и живёт, пока не кликнули мимо.
+    ListModel {
+        id: chatModel
+    }
+
     Item {
         id: chatArea
 
-        // корень объявлен ниже, поэтому поднимаем чат по z
         z: 10
         anchors.fill: parent
 
@@ -726,18 +736,201 @@ PanelWindow {
             onClicked: cat.closeChat()
         }
 
-        // === ввод: прижат к низу окна, растёт вверх под весь текст.
-        // Кот сидит на верхней кромке панели (catOffsetY)
+        // задняя обводка диалога
+        Panel {
+            visible: dialogPanel.visible
+            x: dialogPanel.x - Settings.line
+            y: dialogPanel.y - Settings.line
+            width: dialogPanel.width + Settings.line * 2
+            height: dialogPanel.height + Settings.line * 2
+
+            cornerCut: Settings.line * 3
+            strokeColor: Settings.c2
+            fillColor: Settings.c2
+            strokeWidth: Settings.line
+        }
+
+        // === диалог: мои сообщения справа, кота — слева ===
+        Panel {
+            id: dialogPanel
+
+            visible: cat.chatState !== "none"
+            x: 100
+            width: 320
+            height: Math.min(cat.catOffsetY + 152,
+                dialogList.contentHeight + 20)
+            y: cat.catOffsetY + 160 - height
+
+            cornerCut: Settings.line * 2
+            strokeColor: Settings.c1
+            fillColor: Settings.c2
+            strokeWidth: Settings.line
+
+            ListView {
+                id: dialogList
+
+                anchors.fill: parent
+                anchors.margins: 10
+                clip: true
+                spacing: 10
+                model: chatModel
+
+                // прилипаем к низу, пока юзер не отскроллил вверх
+                property bool stick: true
+
+                onContentYChanged: stick = atYEnd
+                onContentHeightChanged: if (stick) positionViewAtEnd()
+                onCountChanged: if (stick) positionViewAtEnd()
+
+                delegate: Item {
+                    id: msgRoot
+
+                    required property int index
+                    required property string role
+                    required property string mtext
+
+                    width: dialogList.width - 4
+                    x: 2
+                    height: bubble.height
+
+                    readonly property bool isUser: role === "user"
+                    readonly property real targetX: isUser
+                        ? width - bubble.width : 0
+                    property real slideOff: 0
+
+                    // моё сообщение выезжает из-за правой границы экрана
+                    Component.onCompleted: if (isUser) {
+                        slideOff = cat.winW
+                        slideIn.start()
+                    }
+
+                    NumberAnimation {
+                        id: slideIn
+
+                        target: msgRoot
+                        property: "slideOff"
+                        to: 0
+                        duration: 380
+                        easing.type: Easing.OutCubic
+                    }
+
+                    TextMetrics {
+                        id: msgMetrics
+
+                        font: msgLabel.font
+                        text: msgRoot.mtext
+                    }
+
+                    Item {
+                        id: bubble
+
+                        x: msgRoot.targetX + msgRoot.slideOff
+                        width: Math.min(272, msgMetrics.width + 26)
+                        height: msgLabel.implicitHeight + 12
+
+                        Panel {
+                            anchors.fill: parent
+                            cornerCut: Settings.line * 2
+                            strokeColor: Settings.c1
+                            fillColor: msgRoot.isUser
+                                ? Settings.c1 : Settings.c2
+                            strokeWidth: Settings.line
+                        }
+
+                        SText {
+                            id: msgLabel
+
+                            anchors.fill: parent
+                            anchors.leftMargin: 13
+                            anchors.rightMargin: 13
+                            anchors.topMargin: 4
+                            anchors.bottomMargin: 4
+                            verticalAlignment: Text.AlignVCenter
+
+                            text: msgRoot.mtext
+                            color: msgRoot.isUser
+                                ? Settings.c2 : Settings.c1
+                            font.pixelSize: 14
+                            wrapMode: Text.Wrap
+                        }
+                    }
+                }
+
+                footer: Item {
+                    width: dialogList.width - 4
+                    x: 2
+                    height: cat.chatState === "response"
+                        && (cat.thinking || cat.streamText !== "")
+                        ? catBubble.height : 0
+
+                    TextMetrics {
+                        id: streamMetrics
+
+                        font: streamLabel.font
+                        text: cat.streamText
+                    }
+
+                    Item {
+                        id: catBubble
+
+                        width: Math.min(272, streamMetrics.width + 26)
+                        height: streamLabel.implicitHeight + 12
+
+                        Panel {
+                            anchors.fill: parent
+                            cornerCut: Settings.line * 2
+                            strokeColor: Settings.c1
+                            fillColor: Settings.c2
+                            strokeWidth: Settings.line
+                        }
+
+                        SText {
+                            id: streamLabel
+
+                            anchors.fill: parent
+                            anchors.leftMargin: 13
+                            anchors.rightMargin: 13
+                            anchors.topMargin: 4
+                            anchors.bottomMargin: 4
+                            verticalAlignment: Text.AlignVCenter
+
+                            text: cat.thinking
+                                ? ".".repeat(1
+                                    + (Math.floor(cat.zzzPhase * 3) % 3))
+                                : cat.streamText
+                            color: Settings.c1
+                            font.pixelSize: 14
+                            wrapMode: Text.Wrap
+                        }
+                    }
+                }
+            }
+        }
+
+        // задняя обводка ввода
+        Panel {
+            visible: inputPanel.height > 0.5
+            x: inputPanel.x - Settings.line
+            y: inputPanel.y - Settings.line
+            width: inputPanel.width + Settings.line * 2
+            height: inputPanel.height + Settings.line * 2
+
+            cornerCut: Settings.line * 3
+            strokeColor: Settings.c2
+            fillColor: Settings.c2
+            strokeWidth: Settings.line
+        }
+
+        // === ввод: прижат к низу, растёт вверх с капотом и скроллом ===
         Panel {
             id: inputPanel
 
-            visible: cat.chatState === "input" || height > 0.5
             x: 100
             width: 320
             y: cat.winH - height
             height: cat.chatState === "input"
-                ? Math.min(cat.winH - cat.catHeight,
-                           Math.max(64, inputField.contentHeight + 32))
+                ? Math.min(240, Math.max(46,
+                    inputField.contentHeight + 18))
                 : 0
 
             cornerCut: Settings.line * 2
@@ -745,96 +938,56 @@ PanelWindow {
             fillColor: Settings.c2
             strokeWidth: Settings.line
 
-            // клик по панели не должен закрывать чат
-            MouseArea {
-                anchors.fill: parent
-
-                onClicked: inputField.forceActiveFocus()
-            }
-
-            TextEdit {
-                id: inputField
-
-                visible: cat.chatState === "input"
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                anchors.bottomMargin: 14
-                height: Math.max(20, contentHeight)
-                color: Settings.c1
-                font.pixelSize: 16
-                wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
-                selectByMouse: true
-
-                // Enter — отправить, Shift+Enter — перенос строки
-                Keys.onPressed: (event) => {
-                    if (event.key === Qt.Key_Return
-                            || event.key === Qt.Key_Enter) {
-                        if (event.modifiers & Qt.ShiftModifier) {
-                            event.accepted = false
-                        } else {
-                            event.accepted = true
-                            cat.submit(text)
-                        }
-                    } else if (event.key === Qt.Key_Escape) {
-                        event.accepted = true
-                        cat.closeChat()
-                    }
-                }
-            }
-
-            SText {
-                visible: cat.chatState === "input" && inputField.text === ""
-                anchors.left: parent.left
-                anchors.leftMargin: 16
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: 14
-                text: "спроси кота..."
-                color: Settings.c1
-                opacity: 0.45
-                font.pixelSize: 14
-            }
-        }
-
-        // === ответ: растягивается вверх по мере стриминга ===
-        Panel {
-            id: responsePanel
-
-            visible: cat.chatState === "response"
-            x: 100
-            width: 320
-            height: Math.min(396, responseLabel.implicitHeight + 36)
-            y: 410 - height
-
-            cornerCut: Settings.line * 2
-            strokeColor: Settings.c1
-            fillColor: Settings.c2
-            strokeWidth: Settings.line
-
             Behavior on height {
-                NumberAnimation { duration: 120 }
+                NumberAnimation { duration: 150 }
             }
 
             Item {
-                anchors.fill: parent
-                anchors.margins: 10
+                id: inputClip
+
+                x: 14
+                y: 4
+                width: parent.width - 28
+                height: parent.height - 12
                 clip: true
 
-                SText {
-                    id: responseLabel
+                TextInput {
+                    id: inputField
 
-                    anchors.bottom: parent.bottom
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-
-                    text: cat.thinking
-                        ? ".".repeat(1 + (Math.floor(cat.zzzPhase * 3) % 3))
-                        : cat.responseText
+                    width: parent.width
+                    y: -cat.inputScroll
                     color: Settings.c1
                     font.pixelSize: 14
-                    wrapMode: Text.Wrap
+                    wrapMode: TextInput.WrapAtWordBoundaryOrAnywhere
+                    selectByMouse: true
+
+                    // курсор всегда в зоне видимости
+                    onCursorRectangleChanged: {
+                        const crY = cursorRectangle.y
+                        const crH = cursorRectangle.height
+                        const viewBottom = cat.inputScroll
+                            + inputClip.height
+
+                        if (crY < cat.inputScroll)
+                            cat.inputScroll = crY
+                        else if (crY + crH > viewBottom)
+                            cat.inputScroll = crY + crH
+                                - inputClip.height
+                    }
+
+                    onAccepted: cat.submit(text)
+                    Keys.onEscapePressed: cat.closeChat()
+                }
+
+                SText {
+                    visible: cat.chatState === "input"
+                        && inputField.text === ""
+                    x: 0
+                    y: 3
+                    text: "спроси кота..."
+                    color: Settings.c1
+                    opacity: 0.45
+                    font.pixelSize: 14
                 }
             }
         }
