@@ -34,9 +34,9 @@ PanelWindow {
     visible: shown || slideY < hideY - 1
     exclusiveZone: -1
     WlrLayershell.layer: WlrLayer.Top
-    // клавиатура нужна только пока открыт ввод
-    WlrLayershell.keyboardFocus: chatState === "input"
-        ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    // клавиатуру берём по требованию: клик по окну кота фокусирует
+    // ввод, при этом ввод в других окнах не блокируется
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
     color: "transparent"
 
     // Прозрачные области окна не должны перехватывать мышь:
@@ -191,7 +191,12 @@ PanelWindow {
     property real jumpY: 0
     property real jumpVel: 0
 
-    // хвост
+    // хвост: кривая покоя (квадратичная безье) — константы
+    readonly property real tailC1X: 760
+    readonly property real tailC1Y: 955
+    readonly property real tailC2X: 790
+    readonly property real tailC2Y: 815
+
     property real tailPhase: 0
     property real tailSpeed: 2.2
     property real whipX: 0
@@ -529,11 +534,11 @@ PanelWindow {
             // хлыст при касании хвоста
             const tailDist = distToSegment(cat.curSvgX, cat.curSvgY,
                 CatData.pivots.tailBase.x, CatData.pivots.tailBase.y - 10,
-                cat.tailTipX, cat.tailTipY)
+                cat.tailC2X, cat.tailC2Y)
 
             if (tailDist < 90 && cat.cursorVel > 300 && !cat.asleep)
                 cat.whipVel += clamp(cat.cursorVel * 0.35, -500, 500)
-                    * (cat.curSvgX < cat.tailTipX ? -1 : 1)
+                    * (cat.curSvgX < cat.tailC2X ? -1 : 1)
 
             cat.whipVel += (-cat.whipX * 130 - cat.whipVel * 6) * dt
             cat.whipX += cat.whipVel * dt
@@ -541,22 +546,47 @@ PanelWindow {
             const amp = cat.asleep ? 6 : cat.petting ? 52
                 : cat.near ? 42 : 30
 
+            // синусоида вдоль хвоста: отдающие точки лежат на кривой
+            // покоя и гуляют по нормали; амплитуда растёт от нуля у
+            // основания к полной у кончика. Хлыст добавляется так же,
+            // с тем же ростом.
             const q = v => Math.round(v * 4) / 4
+            const N = 14
+            const p0 = CatData.pivots.tailBase
+            let path = ""
 
-            const tipX = q(790 + Math.sin(cat.tailPhase) * amp
-                + clamp(cat.whipX, -60, 60))
-            const tipY = q(815 + Math.sin(cat.tailPhase * 0.9) * 16)
-            // базовая часть кривой до колена — константа: основание
-            // хвоста гарантированно неподвижно
-            const nextPath = "M 655,1005 C 700,995 745,965 768,940 "
-                + "C 786,920 " + (tipX - 12) + "," + (tipY + 45) + " "
-                + tipX + "," + tipY
+            for (let i = 0; i <= N; i++) {
+                const t = i / N
+                const it = 1 - t
 
-            if (nextPath !== cat.tailPath)
-                cat.tailPath = nextPath
+                const bx = it * it * p0.x + 2 * it * t * cat.tailC1X
+                    + t * t * cat.tailC2X
+                const by = it * it * p0.y + 2 * it * t * cat.tailC1Y
+                    + t * t * cat.tailC2Y
 
-            cat.tailTipX = tipX
-            cat.tailTipY = tipY
+                let tx = 2 * it * (cat.tailC1X - p0.x)
+                    + 2 * t * (cat.tailC2X - cat.tailC1X)
+                let ty = 2 * it * (cat.tailC1Y - p0.y)
+                    + 2 * t * (cat.tailC2Y - cat.tailC1Y)
+                const tl = Math.sqrt(tx * tx + ty * ty) || 1
+                tx /= tl
+                ty /= tl
+
+                const grow = t * t
+                const off = Math.sin(cat.tailPhase - t * 1.7) * amp * grow
+                    + clamp(cat.whipX, -60, 60) * grow
+
+                const x = q(bx - ty * off)
+                const y = q(by + tx * off)
+
+                path += (i === 0 ? "M " : "L ") + x + "," + y + " "
+            }
+
+            if (path !== cat.tailPath)
+                cat.tailPath = path
+
+            cat.tailTipX = q(cat.tailC2X)
+            cat.tailTipY = q(cat.tailC2Y)
 
             // === zzz ===
             cat.zzzPhase += dt
@@ -865,6 +895,7 @@ PanelWindow {
                     strokeColor: Settings.c2
                     strokeWidth: 48
                     capStyle: ShapePath.RoundCap
+                    joinStyle: ShapePath.RoundJoin
                     fillColor: "transparent"
 
                     PathSvg { path: cat.tailPath }
