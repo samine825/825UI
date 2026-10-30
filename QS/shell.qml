@@ -40,8 +40,8 @@ ShellRoot {
         function openActions(id, y) {
             renameId = ""
             actionId = id
-            actionY = Math.max(52, Math.min(y - actionsH / 2,
-                menuPanel.height - actionsH - 12))
+            actionY = Math.max(58, Math.min(y - actionsH / 2,
+                menuPanel.height - actionsH - 18))
         }
 
         function commitRename(id, text) {
@@ -74,8 +74,25 @@ ShellRoot {
             width: chatMenu.menuWidth - Settings.barGap
             height: parent.height
 
+            // вторая, тёмная обводка: её внешние кромки лежат
+            // ровно на краях экрана и не обрезаются
             Panel {
-                anchors.fill: parent
+                x: Settings.line / 2
+                y: Settings.line / 2
+                width: parent.width - Settings.line
+                height: parent.height - Settings.line
+                cornerCut: Settings.line * (2 + Math.sqrt(2) / 2)
+                flatRight: true
+                strokeColor: Settings.c2
+                fillColor: Settings.c2
+                strokeWidth: Settings.line
+            }
+
+            Panel {
+                x: Settings.line * 1.5
+                y: Settings.line * 1.5
+                width: parent.width - Settings.line * 3
+                height: parent.height - Settings.line * 3
                 cornerCut: Settings.line * 2
                 flatRight: true
                 strokeColor: Settings.c1
@@ -87,8 +104,8 @@ ShellRoot {
             Item {
                 id: newChatBtn
 
-                x: menuPanel.width - width - 12
-                y: 12
+                x: menuPanel.width - width - 18
+                y: 18
                 width: 28
                 height: 28
 
@@ -145,10 +162,10 @@ ShellRoot {
             Flickable {
                 id: chatList
 
-                x: 12
-                y: 52
-                width: menuPanel.width - 24
-                height: menuPanel.height - 52 - 12
+                x: 18
+                y: 58
+                width: menuPanel.width - 36
+                height: menuPanel.height - 58 - 18
                 contentWidth: width
                 contentHeight: chatRows.height
                 boundsBehavior: Flickable.StopAtBounds
@@ -343,7 +360,7 @@ ShellRoot {
 
                 visible: chatMenu.actionId !== ""
                 z: 30
-                x: menuPanel.width - width - 12
+                x: menuPanel.width - width - 18
                 y: chatMenu.actionY
                 width: chatMenu.actionsW
                 height: chatMenu.actionsH

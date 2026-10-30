@@ -295,10 +295,10 @@ PanelWindow {
         // кнопка меню в физическом углу экрана: видна и кликабельна
         // только вместе с открытым интерфейсом чата
         Region {
-            x: cat.winW - cat.menuBtnSize
+            x: cat.winW - cat.menuBtnZone
             y: 0
-            width: cat.chatState !== "none" ? cat.menuBtnSize : 0
-            height: cat.chatState !== "none" ? cat.menuBtnSize : 0
+            width: cat.chatState !== "none" ? cat.menuBtnZone : 0
+            height: cat.chatState !== "none" ? cat.menuBtnZone : 0
         }
     }
 
@@ -382,6 +382,9 @@ PanelWindow {
     property real menuShift: 0
     property bool menuOpen: false
     readonly property real menuBtnSize: 40
+    // кнопка с запасом под обе обводки: кромка чёрной ложится
+    // ровно на край экрана и ничего не обрезается
+    readonly property real menuBtnZone: menuBtnSize + Settings.line * 3
     signal menuToggled()
     // скрыли кота или его интерфейс — панель чатов тоже закрываем
     signal menuCloseRequested()
@@ -2391,7 +2394,9 @@ PanelWindow {
             z: 20
             visible: height > 0.5
             x: cat.inputX
-            width: cat.inputW
+            // на line*1.5 уже правой кромки: внешняя кромка второй
+            // обводки ложится ровно на край экрана и не режется
+            width: cat.inputW - Settings.line * 1.5
             // вторая обводка ложится внешней кромкой ровно на край экрана
             y: cat.winH - cat.inputGap - height
             height: cat.chatState !== "none" ? panelH : 0
@@ -3012,8 +3017,8 @@ PanelWindow {
         z: 30
         x: cat.winW - width
         y: 0
-        width: cat.menuBtnSize
-        height: cat.menuBtnSize
+        width: cat.menuBtnZone
+        height: cat.menuBtnZone
         // режем по кромке окна: спрятанная кнопка уходит за экран
         clip: true
 
@@ -3033,8 +3038,24 @@ PanelWindow {
                 }
             }
 
+            // вторая, тёмная обводка — как у панелей ControlPanel;
+            // её внешняя кромка лежит ровно на краю экрана
             Panel {
-                anchors.fill: parent
+                x: Settings.line / 2
+                y: Settings.line / 2
+                width: parent.width - Settings.line
+                height: parent.height - Settings.line
+                cornerCut: Settings.line * (2 + Math.sqrt(2) / 2)
+                strokeColor: Settings.c2
+                fillColor: Settings.c2
+                strokeWidth: Settings.line
+            }
+
+            Panel {
+                x: Settings.line * 1.5
+                y: Settings.line * 1.5
+                width: parent.width - Settings.line * 3
+                height: parent.height - Settings.line * 3
                 cornerCut: Settings.line * 2
                 strokeColor: Settings.c1
                 fillColor: cat.menuOpen ? Settings.c1 : Settings.c2
