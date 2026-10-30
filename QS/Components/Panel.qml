@@ -3,6 +3,8 @@ import QtQuick.Shapes
 Shape {
     id: root
     property real cornerCut: 0
+    // правая кромка без скоса — для панелей, прижатых к краю экрана
+    property bool flatRight: false
     property color strokeColor: "white"
     property color fillColor: "white"
     property real strokeWidth: 0
@@ -17,10 +19,10 @@ Shape {
 
         startX: root.cornerCut
         startY: 0
-        PathLine { x: root.width - root.cornerCut; y: 0 }
-        PathLine { x: root.width; y: root.cornerCut }
-        PathLine { x: root.width; y: root.height - root.cornerCut }
-        PathLine { x: root.width - root.cornerCut; y: root.height }
+        PathLine { x: root.width - (root.flatRight ? 0 : root.cornerCut); y: 0 }
+        PathLine { x: root.width; y: root.flatRight ? 0 : root.cornerCut }
+        PathLine { x: root.width; y: root.flatRight ? root.height : root.height - root.cornerCut }
+        PathLine { x: root.width - (root.flatRight ? 0 : root.cornerCut); y: root.height }
         PathLine { x: root.cornerCut; y: root.height }
         PathLine { x: 0; y: root.height - root.cornerCut }
         PathLine { x: 0; y: root.cornerCut }
