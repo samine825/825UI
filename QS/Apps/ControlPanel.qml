@@ -6,6 +6,8 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Services.Pipewire
 import Quickshell.Services.Mpris
+import Quickshell.Networking
+import Quickshell.Bluetooth
 import Qt5Compat.GraphicalEffects
 import "../Components"
 import "../"
@@ -57,9 +59,23 @@ PanelWindow {
         "M 5.5,10.5 L 18.5,10.5 L 18.5,20.5 L 5.5,20.5 Z"
     readonly property string iconLockStroke:
         "M 8.5,10.5 L 8.5,7.5 A 3.5,3.5 0 0,1 15.5,7.5 L 15.5,10.5"
+    readonly property string iconMic:
+        "M 12,2 A 3,3 0 0,1 15,5 L 15,11 A 3,3 0 0,1 12,14 A 3,3 0 0,1 9,11 L 9,5 A 3,3 0 0,1 12,2 Z"
+        + " M 5,11 A 7,7 0 0,0 19,11 M 12,18 L 12,21.5"
+    readonly property string iconMicMuted: root.iconMic + " M 4,4 L 20,20"
+    readonly property string iconWifi:
+        "M 2.4,9.6 C 6.8,5.2 17.2,5.2 21.6,9.6"
+        + " M 5.6,13.2 C 9,9.9 15,9.9 18.4,13.2"
+        + " M 8.9,16.7 C 10.7,15.1 13.3,15.1 15.1,16.7"
+    readonly property string iconWifiDot:
+        "M 10.7,19.4 A 1.3,1.3 0 1,0 13.3,19.4 A 1.3,1.3 0 1,0 10.7,19.4 Z"
+    readonly property string iconBluetooth:
+        "M 7,7.5 L 17,16.5 L 12,21 L 12,3 L 17,7.5 L 7,16.5"
 
     // === АУДИО (PipeWire) ===
-    PwObjectTracker { objects: [Pipewire.defaultAudioSink] }
+    PwObjectTracker {
+        objects: [Pipewire.defaultAudioSink, Pipewire.defaultAudioSource]
+    }
 
     readonly property var sinkAudio:
         Pipewire.defaultAudioSink && Pipewire.defaultAudioSink.ready
@@ -67,6 +83,13 @@ PanelWindow {
 
     readonly property real volumeLevel: sinkAudio ? sinkAudio.volume : 0
     readonly property bool volumeMuted: sinkAudio ? sinkAudio.muted : false
+
+    readonly property var sourceAudio:
+        Pipewire.defaultAudioSource && Pipewire.defaultAudioSource.ready
+            ? Pipewire.defaultAudioSource.audio : null
+
+    readonly property real micLevel: sourceAudio ? sourceAudio.volume : 0
+    readonly property bool micMuted: sourceAudio ? sourceAudio.muted : false
 
     function setVolume(v) {
         if (sinkAudio)
@@ -76,6 +99,16 @@ PanelWindow {
     function toggleMute() {
         if (sinkAudio)
             sinkAudio.muted = !sinkAudio.muted
+    }
+
+    function setMicVolume(v) {
+        if (sourceAudio)
+            sourceAudio.volume = Math.max(0, Math.min(1, v))
+    }
+
+    function toggleMicMute() {
+        if (sourceAudio)
+            sourceAudio.muted = !sourceAudio.muted
     }
 
     // === ЯРКОСТЬ (brightnessctl, fallback — ddcutil) ===
@@ -216,12 +249,83 @@ PanelWindow {
         return list.length > 0 ? list[0] : null
     }
 
+    // === WI-FI / BLUETOOTH ===
+    readonly property var wifiDevice: {
+        const list = Networking.devices.values
+
+        for (let i = 0; i < list.length; i++) {
+            if (list[i].type === DeviceType.Wifi)
+                return list[i]
+        }
+
+        return null
+    }
+
+    // элементы колеса: сети, отсортированные по уровню сигнала
+    readonly property var wifiItems: {
+        const dev = root.wifiDevice
+        if (!dev || !dev.networks)
+            return []
+
+        const nets = dev.networks.values || []
+        const arr = []
+
+        for (let i = 0; i < nets.length; i++) {
+            const n = nets[i]
+            if (!n || n.name === "")
+                continue
+
+            arr.push({
+                label: n.name
+                    + (n.connected ? " •" : (n.stateChanging ? " …" : "")),
+                icon: "",
+                glyphFill: root.iconWifiDot,
+                glyphStroke: root.iconWifi,
+                net: n
+            })
+        }
+
+        arr.sort((a, b) => b.net.signalStrength - a.net.signalStrength)
+        return arr
+    }
+
+    // элементы колеса: спаренные и обнаруженные Bluetooth-устройства
+    readonly property var btItems: {
+        const adapter = Bluetooth.defaultAdapter
+        if (!adapter || !adapter.devices)
+            return []
+
+        const devs = adapter.devices.values || []
+        const arr = []
+
+        for (let i = 0; i < devs.length; i++) {
+            const d = devs[i]
+            if (!d)
+                continue
+
+            const busy = d.pairing
+                || d.state === BluetoothDeviceState.Connecting
+                || d.state === BluetoothDeviceState.Disconnecting
+
+            arr.push({
+                label: (d.name !== "" ? d.name : d.address)
+                    + (d.connected ? " •" : (busy ? " …" : "")),
+                icon: "",
+                glyphFill: "",
+                glyphStroke: root.iconBluetooth,
+                dev: d
+            })
+        }
+
+        arr.sort((a, b) => (b.dev.connected - a.dev.connected)
+            || a.label.localeCompare(b.label))
+        return arr
+    }
+
     // === ПИТАНИЕ ===
     Process {
         id: powerProcess
-    }
-
-    function powerAction(action) {
+    }    function powerAction(action) {
         if (action === "")
             return
 
@@ -263,40 +367,6 @@ PanelWindow {
             PathLine { x: 0; y: notchShape.height }
             PathLine { x: notchShape.notchPt; y: notchShape.height / 2 }
             PathLine { x: 0; y: 0 }
-        }
-    }
-
-    // Векторная иконка: PathSvg в поле 24x24, масштабируется в размер.
-    component VIcon: Shape {
-        id: vIcon
-
-        property color lineColor: Settings.c1
-        property real strokeWidth: Settings.line
-        property string fillPath: ""
-        property string strokePath: ""
-
-        preferredRendererType: Shape.CurveRenderer
-
-        transform: Scale {
-            xScale: vIcon.width / 24
-            yScale: vIcon.height / 24
-        }
-
-        SShapePath {
-            fillColor: vIcon.lineColor
-            strokeColor: "transparent"
-
-            PathSvg { path: vIcon.fillPath }
-        }
-
-        SShapePath {
-            fillColor: "transparent"
-            strokeColor: vIcon.lineColor
-            strokeWidth: vIcon.strokeWidth * 24 / Math.max(1, vIcon.width)
-            capStyle: ShapePath.RoundCap
-            joinStyle: ShapePath.RoundJoin
-
-            PathSvg { path: vIcon.strokePath }
         }
     }
 
@@ -435,6 +505,37 @@ PanelWindow {
             enabled: btnTile.btnEnabled
 
             onClicked: btnTile.activated()
+        }
+    }
+
+    // Клетка устройства (Wi-Fi/Bluetooth): плитка обоев с иконкой,
+    // клик открывает колесо устройств
+    component DeviceTile: Panel {
+        id: deviceTile
+
+        property string iconFill: ""
+        property string iconStroke: ""
+
+        signal activated()
+
+        cornerCut: Settings.line * 2
+        strokeColor: Settings.c1
+        fillColor: "transparent"
+        strokeWidth: Settings.line
+
+        VIcon {
+            anchors.centerIn: parent
+            width: parent.height * 0.55
+            height: width
+            fillPath: deviceTile.iconFill
+            strokePath: deviceTile.iconStroke
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+
+            onClicked: deviceTile.activated()
         }
     }
 
@@ -603,7 +704,6 @@ PanelWindow {
                                         ? 0 : root.volumeLevel
                                     iconFill: root.iconVolumeBody
                                     iconStroke: root.volumeMuted
-                                        || root.volumeLevel <= 0.001
                                         ? root.iconVolumeMuted
                                         : root.iconVolumeWaves
 
@@ -627,6 +727,25 @@ PanelWindow {
                                     onIconActivated: brightnessCtl.refresh()
                                 }
 
+                                // Микрофон 2x0, размер 3x1
+                                SliderTile {
+                                    x: leftPart.cellX(0)
+                                    y: leftPart.cellY(2)
+                                    width: leftPart.cell * 3 + leftPart.gap * 2
+                                    height: leftPart.cell
+
+                                    available: root.sourceAudio !== null
+                                    value: root.micMuted
+                                        ? 0 : root.micLevel
+                                    iconFill: ""
+                                    iconStroke: root.micMuted
+                                        ? root.iconMicMuted
+                                        : root.iconMic
+
+                                    onValueRequested: (v) => root.setMicVolume(v)
+                                    onIconActivated: root.toggleMicMute()
+                                }
+
                                 // Плеер 3x3 у правого края верхней зоны
                                 Item {
                                     id: playerTile
@@ -640,7 +759,6 @@ PanelWindow {
                                         player !== null && player.trackTitle !== ""
 
                                     property real polledPos: 0
-                                    property real seekHold: -1
 
                                     readonly property real cornerCut:
                                         Settings.line * 2
@@ -659,17 +777,10 @@ PanelWindow {
                                             && playerTile.player.positionSupported
 
                                         onTriggered: {
-                                            if (playerTile.seekHold < 0
-                                                    && playerTile.player)
+                                            if (playerTile.player)
                                                 playerTile.polledPos =
                                                     playerTile.player.position
                                         }
-                                    }
-
-                                    Timer {
-                                        id: seekHoldReset
-                                        interval: 500
-                                        onTriggered: playerTile.seekHold = -1
                                     }
 
                                     // фон и рамка карточки (стиль обоев)
@@ -726,23 +837,64 @@ PanelWindow {
                                         height: controls.y
                                     }
 
-                                    // кнопки: prev / play-pause / next
+                                    // кнопки: prev / play-pause / next —
+                                    // только иконки, без плошек
                                     Item {
                                         id: controls
                                         z: 3
                                         width: btnPrev.width + btnPlay.width
                                             + btnNext.width + Settings.line * 4
                                         height: Math.max(
-                                            btnPrev.height, btnPlay.height)
+                                            btnPrev.height, btnPlay.height,
+                                            btnNext.height)
                                         x: (parent.width - width) / 2
-                                        y: seekBar.y - height
+                                        y: captionStrip.y - height
                                             - Settings.line * 2
 
-                                        ButtonTile {
+                                        component PlayerButton: Item {
+                                            id: playerButton
+
+                                            property string iconFill: ""
+                                            property bool btnEnabled: true
+
+                                            signal activated()
+
+                                            opacity: btnEnabled ? 1 : 0.35
+
+                                            Behavior on opacity {
+                                                NumberAnimation {
+                                                    duration: 200
+                                                }
+                                            }
+
+                                            VIcon {
+                                                anchors.centerIn: parent
+                                                width: parent.width
+                                                height: parent.height
+                                                fillPath: playerButton.iconFill
+                                            }
+
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                anchors.margins:
+                                                    -Settings.line * 2
+                                                cursorShape:
+                                                    Qt.PointingHandCursor
+                                                enabled:
+                                                    playerButton.btnEnabled
+
+                                                onClicked:
+                                                    playerButton.activated()
+                                            }
+                                        }
+
+                                        PlayerButton {
                                             id: btnPrev
                                             x: 0
-                                            width: playerTile.width * 0.17
-                                            height: playerTile.height * 0.13
+                                            anchors.verticalCenter:
+                                                parent.verticalCenter
+                                            width: playerTile.width * 0.13
+                                            height: playerTile.width * 0.13
                                             iconFill: root.iconPrev
                                             btnEnabled: playerTile.hasTrack
                                                 && playerTile.player.canGoPrevious
@@ -753,12 +905,14 @@ PanelWindow {
                                             }
                                         }
 
-                                        ButtonTile {
+                                        PlayerButton {
                                             id: btnPlay
                                             x: btnPrev.width
                                                 + Settings.line * 2
-                                            width: playerTile.width * 0.22
-                                            height: playerTile.height * 0.13
+                                            anchors.verticalCenter:
+                                                parent.verticalCenter
+                                            width: playerTile.width * 0.16
+                                            height: playerTile.width * 0.16
                                             iconFill: playerTile.hasTrack
                                                 && playerTile.player.isPlaying
                                                 ? root.iconPause : root.iconPlay
@@ -771,12 +925,14 @@ PanelWindow {
                                             }
                                         }
 
-                                        ButtonTile {
+                                        PlayerButton {
                                             id: btnNext
                                             x: btnPrev.width + btnPlay.width
                                                 + Settings.line * 4
-                                            width: playerTile.width * 0.17
-                                            height: playerTile.height * 0.13
+                                            anchors.verticalCenter:
+                                                parent.verticalCenter
+                                            width: playerTile.width * 0.13
+                                            height: playerTile.width * 0.13
                                             iconFill: root.iconNext
                                             btnEnabled: playerTile.hasTrack
                                                 && playerTile.player.canGoNext
@@ -785,48 +941,6 @@ PanelWindow {
                                                 if (playerTile.player)
                                                     playerTile.player.next()
                                             }
-                                        }
-                                    }
-
-                                    // слайдер позиции трека
-                                    SliderTile {
-                                        id: seekBar
-                                        z: 3
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        anchors.bottom: captionStrip.top
-                                        anchors.bottomMargin: Settings.line
-                                        anchors.leftMargin: Settings.line * 2
-                                        anchors.rightMargin: Settings.line * 2
-                                        height: Settings.line * 4
-
-                                        showIcon: false
-                                        iconScale: 0
-
-                                        available: playerTile.hasTrack
-                                            && playerTile.player.canSeek
-
-                                        value: playerTile.seekHold >= 0
-                                            ? playerTile.seekHold
-                                            : (playerTile.player
-                                                && playerTile.player.length > 0
-                                                ? playerTile.polledPos
-                                                    / playerTile.player.length
-                                                : 0)
-
-                                        onValueRequested: (v) => {
-                                            playerTile.seekHold = v
-                                        }
-
-                                        onDragEnded: {
-                                            if (playerTile.player
-                                                    && playerTile.seekHold >= 0) {
-                                                playerTile.player.position =
-                                                    playerTile.seekHold
-                                                        * playerTile.player.length
-                                            }
-
-                                            seekHoldReset.restart()
                                         }
                                     }
 
@@ -918,8 +1032,11 @@ PanelWindow {
                                         }
                                     }
 
-                                    // подпись (как у плиток обоев)
-                                    SRectangle {
+                                    // нижняя полоса: прогресс — фон под
+                                    // бегущим текстом. Чёрное — не пройдено,
+                                    // белое — пройдено, текст инвертируется
+                                    // над белой частью.
+                                    Item {
                                         id: captionStrip
                                         z: 4
                                         anchors.bottom: parent.bottom
@@ -927,35 +1044,203 @@ PanelWindow {
                                         anchors.right: parent.right
                                         anchors.margins: Settings.line / 2
                                         height: 20
-                                        color: '#77' + Settings.c2.slice(1)
+                                        clip: true
+
+                                        // удержание позиции при перемотке
+                                        property real seekHold: -1
+
+                                        readonly property real ratio: seekHold >= 0 ? seekHold : (playerTile.hasTrack && playerTile.player && playerTile.player.length > 0 ? Math.max(0, Math.min(1, playerTile.polledPos / playerTile.player.length)) : 0)
+
+                                        readonly property string caption: playerTile.hasTrack ? (playerTile.player.trackArtist !== "" ? playerTile.player.trackArtist + " — " + playerTile.player.trackTitle : playerTile.player.trackTitle) : "Нет медиа"
+
+                                        // бегущая строка: текст листается
+                                        // вправо бесконечно, между
+                                        // повторами зазор marqueeGap
+                                        readonly property real marqueeGap: 40
+                                        readonly property real marqueePeriod: captionMetrics.width + marqueeGap
+                                        readonly property bool scrolling: captionMetrics.width > width - 20
+                                        property real marqueePhase: 0
+
+                                        TextMetrics {
+                                            id: captionMetrics
+                                            text: captionStrip.caption
+                                            font.pixelSize: 10
+                                        }
+
+                                        NumberAnimation {
+                                            id: marqueeAnim
+                                            target: captionStrip
+                                            property: "marqueePhase"
+                                            loops: Animation.Infinite
+                                            from: 0
+                                            to: captionStrip.marqueePeriod
+                                            duration: captionStrip.marqueePeriod / 26 * 1000
+                                            running: captionStrip.scrolling
+                                        }
+
+                                        Connections {
+                                            target: captionMetrics
+                                            function onTextChanged() {
+                                                captionStrip.marqueePhase = 0
+                                                marqueeAnim.restart()
+                                            }
+                                        }
+
+                                        // чёрное — отсутствие прогресса
+                                        SRectangle {
+                                            anchors.fill: parent
+                                            color: Settings.c2
+                                        }
+
+                                        // белое — пройденная часть
+                                        SRectangle {
+                                            anchors.top: parent.top
+                                            anchors.bottom: parent.bottom
+                                            anchors.left: parent.left
+                                            width: parent.width * captionStrip.ratio
+                                            color: Settings.c1
+
+                                            Behavior on width {
+                                                NumberAnimation { duration: 300 }
+                                            }
+                                        }
+
+                                        // бегущий текст: белый по чёрному,
+                                        // две копии для бесшовного цикла
+                                        SText {
+                                            y: (parent.height - height) / 2
+                                            x: captionStrip.scrolling
+                                                ? -captionStrip.marqueePhase
+                                                : (captionStrip.width - captionMetrics.width) / 2
+                                            text: captionStrip.caption
+                                            color: Settings.c1
+                                            font.pixelSize: 10
+                                        }
 
                                         SText {
-                                            anchors.left: parent.left
-                                            anchors.right: parent.right
-                                            anchors.leftMargin: 10
-                                            anchors.rightMargin: 10
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            text: playerTile.hasTrack
-                                                ? (playerTile.player.trackArtist !== ""
-                                                    ? playerTile.player.trackArtist
-                                                        + " — " + playerTile.player.trackTitle
-                                                    : playerTile.player.trackTitle)
-                                                : "Нет медиа"
-                                            color: "white"
-                                            elide: Text.ElideMiddle
+                                            visible: captionStrip.scrolling
+                                            y: (parent.height - height) / 2
+                                            x: captionStrip.marqueePeriod
+                                                - captionStrip.marqueePhase
+                                            text: captionStrip.caption
+                                            color: Settings.c1
                                             font.pixelSize: 10
-                                            horizontalAlignment: Text.AlignHCenter
+                                        }
+
+                                        // чёрные копии, обрезанные до
+                                        // пройденной части
+                                        Item {
+                                            anchors.top: parent.top
+                                            anchors.bottom: parent.bottom
+                                            anchors.left: parent.left
+                                            width: parent.width * captionStrip.ratio
+                                            clip: true
+
+                                            Behavior on width {
+                                                NumberAnimation { duration: 300 }
+                                            }
+
+                                            SText {
+                                                y: (parent.height - height) / 2
+                                                x: captionStrip.scrolling
+                                                    ? -captionStrip.marqueePhase
+                                                    : (captionStrip.width - captionMetrics.width) / 2
+                                                text: captionStrip.caption
+                                                color: Settings.c2
+                                                font.pixelSize: 10
+                                            }
+
+                                            SText {
+                                                visible: captionStrip.scrolling
+                                                y: (parent.height - height) / 2
+                                                x: captionStrip.marqueePeriod
+                                                    - captionStrip.marqueePhase
+                                                text: captionStrip.caption
+                                                color: Settings.c2
+                                                font.pixelSize: 10
+                                            }
+                                        }
+
+                                        // перемотка: клик и драг по полосе
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            enabled: playerTile.hasTrack
+                                                && playerTile.player
+                                                && playerTile.player.canSeek
+                                            cursorShape: Qt.PointingHandCursor
+
+                                            function apply(mouse) {
+                                                captionStrip.seekHold =
+                                                    Math.max(0, Math.min(1,
+                                                        mouse.x / width))
+                                            }
+
+                                            onPressed: (mouse) => apply(mouse)
+                                            onPositionChanged: (mouse) => {
+                                                if (pressed)
+                                                    apply(mouse)
+                                            }
+                                            onReleased: {
+                                                if (captionStrip.seekHold >= 0
+                                                        && playerTile.player)
+                                                    playerTile.player.position =
+                                                        captionStrip.seekHold
+                                                            * playerTile.player.length
+
+                                                seekHoldReset.restart()
+                                            }
+                                        }
+
+                                        Timer {
+                                            id: seekHoldReset
+                                            interval: 500
+                                            onTriggered: captionStrip.seekHold = -1
                                         }
                                     }
                                 }
 
-                                // Пустышки 1x1 (стиль плиток обоев), ниже плеера
+                                // Wi-Fi и Bluetooth 1x1 — первые клетки
+                                // ряда пустышек, открывают свои колёса
+                                DeviceTile {
+                                    x: leftPart.cellX(0)
+                                    y: leftPart.cellY(3)
+                                    width: leftPart.cell
+                                    height: leftPart.cell
+                                    iconFill: root.iconWifiDot
+                                    iconStroke: root.iconWifi
+
+                                    onActivated: {
+                                        root.hide()
+                                        wifiWheel.show()
+                                    }
+                                }
+
+                                DeviceTile {
+                                    x: leftPart.cellX(1)
+                                    y: leftPart.cellY(3)
+                                    width: leftPart.cell
+                                    height: leftPart.cell
+                                    iconStroke: root.iconBluetooth
+
+                                    onActivated: {
+                                        root.hide()
+                                        btWheel.show()
+                                    }
+                                }
+
+                                // Пустышки 1x1 (стиль плиток обоев), ниже
+                                // плеера — первые две клетки ряда заняты
+                                // Wi-Fi и Bluetooth
                                 Repeater {
-                                    model: 8
+                                    model: [
+                                        Qt.point(2, 3), Qt.point(3, 3),
+                                        Qt.point(4, 3), Qt.point(5, 3),
+                                        Qt.point(0, 4), Qt.point(1, 4)
+                                    ]
 
                                     delegate: Panel {
-                                        property int tileCol: index % leftPart.columns
-                                        property int tileRow: 3 + Math.floor(index / leftPart.columns)
+                                        property int tileCol: modelData.x
+                                        property int tileRow: modelData.y
 
                                         x: leftPart.cellX(tileCol)
                                         y: leftPart.cellY(tileRow)
@@ -1053,7 +1338,10 @@ PanelWindow {
                                 }
                             }
 
-                            // Вертикальный разделитель с обводкой по центру
+                            // Вертикальный разделитель между зонами.
+                            // Штрих от левой кромки элемента: элемент
+                            // стоит на границе после поля грида, и зазор
+                            // от плиток до линии равен зазорам сетки
                             Shape {
                                 id: separator
                                 width: Settings.line
@@ -1065,7 +1353,7 @@ PanelWindow {
                                     capStyle: ShapePath.FlatCap
                                     strokeColor: Settings.c1
                                     strokeWidth: Settings.line
-                                    startX: Settings.line / 2
+                                    startX: 0
                                     startY: 0
                                     PathLine { x: Settings.line / 2; y: separator.height }
                                 }
@@ -1114,6 +1402,56 @@ PanelWindow {
                 interval: 1000; repeat: true; running: true; triggeredOnStart: true
                 onTriggered: if (!statsProcess.running) statsProcess.running = true
             }
+        }
+    }
+
+    // === КОЛЁСА УСТРОЙСТВ ===
+    RadialWheel {
+        id: wifiWheel
+
+        model: root.wifiItems
+
+        onActivated: (item) => {
+            if (item.net.connected)
+                item.net.disconnect()
+            else
+                item.net.connect()
+        }
+    }
+
+    RadialWheel {
+        id: btWheel
+
+        model: root.btItems
+
+        onActivated: (item) => {
+            const d = item.dev
+
+            if (d.connected)
+                d.disconnect()
+            else if (d.paired)
+                d.connect()
+            else
+                d.pair()
+        }
+    }
+
+    // сканирование активно, только пока открыто колесо
+    Connections {
+        target: wifiWheel
+
+        function onVisibleChanged() {
+            if (root.wifiDevice)
+                root.wifiDevice.scannerEnabled = wifiWheel.visible
+        }
+    }
+
+    Connections {
+        target: btWheel
+
+        function onVisibleChanged() {
+            if (Bluetooth.defaultAdapter)
+                Bluetooth.defaultAdapter.discovering = btWheel.visible
         }
     }
 }
