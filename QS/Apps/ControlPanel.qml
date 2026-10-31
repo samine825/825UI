@@ -453,59 +453,59 @@ PanelWindow {
         // выключенный слайдер прячется целиком
         visible: available
 
-        // базовый слой
+        // базовый слой: заливка — ребёнок рамки, обводка z1 всегда поверх
         SFrame {
             anchors.fill: parent
             fillColor: Settings.c2
             strokeColor: Settings.c1
-        }
 
-        VIcon {
-            visible: sliderTile.showIcon
-            anchors.centerIn: parent
-            width: parent.height * sliderTile.iconScale
-            height: width
-            lineColor: Settings.c1
-            fillPath: sliderTile.iconFill
-            strokePath: sliderTile.iconStroke
-        }
-
-        // слой заполнения (клип по уровню, инвертированные цвета)
-        Item {
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.left: parent.left
-            height: parent.height
-            width: parent.width * Math.max(0, Math.min(1, sliderTile.value))
-            clip: true
-
-            Behavior on width {
-                NumberAnimation { duration: Settings.animInstant }
+            VIcon {
+                visible: sliderTile.showIcon
+                anchors.centerIn: parent
+                width: parent.height * sliderTile.iconScale
+                height: width
+                lineColor: Settings.c1
+                fillPath: sliderTile.iconFill
+                strokePath: sliderTile.iconStroke
             }
 
+            // слой заполнения (клип по уровню, инвертированные цвета)
             Item {
-                width: sliderTile.width
-                height: sliderTile.height
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                height: parent.height
+                width: parent.width * Math.max(0, Math.min(1, sliderTile.value))
+                clip: true
 
-                // заливка c1 с зазором-тенью внутри: отделяет заливку
-                // от обводки слайдера ровно одной линией и на прямых,
-                // и на косых гранях
-                SFrame {
-                    anchors.fill: parent
-                    fillColor: Settings.c1
-                    strokeColor: "transparent"
-                    shadow: "inside"
-                    shadowColor: Settings.c2
-                    fillInset: -Settings.line / 2
+                Behavior on width {
+                    NumberAnimation { duration: Settings.animInstant }
                 }
 
-                VIcon {
-                    visible: sliderTile.showIcon
-                    anchors.centerIn: parent
-                    width: parent.height * sliderTile.iconScale
-                    height: width
-                    lineColor: Settings.c2
-                    fillPath: sliderTile.iconFill
-                    strokePath: sliderTile.iconStroke
+                Item {
+                    width: sliderTile.width
+                    height: sliderTile.height
+
+                    // заливка c1 с зазором-тенью внутри: отделяет заливку
+                    // от обводки слайдера ровно одной линией и на прямых,
+                    // и на косых гранях
+                    SFrame {
+                        anchors.fill: parent
+                        fillColor: Settings.c1
+                        strokeColor: "transparent"
+                        shadow: "inside"
+                        shadowColor: Settings.c2
+                        fillInset: -Settings.line / 2
+                    }
+
+                    VIcon {
+                        visible: sliderTile.showIcon
+                        anchors.centerIn: parent
+                        width: parent.height * sliderTile.iconScale
+                        height: width
+                        lineColor: Settings.c2
+                        fillPath: sliderTile.iconFill
+                        strokePath: sliderTile.iconStroke
+                    }
                 }
             }
         }
@@ -661,9 +661,9 @@ PanelWindow {
                                     // слайдер занимает свою зону целиком
                                     // (3 клетки + 2 зазора), рамка = зоне
                                     x: leftPart.cellX(0)
-                                    y: leftPart.cellY(0)
+                                    y: leftPart.cellY(0) - Settings.line / 2
                                     width: leftPart.cell * 3 + leftPart.gap * 2
-                                    height: leftPart.cell
+                                    height: leftPart.cell + Settings.line
 
                                     value: root.volumeMuted
                                         ? 0 : root.volumeLevel
@@ -688,9 +688,9 @@ PanelWindow {
                                     // слайдер занимает свою зону целиком
                                     // (3 клетки + 2 зазора), рамка = зоне
                                     x: leftPart.cellX(0)
-                                    y: leftPart.cellY(1)
+                                    y: leftPart.cellY(1) - Settings.line / 2
                                     width: leftPart.cell * 3 + leftPart.gap * 2
-                                    height: leftPart.cell
+                                    height: leftPart.cell + Settings.line
 
                                     available: brightnessCtl.available
                                     value: brightnessCtl.ratio
@@ -708,9 +708,9 @@ PanelWindow {
                                     // слайдер занимает свою зону целиком
                                     // (3 клетки + 2 зазора), рамка = зоне
                                     x: leftPart.cellX(0)
-                                    y: leftPart.cellY(2)
+                                    y: leftPart.cellY(2) - Settings.line / 2
                                     width: leftPart.cell * 3 + leftPart.gap * 2
-                                    height: leftPart.cell
+                                    height: leftPart.cell + Settings.line
 
                                     available: root.sourceAudio !== null
                                     value: root.micMuted
@@ -746,11 +746,6 @@ PanelWindow {
                                     readonly property real cornerCut:
                                         Settings.line * 2
 
-                                    // катет маскирующих уголков обложки:
-                                    // гипотенуза по фаске контура панели
-                                    // (инсет пол-линии + срез)
-                                    readonly property real maskLeg:
-                                        Settings.line + cornerCut
 
                                     // опрос позиции трека
                                     Timer {
@@ -766,36 +761,37 @@ PanelWindow {
                                         }
                                     }
 
-                                    // фон и рамка карточки (стиль обоев)
+                                    // фон и рамка карточки; обложка — контент
+                                    // панели: режется по силуэту и всегда
+                                    // остаётся под обводкой
                                     SPanel {
                                         anchors.fill: parent
                                         cornerCut: playerTile.cornerCut
                                         strokeColor: Settings.c1
                                         fillColor: Settings.c2
-                                    }
 
-                                    // обложка
-                                    Image {
-                                        anchors.fill: parent
-                                        asynchronous: true
-                                        cache: false
-                                        smooth: true
-                                        fillMode: Image.PreserveAspectCrop
-                                        visible: playerTile.hasTrack
-                                            && playerTile.player.trackArtUrl !== ""
+                                        Image {
+                                            anchors.fill: parent
+                                            asynchronous: true
+                                            cache: false
+                                            smooth: true
+                                            fillMode: Image.PreserveAspectCrop
+                                            visible: playerTile.hasTrack
+                                                && playerTile.player.trackArtUrl !== ""
 
-                                        source: {
-                                            const p = playerTile.player
-                                            if (!p)
-                                                return ""
+                                            source: {
+                                                const p = playerTile.player
+                                                if (!p)
+                                                    return ""
 
-                                            const u = p.trackArtUrl
-                                            if (u === "")
-                                                return ""
+                                                const u = p.trackArtUrl
+                                                if (u === "")
+                                                    return ""
 
-                                            return (u.startsWith("file://")
-                                                    || u.startsWith("http"))
-                                                ? u : "file://" + u
+                                                return (u.startsWith("file://")
+                                                        || u.startsWith("http"))
+                                                    ? u : "file://" + u
+                                            }
                                         }
                                     }
 
@@ -926,77 +922,6 @@ PanelWindow {
                                                     playerTile.player.next()
                                             }
                                         }
-                                    }
-
-                                    // уголки
-                                    Shape {
-                                        anchors.fill: parent
-                                        z: 4
-
-                                        // ВЛ
-                                        SShapePath {
-                                            joinStyle: ShapePath.MiterJoin
-                                            capStyle: ShapePath.FlatCap
-                                            strokeColor: "transparent"
-                                            fillColor: Settings.c2
-
-                                            startX: 0
-                                            startY: 0
-                                            PathLine { x: playerTile.maskLeg; y: 0 }
-                                            PathLine { x: 0; y: playerTile.maskLeg }
-                                            PathLine { x: 0; y: 0 }
-                                        }
-
-                                        // ВП
-                                        SShapePath {
-                                            joinStyle: ShapePath.MiterJoin
-                                            capStyle: ShapePath.FlatCap
-                                            strokeColor: "transparent"
-                                            fillColor: Settings.c2
-
-                                            startX: playerTile.width - playerTile.maskLeg
-                                            startY: 0
-                                            PathLine { x: playerTile.width; y: 0 }
-                                            PathLine { x: playerTile.width; y: playerTile.maskLeg }
-                                            PathLine { x: playerTile.width - playerTile.maskLeg; y: 0 }
-                                        }
-
-                                        // НП
-                                        SShapePath {
-                                            joinStyle: ShapePath.MiterJoin
-                                            capStyle: ShapePath.FlatCap
-                                            strokeColor: "transparent"
-                                            fillColor: Settings.c2
-
-                                            startX: playerTile.width
-                                            startY: playerTile.height - playerTile.maskLeg
-                                            PathLine { x: playerTile.width; y: playerTile.height }
-                                            PathLine { x: playerTile.width - playerTile.maskLeg; y: playerTile.height }
-                                            PathLine { x: playerTile.width; y: playerTile.height - playerTile.maskLeg }
-                                        }
-
-                                        // НЛ
-                                        SShapePath {
-                                            joinStyle: ShapePath.MiterJoin
-                                            capStyle: ShapePath.FlatCap
-                                            strokeColor: "transparent"
-                                            fillColor: Settings.c2
-
-                                            startX: playerTile.maskLeg
-                                            startY: playerTile.height
-                                            PathLine { x: 0; y: playerTile.height }
-                                            PathLine { x: 0; y: playerTile.height - playerTile.maskLeg }
-                                            PathLine { x: playerTile.maskLeg; y: playerTile.height }
-                                        }
-                                    }
-
-                                    // рамка поверх обложки
-                                    SPanel {
-                                        anchors.fill: parent
-                                        z: 5
-                                        cornerCut: playerTile.cornerCut
-                                        strokeColor: Settings.c1
-                                        fillColor: "transparent"
                                     }
 
                                     // нижняя полоса: прогресс — фон под

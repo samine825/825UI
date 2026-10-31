@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Shapes
+import Qt5Compat.GraphicalEffects
 import ".."
 
 // Гранёный фрейм — шестиугольник с выемками на серединах боковых
@@ -16,6 +17,9 @@ import ".."
 // Геометрия анимирует сам потребитель; цвета анимируют SShapePath.
 Item {
     id: frame
+
+    // дети элемента: над фоном, клип по силуэту рамки, всегда под обводкой
+    default property alias content: contentHolder.data
 
     property string shadow: "both"
     property color fillColor: Settings.c2
@@ -110,8 +114,47 @@ Item {
             strokeWidth: frame.shadow === "inside"
                 ? Settings.line : 0
         }
+    }
 
-        // основная обводка
+    // контент детей: режется по силуэту рамки, не перекрывает обводку
+    Item {
+        id: contentHolder
+
+        anchors.fill: parent
+        layer.enabled: contentHolder.children.length > 0
+        layer.effect: OpacityMask {
+            maskSource: silhouetteSource
+        }
+    }
+
+    // силуэт рамки для маски контента
+    ShaderEffectSource {
+        id: silhouetteSource
+
+        sourceItem: silhouette
+        hideSource: true
+    }
+
+    Shape {
+        id: silhouette
+
+        anchors.fill: parent
+        preferredRendererType: Shape.CurveRenderer
+
+        HexContour {
+            inset: frame.baseInset
+            fillColor: "white"
+            strokeColor: "transparent"
+            strokeWidth: 0
+        }
+    }
+
+    // основная обводка — всегда поверх контента
+    Shape {
+        anchors.fill: parent
+        z: 1
+        preferredRendererType: Shape.CurveRenderer
+
         HexContour {
             inset: frame.baseInset
             fillColor: "transparent"

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Shapes
+import Qt5Compat.GraphicalEffects
 import ".."
 
 // Прямоугольник со срезанными углами. Границы элемента = видимому
@@ -16,6 +17,9 @@ import ".."
 // поверх панели.
 Item {
     id: panel
+
+    // дети элемента: над фоном, клип по силуэту панели, всегда под обводкой
+    default property alias content: contentHolder.data
 
     property string shadow: "none"
     property real cornerCut: Settings.line * 2
@@ -104,7 +108,47 @@ Item {
                 ? Settings.line : 0
         }
 
-        // основная обводка
+    }
+
+    // контент детей: режется по силуэту панели, не перекрывает обводку
+    Item {
+        id: contentHolder
+
+        anchors.fill: parent
+        layer.enabled: contentHolder.children.length > 0
+        layer.effect: OpacityMask {
+            maskSource: silhouetteSource
+        }
+    }
+
+    // силуэт панели для маски контента
+    ShaderEffectSource {
+        id: silhouetteSource
+
+        sourceItem: silhouette
+        hideSource: true
+    }
+
+    Shape {
+        id: silhouette
+
+        anchors.fill: parent
+        preferredRendererType: Shape.CurveRenderer
+
+        CutContour {
+            o: 0
+            fillColor: "white"
+            strokeColor: "transparent"
+            strokeWidth: 0
+        }
+    }
+
+    // основная обводка — всегда поверх контента
+    Shape {
+        anchors.fill: parent
+        z: 1
+        preferredRendererType: Shape.CurveRenderer
+
         CutContour {
             o: 0
             fillColor: "transparent"
