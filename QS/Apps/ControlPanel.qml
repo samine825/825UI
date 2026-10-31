@@ -642,10 +642,12 @@ PanelWindow {
                                 property real gap: Settings.line * 2
 
                                 // отступ слайдеров от зоны плиток слева/справа:
-                                // компенсация острых углов слайдера против
-                                // срезанных углов плиток (кромки c1 верхних
-                                // и нижних граней совпадают)
-                                property real sliderPad: Settings.line * 2
+                                // точная компенсация острого угла против среза
+                                // плитки. Срез — диагональ с проекцией 2·line;
+                                // острый угол выстоит за неё от 2·line на кромке
+                                // до 0 в середине среза — компенсируется средний
+                                // выступ: 2·line / 2 = line
+                                property real sliderPad: Settings.line
                                 property int columns: 6
 
                                 property real cell:
