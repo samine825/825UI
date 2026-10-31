@@ -1,6 +1,7 @@
 import QtQuick
+import ".."
 Text {
     Behavior on color {
-        ColorAnimation { duration: 250 }
+        ColorAnimation { duration: Settings.animBase }
     }
 }

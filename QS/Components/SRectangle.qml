@@ -1,9 +1,10 @@
 import QtQuick
+import ".."
 Rectangle {
     Behavior on color {
-        ColorAnimation { duration: 250 }
+        ColorAnimation { duration: Settings.animBase }
     }
     Behavior on border.color {
-        ColorAnimation { duration: 250 }
+        ColorAnimation { duration: Settings.animBase }
     }
 }

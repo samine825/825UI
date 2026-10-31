@@ -17,6 +17,22 @@ Singleton {
     property alias secondsMode: settings.secondsMode
     property alias infex: settings.infex
 
+    // === ТОКЕНЫ АНИМАЦИЙ ===
+    // instant — слежение за курсором в слайдерах, fast — мелкие
+    // реакции, base — стандартная длительность цветов и геометрии,
+    // slow — крупные перемещения (колесо), morph — морфинг цифр
+    readonly property int animInstant: 60
+    readonly property int animFast: 200
+    readonly property int animBase: 250
+    readonly property int animSlow: 500
+    readonly property int animMorph: 400
+
+    // === ШКАЛА ТЕКСТА (от линии, без clamp) ===
+    readonly property int textXs: line * 3
+    readonly property int textSm: line * 4
+    readonly property int textMd: line * 5
+    readonly property int textLg: line * 6
+
     FileView {
         id: configFile
 

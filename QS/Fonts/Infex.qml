@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Shapes
 import Quickshell
+import ".."
 
 Item {
     id: pc
@@ -11,7 +12,7 @@ Item {
     property color color: "white"
     property bool mirrorX: true
     property real line: 0
-    property int morphDuration: 400
+    property int morphDuration: Settings.animMorph
     property real morphRoundness: 1.0
 
     readonly property real actualReferencePixelSize:
@@ -32,13 +33,13 @@ Item {
 
     Behavior on pixelSize {
         NumberAnimation {
-            duration: 200
+            duration: Settings.animFast
         }
     }
 
     Behavior on implicitWidth {
         NumberAnimation {
-            duration: 200
+            duration: Settings.animFast
             easing.type: Easing.InOutQuad
         }
     }
@@ -1021,7 +1022,7 @@ Item {
     }
     Behavior on color {
         ColorAnimation {
-            duration: 250
+            duration: Settings.animBase
         }
     }
 }

@@ -49,7 +49,7 @@ Item {
                     anchors.centerIn: parent
                     text: root.cpuText
                     color: Settings.c1
-                    font.pixelSize: Math.max(11, Settings.barHeight * 0.4)
+                    font.pixelSize: Settings.textSm
                     font.bold: true
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -84,7 +84,7 @@ Item {
                     anchors.centerIn: parent
                     text: root.tempText
                     color: Settings.c1
-                    font.pixelSize: Math.max(11, Settings.barHeight * 0.4)
+                    font.pixelSize: Settings.textSm
                     font.bold: true
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -119,7 +119,7 @@ Item {
                     anchors.centerIn: parent
                     text: root.ramText
                     color: Settings.c1
-                    font.pixelSize: Math.max(11, Settings.barHeight * 0.4)
+                    font.pixelSize: Settings.textSm
                     font.bold: true
                     verticalAlignment: Text.AlignVCenter
                 }

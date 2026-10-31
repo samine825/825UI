@@ -479,7 +479,7 @@ PanelWindow {
             clip: true
 
             Behavior on width {
-                NumberAnimation { duration: 60 }
+                NumberAnimation { duration: Settings.animInstant }
             }
 
             Item {
@@ -830,7 +830,7 @@ PanelWindow {
 
         Behavior on opacity {
             NumberAnimation {
-                duration: 250
+                duration: Settings.animBase
             }
         }
 
@@ -1023,7 +1023,7 @@ PanelWindow {
                                         TextMetrics {
                                             id: captionMetrics
                                             text: captionStrip.caption
-                                            font.pixelSize: 10
+                                            font.pixelSize: Settings.textXs
                                         }
 
                                         NumberAnimation {
@@ -1060,7 +1060,7 @@ PanelWindow {
                                             color: Settings.c1
 
                                             Behavior on width {
-                                                NumberAnimation { duration: 300 }
+                                                NumberAnimation { duration: Settings.animBase }
                                             }
                                         }
 
@@ -1073,7 +1073,7 @@ PanelWindow {
                                                 : (captionStrip.width - captionMetrics.width) / 2
                                             text: captionStrip.caption
                                             color: Settings.c1
-                                            font.pixelSize: 10
+                                            font.pixelSize: Settings.textXs
                                         }
 
                                         SText {
@@ -1083,7 +1083,7 @@ PanelWindow {
                                                 - captionStrip.marqueePhase
                                             text: captionStrip.caption
                                             color: Settings.c1
-                                            font.pixelSize: 10
+                                            font.pixelSize: Settings.textXs
                                         }
 
                                         // чёрные копии, обрезанные до
@@ -1096,7 +1096,7 @@ PanelWindow {
                                             clip: true
 
                                             Behavior on width {
-                                                NumberAnimation { duration: 300 }
+                                                NumberAnimation { duration: Settings.animBase }
                                             }
 
                                             SText {
@@ -1106,7 +1106,7 @@ PanelWindow {
                                                     : (captionStrip.width - captionMetrics.width) / 2
                                                 text: captionStrip.caption
                                                 color: Settings.c2
-                                                font.pixelSize: 10
+                                                font.pixelSize: Settings.textXs
                                             }
 
                                             SText {
@@ -1116,7 +1116,7 @@ PanelWindow {
                                                     - captionStrip.marqueePhase
                                                 text: captionStrip.caption
                                                 color: Settings.c2
-                                                font.pixelSize: 10
+                                                font.pixelSize: Settings.textXs
                                             }
                                         }
 
@@ -1350,7 +1350,7 @@ PanelWindow {
                                     anchors.centerIn: parent
                                     text: "Notifications"
                                     color: Settings.c1
-                                    font.pixelSize: Math.max(14, Settings.barHeight * 0.4)
+                                    font.pixelSize: Settings.textLg
                                     font.bold: true
                                 }
                             }

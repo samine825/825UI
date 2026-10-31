@@ -1,4 +1,5 @@
 import QtQuick
+import ".."
 Item {
     id: tiltContainer
 
@@ -24,7 +25,7 @@ Item {
 
             Behavior on angle {
                 NumberAnimation {
-                    duration: 250
+                    duration: Settings.animBase
                     easing.type: Easing.OutQuad
                 }
             }
@@ -39,7 +40,7 @@ Item {
 
             Behavior on angle {
                 NumberAnimation {
-                    duration: 250
+                    duration: Settings.animBase
                     easing.type: Easing.OutQuad
                 }
             }

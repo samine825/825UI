@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Shapes
+import ".."
 Shape {
     id: root
     property real cornerCut: 0
@@ -29,12 +30,12 @@ Shape {
         PathLine { x: root.cornerCut; y: 0 }
     }
     Behavior on width {
-        NumberAnimation { duration: 250 }
+        NumberAnimation { duration: Settings.animBase }
     }
     Behavior on height {
-        NumberAnimation { duration: 250 }
+        NumberAnimation { duration: Settings.animBase }
     }
     Behavior on strokeWidth {
-        NumberAnimation { duration: 250 }
+        NumberAnimation { duration: Settings.animBase }
     }
 }

@@ -107,7 +107,7 @@ Item {
 
                 Behavior on x {
                     NumberAnimation {
-                        duration: 300
+                        duration: Settings.animBase
                         easing.type: Easing.OutQuad
                     }
                 }
@@ -167,7 +167,7 @@ Item {
 
                     Behavior on xPos {
                         NumberAnimation {
-                            duration: 300
+                            duration: Settings.animBase
                             easing.type: Easing.InOutQuad
                         }
                     }
@@ -192,7 +192,7 @@ Item {
 
                             Behavior on x {
                                 NumberAnimation {
-                                    duration: 300
+                                    duration: Settings.animBase
                                     easing.type: Easing.InOutQuad
                                 }
                             }
@@ -224,14 +224,14 @@ Item {
 
                         Behavior on x {
                             NumberAnimation {
-                                duration: 300
+                                duration: Settings.animBase
                                 easing.type: Easing.InOutQuad
                             }
                         }
 
                         Behavior on width {
                             NumberAnimation {
-                                duration: 300
+                                duration: Settings.animBase
                                 easing.type: Easing.InOutQuad
                             }
                         }
@@ -288,7 +288,7 @@ Item {
 
                             Behavior on x {
                                 NumberAnimation {
-                                    duration: 300
+                                    duration: Settings.animBase
                                     easing.type: Easing.InOutQuad
                                 }
                             }

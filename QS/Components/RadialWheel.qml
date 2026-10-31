@@ -103,7 +103,7 @@ PanelWindow {
 
             Behavior on rotation {
                 NumberAnimation {
-                    duration: 500
+                    duration: Settings.animSlow
                     easing.type: Easing.OutQuad
                 }
             }
@@ -229,7 +229,7 @@ PanelWindow {
 
                             Behavior on x {
                                 NumberAnimation {
-                                    duration: 500
+                                    duration: Settings.animSlow
                                     easing.type: Easing.InOutQuad
                                 }
                             }
@@ -605,26 +605,26 @@ PanelWindow {
                         useLargeArc: searchArea.angleDiff > 180
                         Behavior on x {
                             NumberAnimation {
-                                duration: 100
+                                duration: Settings.animInstant
                                 easing.type: Easing.OutQuad
                             }
                         }
                         Behavior on y {
                             NumberAnimation {
-                                duration: 100
+                                duration: Settings.animInstant
                                 easing.type: Easing.OutQuad
                             }
                         }
                     }
                     Behavior on startX {
                         NumberAnimation {
-                            duration: 100
+                            duration: Settings.animInstant
                             easing.type: Easing.OutQuad
                         }
                     }
                     Behavior on startY {
                         NumberAnimation {
-                            duration: 100
+                            duration: Settings.animInstant
                             easing.type: Easing.OutQuad
                         }
                     }
@@ -647,26 +647,26 @@ PanelWindow {
                         useLargeArc: searchArea.angleDiff > 180
                         Behavior on x {
                             NumberAnimation {
-                                duration: 100
+                                duration: Settings.animInstant
                                 easing.type: Easing.OutQuad
                             }
                         }
                         Behavior on y {
                             NumberAnimation {
-                                duration: 100
+                                duration: Settings.animInstant
                                 easing.type: Easing.OutQuad
                             }
                         }
                     }
                     Behavior on startX {
                         NumberAnimation {
-                            duration: 100
+                            duration: Settings.animInstant
                             easing.type: Easing.OutQuad
                         }
                     }
                     Behavior on startY {
                         NumberAnimation {
-                            duration: 100
+                            duration: Settings.animInstant
                             easing.type: Easing.OutQuad
                         }
                     }
@@ -689,26 +689,26 @@ PanelWindow {
                         useLargeArc: searchArea.angleDiff > 180
                         Behavior on x {
                             NumberAnimation {
-                                duration: 100
+                                duration: Settings.animInstant
                                 easing.type: Easing.OutQuad
                             }
                         }
                         Behavior on y {
                             NumberAnimation {
-                                duration: 100
+                                duration: Settings.animInstant
                                 easing.type: Easing.OutQuad
                             }
                         }
                     }
                     Behavior on startX {
                         NumberAnimation {
-                            duration: 100
+                            duration: Settings.animInstant
                             easing.type: Easing.OutQuad
                         }
                     }
                     Behavior on startY {
                         NumberAnimation {
-                            duration: 100
+                            duration: Settings.animInstant
                             easing.type: Easing.OutQuad
                         }
                     }
@@ -764,7 +764,7 @@ PanelWindow {
                         property string character: searchInput.text.charAt(index)
 
                         color: Settings.c1
-                        font.pixelSize: 20
+                        font.pixelSize: Settings.textMd
                         text: character
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
@@ -781,9 +781,9 @@ PanelWindow {
                         y: -searchArea.arcRadius * Math.sin(theta) - height / 2
                         rotation: theta * 180 / Math.PI + 90
 
-                        Behavior on x { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
-                        Behavior on y { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
-                        Behavior on rotation { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
+                        Behavior on x { NumberAnimation { duration: Settings.animInstant; easing.type: Easing.OutQuad } }
+                        Behavior on y { NumberAnimation { duration: Settings.animInstant; easing.type: Easing.OutQuad } }
+                        Behavior on rotation { NumberAnimation { duration: Settings.animInstant; easing.type: Easing.OutQuad } }
                     }
                 }
 

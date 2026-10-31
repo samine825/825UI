@@ -71,7 +71,7 @@ Item {
                 clip: true
 
                 Behavior on width {
-                    NumberAnimation { duration: 300; easing.type: Easing.InOutQuad }
+                    NumberAnimation { duration: Settings.animBase; easing.type: Easing.InOutQuad }
                 }
 
                 Row {
