@@ -431,6 +431,50 @@ PanelWindow {
                     strokeColor: "transparent"
                 }
 
+                // внутренний третий контур с отступом в одну линию —
+                // шестиугольник со срезанными углами (форма маски
+                // уведомлений): срез сдвигает косые грани так, чтобы
+                // перпендикулярный зазор до косых основного контура
+                // равнялся зазору прямых граней, иначе линия тонет
+                // в обводке слайдера на насечках
+                Shape {
+                    id: innerContour
+
+                    anchors.fill: parent
+                    preferredRendererType: Shape.CurveRenderer
+
+                    readonly property real k: 2 * (403.16 / 1000)
+                    // горизонтальный сдвиг косой грани при
+                    // перпендикулярном зазоре в одну линию
+                    readonly property real s:
+                        Settings.line * Math.sqrt(1 + k * k)
+                    readonly property real padY: Settings.line
+                    // угол верхнего края: точка, где параллельная косая
+                    // (наклон основного контура) встречается с краем
+                    readonly property real cornerX: k * padY + s
+                    readonly property real tipX: k * (height / 2) + s
+
+                    SShapePath {
+                        joinStyle: ShapePath.MiterJoin
+                        capStyle: ShapePath.FlatCap
+                        strokeColor: Settings.c2
+                        strokeWidth: Settings.line
+                        fillColor: "transparent"
+
+                        startX: innerContour.cornerX
+                        startY: innerContour.padY
+
+                        PathLine { x: innerContour.width - innerContour.cornerX; y: innerContour.padY }
+                        PathLine { x: innerContour.width - innerContour.tipX; y: innerContour.height / 2 }
+                        PathLine { x: innerContour.width - innerContour.cornerX; y: innerContour.height - innerContour.padY }
+                        PathLine { x: innerContour.cornerX; y: innerContour.height - innerContour.padY }
+                        PathLine { x: innerContour.tipX; y: innerContour.height / 2 }
+
+                        // замыкание: левая верхняя косая обратно к старту
+                        PathLine { x: innerContour.cornerX; y: innerContour.padY }
+                    }
+                }
+
                 VIcon {
                     visible: sliderTile.showIcon
                     anchors.centerIn: parent
@@ -508,20 +552,36 @@ PanelWindow {
         }
     }
 
-    // Клетка устройства (Wi-Fi/Bluetooth): плитка обоев с иконкой,
-    // клик открывает колесо устройств
+    // Клетка устройства (Wi-Fi/Bluetooth): плитка обоев с иконкой.
+    // Левый клик — включить/выключить (активная заливается как активный
+    // таб в настройках), правый — открыть колесо устройств, но только
+    // если устройство уже включено
     component DeviceTile: Panel {
         id: deviceTile
 
         property string iconFill: ""
         property string iconStroke: ""
+        property bool active: false
 
         signal activated()
+        signal wheelRequested()
 
         cornerCut: Settings.line * 2
         strokeColor: Settings.c1
-        fillColor: "transparent"
+        fillColor: deviceTile.active ? Settings.c1 : "transparent"
         strokeWidth: Settings.line
+
+        // внутренний третий контур: отступ ровно в одну линию, а скос —
+        // параллельный внутренний аналог скоса основного контура,
+        // потому меньше его
+        Panel {
+            anchors.fill: parent
+            anchors.margins: Settings.line
+            cornerCut: Settings.line * 2 - Settings.line * (2 - Math.sqrt(2))
+            strokeColor: deviceTile.active ? Settings.c2 : "transparent"
+            fillColor: "transparent"
+            strokeWidth: Settings.line
+        }
 
         VIcon {
             anchors.centerIn: parent
@@ -529,13 +589,22 @@ PanelWindow {
             height: width
             fillPath: deviceTile.iconFill
             strokePath: deviceTile.iconStroke
+            lineColor: deviceTile.active ? Settings.c2 : Settings.c1
         }
 
         MouseArea {
             anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
             cursorShape: Qt.PointingHandCursor
 
-            onClicked: deviceTile.activated()
+            onClicked: (mouse) => {
+                if (mouse.button === Qt.RightButton) {
+                    if (deviceTile.active)
+                        deviceTile.wheelRequested()
+                } else {
+                    deviceTile.activated()
+                }
+            }
         }
     }
 
@@ -763,12 +832,6 @@ PanelWindow {
                                     readonly property real cornerCut:
                                         Settings.line * 2
 
-                                    opacity: hasTrack ? 1 : 0.45
-
-                                    Behavior on opacity {
-                                        NumberAnimation { duration: 200 }
-                                    }
-
                                     // опрос позиции трека
                                     Timer {
                                         interval: 500
@@ -859,13 +922,15 @@ PanelWindow {
 
                                             signal activated()
 
-                                            opacity: btnEnabled ? 1 : 0.35
+        // недоступная кнопка плавно исчезает целиком: в теме только два
+        // цвета, полупрозрачных состояний нет
+        opacity: btnEnabled ? 1 : 0
 
-                                            Behavior on opacity {
-                                                NumberAnimation {
-                                                    duration: 200
-                                                }
-                                            }
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 250
+            }
+        }
 
                                             VIcon {
                                                 anchors.centerIn: parent
@@ -1049,7 +1114,16 @@ PanelWindow {
                                         // удержание позиции при перемотке
                                         property real seekHold: -1
 
-                                        readonly property real ratio: seekHold >= 0 ? seekHold : (playerTile.hasTrack && playerTile.player && playerTile.player.length > 0 ? Math.max(0, Math.min(1, playerTile.polledPos / playerTile.player.length)) : 0)
+                                        // медиа нельзя пролистать — белая
+                                        // заливка прогресса плавно исчезает
+                                        // (ширина к нулю), полоса остаётся
+                                        // фоном под текстом
+                                        readonly property bool seekable:
+                                            playerTile.hasTrack
+                                            && playerTile.player
+                                            && playerTile.player.canSeek
+
+                                        readonly property real ratio: seekHold >= 0 ? seekHold : (seekable && playerTile.player.length > 0 ? Math.max(0, Math.min(1, playerTile.polledPos / playerTile.player.length)) : 0)
 
                                         readonly property string caption: playerTile.hasTrack ? (playerTile.player.trackArtist !== "" ? playerTile.player.trackArtist + " — " + playerTile.player.trackTitle : playerTile.player.trackTitle) : "Нет медиа"
 
@@ -1164,9 +1238,7 @@ PanelWindow {
                                         // перемотка: клик и драг по полосе
                                         MouseArea {
                                             anchors.fill: parent
-                                            enabled: playerTile.hasTrack
-                                                && playerTile.player
-                                                && playerTile.player.canSeek
+                                            enabled: captionStrip.seekable
                                             cursorShape: Qt.PointingHandCursor
 
                                             function apply(mouse) {
@@ -1209,7 +1281,12 @@ PanelWindow {
                                     iconFill: root.iconWifiDot
                                     iconStroke: root.iconWifi
 
-                                    onActivated: {
+                                    active: Networking.wifiEnabled
+
+                                    onActivated: Networking.wifiEnabled =
+                                        !Networking.wifiEnabled
+
+                                    onWheelRequested: {
                                         root.hide()
                                         wifiWheel.show()
                                     }
@@ -1222,7 +1299,22 @@ PanelWindow {
                                     height: leftPart.cell
                                     iconStroke: root.iconBluetooth
 
+                                    active: Bluetooth.defaultAdapter !== null
+                                        && Bluetooth.defaultAdapter.enabled
+
                                     onActivated: {
+                                        const adapter = Bluetooth.defaultAdapter
+
+                                        if (!adapter)
+                                            return
+
+                                        if (adapter.enabled)
+                                            adapter.enabled = false
+                                        else
+                                            btUnblock.running = true
+                                    }
+
+                                    onWheelRequested: {
                                         root.hide()
                                         btWheel.show()
                                     }
@@ -1429,9 +1521,10 @@ PanelWindow {
 
             if (d.connected)
                 d.disconnect()
-            else if (d.paired)
+            else if (d.paired) {
+                d.trusted = true
                 d.connect()
-            else
+            } else
                 d.pair()
         }
     }
@@ -1446,12 +1539,57 @@ PanelWindow {
         }
     }
 
+    // rfkill софт-блок не даёт включить Bluetooth (PowerState:
+    // off-blocked) — снимаем его и только потом включаем адаптер
+    Process {
+        id: btUnblock
+        command: ["rfkill", "unblock", "bluetooth"]
+
+        onExited: {
+            if (Bluetooth.defaultAdapter)
+                Bluetooth.defaultAdapter.enabled = true
+        }
+    }
+
     Connections {
         target: btWheel
 
         function onVisibleChanged() {
             if (Bluetooth.defaultAdapter)
                 Bluetooth.defaultAdapter.discovering = btWheel.visible
+        }
+    }
+
+    // если при открытии колеса устройство ещё не успело появиться или
+    // старт сканирования упал (Not Ready) — выставляем повторно, когда
+    // оно найдётся, и ретраим по таймеру
+    onWifiDeviceChanged: {
+        if (wifiDevice)
+            wifiDevice.scannerEnabled = wifiWheel.visible
+    }
+
+    Connections {
+        target: Bluetooth
+
+        function onDefaultAdapterChanged() {
+            if (Bluetooth.defaultAdapter)
+                Bluetooth.defaultAdapter.discovering = btWheel.visible
+        }
+    }
+
+    Timer {
+        interval: 1500
+        repeat: true
+        running: wifiWheel.visible || btWheel.visible
+
+        onTriggered: {
+            if (root.wifiDevice && !root.wifiDevice.scannerEnabled)
+                root.wifiDevice.scannerEnabled = true
+
+            const adapter = Bluetooth.defaultAdapter
+
+            if (adapter && !adapter.discovering)
+                adapter.discovering = true
         }
     }
 }
