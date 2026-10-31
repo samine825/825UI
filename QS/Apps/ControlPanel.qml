@@ -322,6 +322,54 @@ PanelWindow {
         return arr
     }
 
+    // элементы колеса: устройства вывода (приёмники PipeWire)
+    readonly property var sinkItems: {
+        const arr = []
+        const nodes = Pipewire.nodes.values
+
+        for (let i = 0; i < nodes.length; i++) {
+            const n = nodes[i]
+            if (!n || !n.audio || n.isStream || !n.isSink)
+                continue
+
+            arr.push({
+                label: (n.description !== "" ? n.description : n.nickname)
+                    + (n === Pipewire.defaultAudioSink ? " •" : ""),
+                icon: "",
+                glyphFill: root.iconVolumeBody,
+                glyphStroke: root.iconVolumeWaves,
+                node: n
+            })
+        }
+
+        arr.sort((a, b) => a.label.localeCompare(b.label))
+        return arr
+    }
+
+    // элементы колеса: устройства ввода (источники)
+    readonly property var sourceItems: {
+        const arr = []
+        const nodes = Pipewire.nodes.values
+
+        for (let i = 0; i < nodes.length; i++) {
+            const n = nodes[i]
+            if (!n || !n.audio || n.isStream || n.isSink)
+                continue
+
+            arr.push({
+                label: (n.description !== "" ? n.description : n.nickname)
+                    + (n === Pipewire.defaultAudioSource ? " •" : ""),
+                icon: "",
+                glyphFill: "",
+                glyphStroke: root.iconMic,
+                node: n
+            })
+        }
+
+        arr.sort((a, b) => a.label.localeCompare(b.label))
+        return arr
+    }
+
     // === ПИТАНИЕ ===
     Process {
         id: powerProcess
@@ -385,6 +433,7 @@ PanelWindow {
         signal valueRequested(real v)
         signal dragEnded()
         signal iconActivated()
+        signal wheelRequested()
 
         opacity: available ? 1 : 0.35
 
@@ -489,16 +538,31 @@ PanelWindow {
 
         MouseArea {
             anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
             cursorShape: Qt.PointingHandCursor
 
+            // левый — выставление значения, правый — колесо устройств
             function apply(mouse) {
+                if (mouse.button !== Qt.LeftButton)
+                    return
+
                 sliderTile.valueRequested(
                     Math.max(0, Math.min(1, mouse.x / sliderTile.width)))
             }
 
-            onPressed: (mouse) => apply(mouse)
+            onPressed: (mouse) => {
+                if (mouse.button === Qt.RightButton) {
+                    sliderTile.wheelRequested()
+                    return
+                }
+
+                apply(mouse)
+            }
             onPositionChanged: (mouse) => apply(mouse)
-            onReleased: sliderTile.dragEnded()
+            onReleased: (mouse) => {
+                if (mouse.button === Qt.LeftButton)
+                    sliderTile.dragEnded()
+            }
         }
 
         // клик по зоне иконки — доп. действие (например mute)
@@ -778,6 +842,11 @@ PanelWindow {
 
                                     onValueRequested: (v) => root.setVolume(v)
                                     onIconActivated: root.toggleMute()
+
+                                    onWheelRequested: {
+                                        root.hide()
+                                        sinkWheel.show()
+                                    }
                                 }
 
                                 // Яркость 0x1, размер 3x1
@@ -813,6 +882,11 @@ PanelWindow {
 
                                     onValueRequested: (v) => root.setMicVolume(v)
                                     onIconActivated: root.toggleMicMute()
+
+                                    onWheelRequested: {
+                                        root.hide()
+                                        sourceWheel.show()
+                                    }
                                 }
 
                                 // Плеер 3x3 у правого края верхней зоны
@@ -1527,6 +1601,24 @@ PanelWindow {
             } else
                 d.pair()
         }
+    }
+
+    RadialWheel {
+        id: sinkWheel
+
+        model: root.sinkItems
+
+        onActivated: (item) =>
+            Pipewire.preferredDefaultAudioSink = item.node
+    }
+
+    RadialWheel {
+        id: sourceWheel
+
+        model: root.sourceItems
+
+        onActivated: (item) =>
+            Pipewire.preferredDefaultAudioSource = item.node
     }
 
     // сканирование активно, только пока открыто колесо
