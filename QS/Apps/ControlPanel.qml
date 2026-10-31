@@ -640,6 +640,12 @@ PanelWindow {
                                 // с каждой стороны: зазор кольцо->плитка = 1 line
                                 property real margin: Settings.line * 2.5
                                 property real gap: Settings.line * 2
+
+                                // отступ слайдеров от зоны плиток слева/справа:
+                                // компенсация острых углов слайдера против
+                                // срезанных углов плиток (кромки c1 верхних
+                                // и нижних граней совпадают)
+                                property real sliderPad: Settings.line * 2
                                 property int columns: 6
 
                                 property real cell:
@@ -657,9 +663,10 @@ PanelWindow {
                                 SliderTile {
                                     // отступы по 2 линии от зоны плиток: кромки c1 слайдера
                                     // совпадают с кромками плиток (у них срез углов)
-                                    x: leftPart.cellX(0) + 1.5 * Settings.line
+                                    x: leftPart.cellX(0) + leftPart.sliderPad - Settings.line / 2
                                     y: leftPart.cellY(0) - Settings.line / 2
-                                    width: leftPart.cell * 3 + leftPart.gap * 2 - 3 * Settings.line
+                                    width: leftPart.cell * 3 + leftPart.gap * 2
+                                        + Settings.line - leftPart.sliderPad * 2
                                     height: leftPart.cell + Settings.line
 
                                     value: root.volumeMuted
@@ -682,9 +689,10 @@ PanelWindow {
                                 SliderTile {
                                     // отступы по 2 линии от зоны плиток: кромки c1 слайдера
                                     // совпадают с кромками плиток (у них срез углов)
-                                    x: leftPart.cellX(0) + 1.5 * Settings.line
+                                    x: leftPart.cellX(0) + leftPart.sliderPad - Settings.line / 2
                                     y: leftPart.cellY(1) - Settings.line / 2
-                                    width: leftPart.cell * 3 + leftPart.gap * 2 - 3 * Settings.line
+                                    width: leftPart.cell * 3 + leftPart.gap * 2
+                                        + Settings.line - leftPart.sliderPad * 2
                                     height: leftPart.cell + Settings.line
 
                                     available: brightnessCtl.available
@@ -700,9 +708,10 @@ PanelWindow {
                                 SliderTile {
                                     // отступы по 2 линии от зоны плиток: кромки c1 слайдера
                                     // совпадают с кромками плиток (у них срез углов)
-                                    x: leftPart.cellX(0) + 1.5 * Settings.line
+                                    x: leftPart.cellX(0) + leftPart.sliderPad - Settings.line / 2
                                     y: leftPart.cellY(2) - Settings.line / 2
-                                    width: leftPart.cell * 3 + leftPart.gap * 2 - 3 * Settings.line
+                                    width: leftPart.cell * 3 + leftPart.gap * 2
+                                        + Settings.line - leftPart.sliderPad * 2
                                     height: leftPart.cell + Settings.line
 
                                     available: root.sourceAudio !== null
