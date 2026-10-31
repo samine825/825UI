@@ -26,52 +26,6 @@ PanelWindow {
     }
     color: "transparent"
 
-    // === ГЛИФЫ ИКОНОК (координатное поле 24x24) ===
-    readonly property string iconVolumeBody:
-        "M 3,9 L 7,9 L 12,4.5 L 12,19.5 L 7,15 L 3,15 Z"
-    readonly property string iconVolumeWaves:
-        "M 15,9.5 C 16.5,10.8 16.5,13.2 15,14.5 M 17.6,7 C 20.3,9.6 20.3,14.4 17.6,17"
-    readonly property string iconVolumeMuted:
-        "M 15.5,9.5 L 20.5,14.5 M 20.5,9.5 L 15.5,14.5"
-    readonly property string iconBrightness:
-        "M 12,7.6 A 4.4,4.4 0 1,0 12,16.4 A 4.4,4.4 0 1,0 12,7.6 Z"
-        + " M 12,1.8 L 12,4.4 M 12,19.6 L 12,22.2 M 1.8,12 L 4.4,12 M 19.6,12 L 22.2,12"
-        + " M 4.6,4.6 L 6.5,6.5 M 17.5,17.5 L 19.4,19.4 M 4.6,19.4 L 6.5,17.5 M 17.5,6.5 L 19.4,4.6"
-    readonly property string iconNote:
-        "M 6,18.6 A 2.6,2.6 0 1,0 11.2,18.6 A 2.6,2.6 0 1,0 6,18.6 Z"
-        + " M 11.2,18.6 L 11.2,5.2 L 19.5,3.5 L 19.5,7.6 L 11.2,9.3 Z"
-    readonly property string iconPlay: "M 7.5,4.5 L 19.5,12 L 7.5,19.5 Z"
-    readonly property string iconPause:
-        "M 6.5,5 L 10,5 L 10,19 L 6.5,19 Z M 14,5 L 17.5,5 L 17.5,19 L 14,19 Z"
-    readonly property string iconPrev:
-        "M 18.5,5 L 18.5,19 L 7.5,12 Z M 5,5 L 7.6,5 L 7.6,19 L 5,19 Z"
-    readonly property string iconNext:
-        "M 5.5,5 L 5.5,19 L 16.5,12 Z M 16.4,5 L 19,5 L 19,19 L 16.4,19 Z"
-    readonly property string iconPowerStroke:
-        "M 18.36,6.64 A 9,9 0 1,1 5.64,6.64 M 12,2 L 12,10"
-    readonly property string iconRebootStroke:
-        "M 22.4,4.6 L 22.4,10 L 17,10 M 20.1,14.6 A 8.4,8.4 0 1,1 18.1,6.1 L 22.4,10"
-    readonly property string iconMoonFill:
-        "M 21,12.79 A 9,9 0 1,1 11.21,3 A 7,7 0 0,0 21,12.79 Z"
-    readonly property string iconHibernateStroke:
-        "M 4,5 L 11.5,5 L 4,13 L 11.5,13 M 14,12 L 19.5,12 L 14,18.5 L 19.5,18.5"
-    readonly property string iconLockFill:
-        "M 5.5,10.5 L 18.5,10.5 L 18.5,20.5 L 5.5,20.5 Z"
-    readonly property string iconLockStroke:
-        "M 8.5,10.5 L 8.5,7.5 A 3.5,3.5 0 0,1 15.5,7.5 L 15.5,10.5"
-    readonly property string iconMic:
-        "M 12,2 A 3,3 0 0,1 15,5 L 15,11 A 3,3 0 0,1 12,14 A 3,3 0 0,1 9,11 L 9,5 A 3,3 0 0,1 12,2 Z"
-        + " M 5,11 A 7,7 0 0,0 19,11 M 12,18 L 12,21.5"
-    readonly property string iconMicMuted: root.iconMic + " M 4,4 L 20,20"
-    readonly property string iconWifi:
-        "M 2.4,9.6 C 6.8,5.2 17.2,5.2 21.6,9.6"
-        + " M 5.6,13.2 C 9,9.9 15,9.9 18.4,13.2"
-        + " M 8.9,16.7 C 10.7,15.1 13.3,15.1 15.1,16.7"
-    readonly property string iconWifiDot:
-        "M 10.7,19.4 A 1.3,1.3 0 1,0 13.3,19.4 A 1.3,1.3 0 1,0 10.7,19.4 Z"
-    readonly property string iconBluetooth:
-        "M 7,7.5 L 17,16.5 L 12,21 L 12,3 L 17,7.5 L 7,16.5"
-
     // === АУДИО (PipeWire) ===
     PwObjectTracker {
         objects: [Pipewire.defaultAudioSink, Pipewire.defaultAudioSource]
@@ -528,11 +482,8 @@ PanelWindow {
         signal iconActivated()
         signal wheelRequested()
 
-        opacity: available ? 1 : 0.35
-
-        Behavior on opacity {
-            NumberAnimation { duration: 200 }
-        }
+        // выключенный слайдер прячется целиком
+        visible: available
 
         // базовый слой
         NotchShape {
@@ -670,90 +621,6 @@ PanelWindow {
         }
     }
 
-    // Кнопка в форме элемента бара.
-    component ButtonTile: Item {
-        id: btnTile
-
-        property string iconFill: ""
-        property string iconStroke: ""
-        property bool btnEnabled: true
-
-        signal activated()
-
-        opacity: btnEnabled ? 1 : 0.35
-
-        Behavior on opacity {
-            NumberAnimation { duration: 200 }
-        }
-
-        NotchShape {
-            anchors.fill: parent
-            fillColor: Settings.c2
-            strokeColor: Settings.c1
-        }
-
-        VIcon {
-            anchors.centerIn: parent
-            width: parent.height * 0.62
-            height: width
-            fillPath: btnTile.iconFill
-            strokePath: btnTile.iconStroke
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            enabled: btnTile.btnEnabled
-
-            onClicked: btnTile.activated()
-        }
-    }
-
-    // Клетка устройства (Wi-Fi/Bluetooth): плитка обоев с иконкой.
-    // Левый клик — включить/выключить (активная заливается как активный
-    // таб в настройках), правый — открыть колесо устройств, но только
-    // если устройство уже включено
-    component DeviceTile: SPanel {
-        id: deviceTile
-
-        property string iconFill: ""
-        property string iconStroke: ""
-        property bool active: false
-
-        signal activated()
-        signal wheelRequested()
-
-        cornerCut: Settings.line * 2
-        strokeColor: Settings.c1
-        fillColor: deviceTile.active ? Settings.c1 : "transparent"
-        shadow: deviceTile.active ? "inside" : "none"
-        shadowColor: Settings.c2
-
-        VIcon {
-            anchors.centerIn: parent
-            width: parent.height * 0.55
-            height: width
-            fillPath: deviceTile.iconFill
-            strokePath: deviceTile.iconStroke
-            lineColor: deviceTile.active ? Settings.c2 : Settings.c1
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            cursorShape: Qt.PointingHandCursor
-
-            onClicked: (mouse) => {
-                if (mouse.button === Qt.RightButton) {
-                    if (deviceTile.active)
-                        deviceTile.wheelRequested()
-                } else {
-                    deviceTile.activated()
-                }
-            }
-        }
-    }
-
     MouseArea {
         anchors.fill: parent
         onClicked: root.hide()
@@ -862,10 +729,10 @@ PanelWindow {
 
                                     value: root.volumeMuted
                                         ? 0 : root.volumeLevel
-                                    iconFill: root.iconVolumeBody
+                                    iconFill: Glyphs.iconVolumeBody
                                     iconStroke: root.volumeMuted
-                                        ? root.iconVolumeMuted
-                                        : root.iconVolumeWaves
+                                        ? Glyphs.iconVolumeMuted
+                                        : Glyphs.iconVolumeWaves
 
                                     onValueRequested: (v) => root.setVolume(v)
                                     onIconActivated: root.toggleMute()
@@ -886,7 +753,7 @@ PanelWindow {
                                     available: brightnessCtl.available
                                     value: brightnessCtl.ratio
                                     iconFill: ""
-                                    iconStroke: root.iconBrightness
+                                    iconStroke: Glyphs.iconBrightness
 
                                     onValueRequested: (v) => brightnessCtl.request(v)
                                     onIconActivated: brightnessCtl.refresh()
@@ -904,8 +771,8 @@ PanelWindow {
                                         ? 0 : root.micLevel
                                     iconFill: ""
                                     iconStroke: root.micMuted
-                                        ? root.iconMicMuted
-                                        : root.iconMic
+                                        ? Glyphs.iconMicMuted
+                                        : Glyphs.iconMic
 
                                     onValueRequested: (v) => root.setMicVolume(v)
                                     onIconActivated: root.toggleMicMute()
@@ -994,7 +861,7 @@ PanelWindow {
                                             || playerTile.player.trackArtUrl === ""
                                         width: playerTile.width * 0.26
                                         height: width
-                                        fillPath: root.iconNote
+                                        fillPath: Glyphs.iconNote
                                         lineColor: Settings.c1
                                     }
 
@@ -1066,7 +933,7 @@ PanelWindow {
                                                 parent.verticalCenter
                                             width: playerTile.width * 0.13
                                             height: playerTile.width * 0.13
-                                            iconFill: root.iconPrev
+                                            iconFill: Glyphs.iconPrev
                                             btnEnabled: playerTile.hasTrack
                                                 && playerTile.player.canGoPrevious
 
@@ -1086,7 +953,7 @@ PanelWindow {
                                             height: playerTile.width * 0.16
                                             iconFill: playerTile.hasTrack
                                                 && playerTile.player.isPlaying
-                                                ? root.iconPause : root.iconPlay
+                                                ? Glyphs.iconPause : Glyphs.iconPlay
                                             btnEnabled: playerTile.hasTrack
                                                 && playerTile.player.canTogglePlaying
 
@@ -1104,7 +971,7 @@ PanelWindow {
                                                 parent.verticalCenter
                                             width: playerTile.width * 0.13
                                             height: playerTile.width * 0.13
-                                            iconFill: root.iconNext
+                                            iconFill: Glyphs.iconNext
                                             btnEnabled: playerTile.hasTrack
                                                 && playerTile.player.canGoNext
 
@@ -1362,31 +1229,34 @@ PanelWindow {
 
                                 // Wi-Fi и Bluetooth 1x1 — первые клетки
                                 // ряда пустышек, открывают свои колёса
-                                DeviceTile {
+                                STile {
                                     x: leftPart.cellX(0)
                                     y: leftPart.cellY(3)
                                     width: leftPart.cell
                                     height: leftPart.cell
-                                    iconFill: root.iconWifiDot
-                                    iconStroke: root.iconWifi
+                                    iconFill: Glyphs.iconWifiDot
+                                    iconStroke: Glyphs.iconWifi
 
                                     active: Networking.wifiEnabled
 
                                     onActivated: Networking.wifiEnabled =
                                         !Networking.wifiEnabled
 
-                                    onWheelRequested: {
+                                    onSecondaryActivated: {
+                                        if (!active)
+                                            return
+
                                         root.hide()
                                         wifiWheel.show()
                                     }
                                 }
 
-                                DeviceTile {
+                                STile {
                                     x: leftPart.cellX(1)
                                     y: leftPart.cellY(3)
                                     width: leftPart.cell
                                     height: leftPart.cell
-                                    iconStroke: root.iconBluetooth
+                                    iconStroke: Glyphs.iconBluetooth
 
                                     active: Bluetooth.defaultAdapter !== null
                                         && Bluetooth.defaultAdapter.enabled
@@ -1403,7 +1273,10 @@ PanelWindow {
                                             btUnblock.running = true
                                     }
 
-                                    onWheelRequested: {
+                                    onSecondaryActivated: {
+                                        if (!active)
+                                            return
+
                                         root.hide()
                                         btWheel.show()
                                     }
@@ -1486,11 +1359,11 @@ PanelWindow {
                                     // иконки и клики по секциям
                                     Repeater {
                                         model: [
-                                            { fill: "", stroke: root.iconPowerStroke, cmd: "poweroff" },
-                                            { fill: "", stroke: root.iconRebootStroke, cmd: "reboot" },
-                                            { fill: root.iconMoonFill, stroke: "", cmd: "suspend" },
-                                            { fill: "", stroke: root.iconHibernateStroke, cmd: "hibernate" },
-                                            { fill: root.iconLockFill, stroke: root.iconLockStroke, cmd: "" }
+                                            { fill: "", stroke: Glyphs.iconPowerStroke, cmd: "poweroff" },
+                                            { fill: "", stroke: Glyphs.iconRebootStroke, cmd: "reboot" },
+                                            { fill: Glyphs.iconMoonFill, stroke: "", cmd: "suspend" },
+                                            { fill: "", stroke: Glyphs.iconHibernateStroke, cmd: "hibernate" },
+                                            { fill: Glyphs.iconLockFill, stroke: Glyphs.iconLockStroke, cmd: "" }
                                         ]
 
                                         delegate: Item {
