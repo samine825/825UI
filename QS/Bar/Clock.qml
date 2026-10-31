@@ -6,7 +6,8 @@ import "../Components"
 import "../"
 Item {
     id: r
-    width: textContainer.width + Settings.line * InfexGeometry.tipMult * 3 + 1
+    width: textContainer.width
+        + Settings.line * (InfexGeometry.tipMult * 3 + 1)
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
@@ -18,69 +19,15 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         height: Settings.barHeight
         width: parent.width
-        
+
         property bool isHovered: false
         property bool showSeconds: Settings.secondsMode === 2 || (Settings.secondsMode === 1 && isHovered)
 
         property date currentTime: new Date()
 
-        readonly property real workspaceBarPoint: backgroundContainer.height * InfexGeometry.notchFrac
-
-        Item {
-            id: backgroundContainer
-            anchors.centerIn: parent
-            width: clockRoot.width
-            height: Math.max(1, clockRoot.height - Settings.line)
-
-            // Нижний слой: Заливка и толстая обводка (c2)
-            Shape {
-                anchors.fill: parent
-                preferredRendererType: Shape.CurveRenderer
-
-                SShapePath {
-                    joinStyle: ShapePath.MiterJoin
-                    capStyle: ShapePath.FlatCap
-
-                    strokeColor: Settings.c2
-                    strokeWidth: Settings.line * 3
-                    fillColor: Settings.c2
-
-                    startX: 0
-                    startY: 0
-
-                    PathLine { x: backgroundContainer.width; y: 0 }
-                    PathLine { x: backgroundContainer.width - clockRoot.workspaceBarPoint; y: backgroundContainer.height / 2 }
-                    PathLine { x: backgroundContainer.width; y: backgroundContainer.height }
-                    PathLine { x: 0; y: backgroundContainer.height }
-                    PathLine { x: clockRoot.workspaceBarPoint; y: backgroundContainer.height / 2 }
-                    PathLine { x: 0; y: 0 }
-                }
-            }
-
-            // Верхний слой: Основная тонкая обводка (c1)
-            Shape {
-                anchors.fill: parent
-                preferredRendererType: Shape.CurveRenderer
-
-                SShapePath {
-                    joinStyle: ShapePath.MiterJoin
-                    capStyle: ShapePath.FlatCap
-
-                    strokeColor: Settings.c1
-                    strokeWidth: Settings.line
-                    fillColor: Settings.c2
-
-                    startX: 0
-                    startY: 0
-
-                    PathLine { x: backgroundContainer.width; y: 0 }
-                    PathLine { x: backgroundContainer.width - clockRoot.workspaceBarPoint; y: backgroundContainer.height / 2 }
-                    PathLine { x: backgroundContainer.width; y: backgroundContainer.height }
-                    PathLine { x: 0; y: backgroundContainer.height }
-                    PathLine { x: clockRoot.workspaceBarPoint; y: backgroundContainer.height / 2 }
-                    PathLine { x: 0; y: 0 }
-                }
-            }
+        // границы фрейма = видимому внешнему краю обводки
+        SFrame {
+            anchors.fill: parent
         }
 
         Item {

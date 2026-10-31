@@ -29,54 +29,9 @@ Item {
 
         readonly property real point: height * InfexGeometry.notchFrac
 
-        // 1. Внешний Shape (Фон панели и толстая обводка)
-        Shape {
+        // границы фрейма = видимому внешнему краю обводки
+        SFrame {
             anchors.fill: parent
-            preferredRendererType: Shape.CurveRenderer
-
-            SShapePath {
-                joinStyle: ShapePath.MiterJoin
-                capStyle: ShapePath.FlatCap
-
-                strokeColor: Settings.c2
-                strokeWidth: Settings.line * 3
-                fillColor: Settings.c2
-
-                startX: 0
-                startY: 0
-
-                PathLine { x: parent.width; y: 0 }
-                PathLine { x: parent.width - root.point; y: root.height / 2 }
-                PathLine { x: parent.width; y: root.height }
-                PathLine { x: 0; y: root.height }
-                PathLine { x: root.point; y: root.height / 2 }
-                PathLine { x: 0; y: 0 }
-            }
-        }
-
-        // 2. Внутренний Shape (Тонкая рамка поверх фона)
-        Shape {
-            anchors.fill: parent
-            preferredRendererType: Shape.CurveRenderer
-
-            SShapePath {
-                joinStyle: ShapePath.MiterJoin
-                capStyle: ShapePath.FlatCap
-
-                strokeColor: Settings.c1
-                strokeWidth: Settings.line
-                fillColor: Settings.c2
-
-                startX: 0
-                startY: 0
-
-                PathLine { x: parent.width; y: 0 }
-                PathLine { x: parent.width - root.point; y: root.height / 2 }
-                PathLine { x: parent.width; y: root.height }
-                PathLine { x: 0; y: root.height }
-                PathLine { x: root.point; y: root.height / 2 }
-                PathLine { x: 0; y: 0 }
-            }
         }
 
         // 3. Строка контента: адаптивные ячейки и встроенные перегородки

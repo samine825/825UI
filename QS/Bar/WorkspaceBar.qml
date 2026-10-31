@@ -50,10 +50,17 @@ Item {
             return -1
         }
         
+        // границы фрейма = видимому внешнему краю обводки
+        SFrame {
+            anchors.fill: parent
+        }
+
+        // контент живёт внутри обводки: отступ в линию с каждой стороны
         Item {
             id: workspaceBar
 
-            //anchors.centerIn: parent
+            x: Settings.line / 2
+            y: Settings.line / 2
 
             width: root.workspaceCount * root.cellWidth
             height: Math.max(1, root.height - Settings.line)
@@ -80,90 +87,6 @@ Item {
             Component.onCompleted: animationsEnabled = true
 
             
-
-            Shape {
-                anchors.fill: parent
-                preferredRendererType: Shape.CurveRenderer
-
-                SShapePath {
-                    joinStyle: ShapePath.MiterJoin
-                    capStyle: ShapePath.FlatCap
-
-                    strokeColor: Settings.c2
-                    strokeWidth: Settings.line * 3
-                    fillColor: Settings.c2
-
-                    startX: 0
-                    startY: 0
-
-                    PathLine {
-                        x: workspaceBar.width
-                        y: 0
-                    }
-                    PathLine {
-                        x: workspaceBar.width - workspaceBar.point
-                        y: workspaceBar.height / 2
-                    }
-                    PathLine {
-                        x: workspaceBar.width
-                        y: workspaceBar.height
-                    }
-                    PathLine {
-                        x: 0
-                        y: workspaceBar.height
-                    }
-                    PathLine {
-                        x: workspaceBar.point
-                        y: workspaceBar.height / 2
-                    }
-                    PathLine {
-                        x: 0
-                        y: 0
-                    }
-                }
-            }
-
-            Shape {
-                anchors.fill: parent
-                preferredRendererType: Shape.CurveRenderer
-
-                SShapePath {
-                    joinStyle: ShapePath.MiterJoin
-                    capStyle: ShapePath.FlatCap
-
-                    strokeColor: Settings.c1
-                    strokeWidth: Settings.line
-                    fillColor: Settings.c2
-
-                    startX: 0
-                    startY: 0
-
-                    PathLine {
-                        x: workspaceBar.width
-                        y: 0
-                    }
-                    PathLine {
-                        x: workspaceBar.width - workspaceBar.point
-                        y: workspaceBar.height / 2
-                    }
-                    PathLine {
-                        x: workspaceBar.width
-                        y: workspaceBar.height
-                    }
-                    PathLine {
-                        x: 0
-                        y: workspaceBar.height
-                    }
-                    PathLine {
-                        x: workspaceBar.point
-                        y: workspaceBar.height / 2
-                    }
-                    PathLine {
-                        x: 0
-                        y: 0
-                    }
-                }
-            }
 
             Shape {
                 id: activeIndicator
