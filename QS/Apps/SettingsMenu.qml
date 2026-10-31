@@ -437,24 +437,13 @@ PanelWindow {
                     width: parent.width
                     height: parent.height - tabBar.height - Settings.line*1.5
 
-                    Panel {
-                        x: -Settings.line
-                        y: -Settings.line
-                        width: parent.width + Settings.line * 2
-                        height: parent.height + Settings.line * 2
-
-                        cornerCut: Settings.line * (2 + Math.sqrt(2)/2)
-                        strokeColor: Settings.c2
-                        fillColor: Settings.c2
-                        strokeWidth: Settings.line
-                    }
-
-                    Panel {
+                    SPanel {
                         anchors.fill: parent
                         cornerCut: Settings.line * 2
                         strokeColor: Settings.c1
                         fillColor: Settings.c2
-                        strokeWidth: Settings.line
+                        shadow: "outside"
+                        shadowColor: Settings.c2
                     }
 
                     // system

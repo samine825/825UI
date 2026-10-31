@@ -9,7 +9,7 @@ Rectangle {
     signal popupClosed
     property var maxWidth: 400
     property var startSize: Settings.barHeight*2
-    property var line: 5
+    readonly property real line: Settings.line
 
     // ── стек уведомлений ──
     // slotIndex выставляется извне (Shell.qml) и отражает позицию
@@ -118,7 +118,7 @@ Rectangle {
     // 1. Имя приложения (одна строка)
     Text {
         text: popupWindow.currentNotification ? popupWindow.currentNotification.appName : ""
-        font.pixelSize: 10
+        font.pixelSize: Settings.textXs
         color: contentRoot.currentTextColor
         width: parent.width
         elide: Text.ElideRight
@@ -128,7 +128,7 @@ Rectangle {
     // 2. Заголовок уведомления (summary)
     Text {
         text: popupWindow.currentNotification ? popupWindow.currentNotification.summary : ""
-        font.pixelSize: 15
+        font.pixelSize: Settings.textSm
         font.bold: true
         color: contentRoot.currentTextColor
         width: parent.width
@@ -146,7 +146,7 @@ Rectangle {
         Text {
             id: bodyText
             text: popupWindow.currentNotification ? popupWindow.currentNotification.body : ""
-            font.pixelSize: 11
+            font.pixelSize: Settings.textXs
             color: contentRoot.currentTextColor
             anchors.fill: parent
             
