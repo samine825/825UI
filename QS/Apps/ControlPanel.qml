@@ -433,38 +433,6 @@ PanelWindow {
 
     // === ИНЛАЙН-КОМПОНЕНТЫ ===
 
-    // Форма элементов бара: шестиугольник с заострениями-насечками
-    // на серединах левой и правой стороны (как дата-бар и часы).
-    component NotchShape: Shape {
-        id: notchShape
-
-        property color fillColor: "transparent"
-        property color strokeColor: "transparent"
-        property real strokeWidth: Settings.line
-        property real pointRatio: InfexGeometry.notchFrac
-
-        readonly property real notchPt: height * pointRatio
-
-        preferredRendererType: Shape.CurveRenderer
-
-        SShapePath {
-            joinStyle: ShapePath.MiterJoin
-            capStyle: ShapePath.FlatCap
-            strokeColor: notchShape.strokeColor
-            strokeWidth: notchShape.strokeWidth
-            fillColor: notchShape.fillColor
-
-            startX: 0
-            startY: 0
-            PathLine { x: notchShape.width; y: 0 }
-            PathLine { x: notchShape.width - notchShape.notchPt; y: notchShape.height / 2 }
-            PathLine { x: notchShape.width; y: notchShape.height }
-            PathLine { x: 0; y: notchShape.height }
-            PathLine { x: notchShape.notchPt; y: notchShape.height / 2 }
-            PathLine { x: 0; y: 0 }
-        }
-    }
-
     // Слайдр в стиле уведомлений: два слоя одного контента, верхний
     // обрезан по уровню заполнения, цвета внутри заполнения инвертированы.
     component SliderTile: Item {
@@ -486,7 +454,7 @@ PanelWindow {
         visible: available
 
         // базовый слой
-        NotchShape {
+        SFrame {
             anchors.fill: parent
             fillColor: Settings.c2
             strokeColor: Settings.c1
@@ -518,54 +486,15 @@ PanelWindow {
                 width: sliderTile.width
                 height: sliderTile.height
 
-                NotchShape {
+                // заливка c1 с зазором-тенью внутри: отделяет заливку
+                // от обводки слайдера ровно одной линией и на прямых,
+                // и на косых гранях
+                SFrame {
                     anchors.fill: parent
                     fillColor: Settings.c1
                     strokeColor: "transparent"
-                }
-
-                // внутренний третий контур с отступом в одну линию —
-                // шестиугольник со срезанными углами (форма маски
-                // уведомлений): срез сдвигает косые грани так, чтобы
-                // перпендикулярный зазор до косых основного контура
-                // равнялся зазору прямых граней, иначе линия тонет
-                // в обводке слайдера на насечках
-                Shape {
-                    id: innerContour
-
-                    anchors.fill: parent
-                    preferredRendererType: Shape.CurveRenderer
-
-                    readonly property real k: 2 * InfexGeometry.notchFrac
-                    // горизонтальный сдвиг косой грани при
-                    // перпендикулярном зазоре в одну линию
-                    readonly property real s:
-                        Settings.line * Math.sqrt(1 + k * k)
-                    readonly property real padY: Settings.line
-                    // угол верхнего края: точка, где параллельная косая
-                    // (наклон основного контура) встречается с краем
-                    readonly property real cornerX: k * padY + s
-                    readonly property real tipX: k * (height / 2) + s
-
-                    SShapePath {
-                        joinStyle: ShapePath.MiterJoin
-                        capStyle: ShapePath.FlatCap
-                        strokeColor: Settings.c2
-                        strokeWidth: Settings.line
-                        fillColor: "transparent"
-
-                        startX: innerContour.cornerX
-                        startY: innerContour.padY
-
-                        PathLine { x: innerContour.width - innerContour.cornerX; y: innerContour.padY }
-                        PathLine { x: innerContour.width - innerContour.tipX; y: innerContour.height / 2 }
-                        PathLine { x: innerContour.width - innerContour.cornerX; y: innerContour.height - innerContour.padY }
-                        PathLine { x: innerContour.cornerX; y: innerContour.height - innerContour.padY }
-                        PathLine { x: innerContour.tipX; y: innerContour.height / 2 }
-
-                        // замыкание: левая верхняя косая обратно к старту
-                        PathLine { x: innerContour.cornerX; y: innerContour.padY }
-                    }
+                    shadow: "inside"
+                    shadowColor: Settings.c2
                 }
 
                 VIcon {

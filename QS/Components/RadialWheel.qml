@@ -401,8 +401,9 @@ PanelWindow {
                             && !appCell.hasStatus
                     }
 
-                    // векторный фолбэк, если иконка темы не загрузилась
-                    VIcon {
+                    // глиф или индикатор статуса (wifi/bt/аудио) вместо
+                    // иконки темы, если та не загрузилась
+                    SIcon {
                         width: 30
                         height: 30
 
@@ -413,24 +414,11 @@ PanelWindow {
                             ? appCell.modelData.glyphFill : ""
                         strokePath: appCell.modelData.glyphStroke
                             ? appCell.modelData.glyphStroke : ""
-
-                        visible: (fillPath !== "" || strokePath !== "")
-                            && cellIcon.status !== Image.Ready
-                            && !appCell.hasStatus
-                    }
-
-                    // индикатор статуса: пусто / подключается / готово / ошибка
-                    StatusIcon {
-                        width: 30
-                        height: 30
-
-                        x: appCell.cx - width / 2
-                        y: appCell.cy + appCell.iconRadius + height - 10
-
-                        visible: appCell.hasStatus
-                            && appCell.modelData.status !== ""
                         status: appCell.hasStatus
                             ? appCell.modelData.status : ""
+
+                        visible: appCell.hasStatus
+                            || cellIcon.status !== Image.Ready
                     }
 
                     FontMetrics {
