@@ -46,8 +46,10 @@ Item {
         readonly property real xL: frame.baseInset + o * k + s
         readonly property real xR: frame.width - frame.baseInset
             - o * k - s
+        // выемка: обе косые смещаются одинаково, их пересечение на
+        // середине Y уходит горизонтально на o·k — слагаемое s сокращается
         readonly property real tipX:
-            k * (frame.height / 2 - frame.baseInset) + s
+            k * (frame.height / 2 - frame.baseInset) - o * k
 
         joinStyle: ShapePath.MiterJoin
         capStyle: ShapePath.FlatCap
