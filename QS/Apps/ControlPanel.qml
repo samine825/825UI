@@ -713,7 +713,7 @@ PanelWindow {
     // Левый клик — включить/выключить (активная заливается как активный
     // таб в настройках), правый — открыть колесо устройств, но только
     // если устройство уже включено
-    component DeviceTile: Panel {
+    component DeviceTile: SPanel {
         id: deviceTile
 
         property string iconFill: ""
@@ -726,19 +726,8 @@ PanelWindow {
         cornerCut: Settings.line * 2
         strokeColor: Settings.c1
         fillColor: deviceTile.active ? Settings.c1 : "transparent"
-        strokeWidth: Settings.line
-
-        // внутренний третий контур: отступ ровно в одну линию, а скос —
-        // параллельный внутренний аналог скоса основного контура,
-        // потому меньше его
-        Panel {
-            anchors.fill: parent
-            anchors.margins: Settings.line
-            cornerCut: Settings.line * 2 - Settings.line * (2 - Math.sqrt(2))
-            strokeColor: deviceTile.active ? Settings.c2 : "transparent"
-            fillColor: "transparent"
-            strokeWidth: Settings.line
-        }
+        shadow: deviceTile.active ? "inside" : "none"
+        shadowColor: Settings.c2
 
         VIcon {
             anchors.centerIn: parent
@@ -806,53 +795,9 @@ PanelWindow {
                     property real tabBorderWidth: Settings.line
                     property real blackOutlineWidth: Settings.line
 
-                    // Внешняя черная обводка со скошенными краями
-                    Shape {
-                        id: tabOuterOutline
+                    // тело бара: гранёный фрейм с тенью
+                    SFrame {
                         anchors.fill: parent
-                        z: -1
-                        preferredRendererType: Shape.CurveRenderer
-
-                        SShapePath {
-                            joinStyle: ShapePath.MiterJoin
-                            capStyle: ShapePath.FlatCap
-                            strokeColor: Settings.c2
-                            strokeWidth: dateBar.tabBorderWidth + dateBar.blackOutlineWidth * 2
-                            fillColor: "transparent"
-
-                            startX: 0
-                            startY: 0
-                            PathLine { x: dateBar.width;                y: 0 }
-                            PathLine { x: dateBar.width - dateBar.point; y: dateBar.height / 2 }
-                            PathLine { x: dateBar.width;                y: dateBar.height }
-                            PathLine { x: 0;                             y: dateBar.height }
-                            PathLine { x: dateBar.point;                  y: dateBar.height / 2 }
-                            PathLine { x: 0; y: 0 }
-                        }
-                    }
-
-                    // Основное тело бара со скошенными краями
-                    Shape {
-                        id: tabShape
-                        anchors.fill: parent
-                        preferredRendererType: Shape.CurveRenderer
-
-                        SShapePath {
-                            joinStyle: ShapePath.MiterJoin
-                            capStyle: ShapePath.FlatCap
-                            strokeColor: Settings.c1
-                            strokeWidth: Settings.line
-                            fillColor: Settings.c2
-
-                            startX: 0
-                            startY: 0
-                            PathLine { x: dateBar.width;                y: 0 }
-                            PathLine { x: dateBar.width - dateBar.point; y: dateBar.height / 2 }
-                            PathLine { x: dateBar.width;                y: dateBar.height }
-                            PathLine { x: 0;                             y: dateBar.height }
-                            PathLine { x: dateBar.point;                  y: dateBar.height / 2 }
-                            PathLine { x: 0; y: 0 }
-                        }
                     }
 
                     // Текст даты внутри бара
@@ -871,25 +816,14 @@ PanelWindow {
                     width: parent.width
                     height: parent.height - dateBar.height - Settings.line * 3.5
 
-                    // Задняя черная обводка главного окна контента
-                    Panel {
-                        x: -Settings.line
-                        y: -Settings.line
-                        width: parent.width + Settings.line * 2
-                        height: parent.height + Settings.line * 2
-                        cornerCut: Settings.line * (2 + Math.sqrt(2)/2)
-                        strokeColor: Settings.c2
-                        fillColor: Settings.c2
-                        strokeWidth: Settings.line
-                    }
-
-                    // Передняя панель основного контента
-                    Panel {
+                    // Панель основного контента, тень ровно в линию
+                    SPanel {
                         anchors.fill: parent
                         cornerCut: Settings.line * 2
                         strokeColor: Settings.c1
                         fillColor: Settings.c2
-                        strokeWidth: Settings.line
+                        shadow: "outside"
+                        shadowColor: Settings.c2
 
                         Row {
                             anchors.fill: parent
@@ -999,6 +933,12 @@ PanelWindow {
                                     readonly property real cornerCut:
                                         Settings.line * 2
 
+                                    // катет маскирующих уголков обложки:
+                                    // гипотенуза по фаске контура панели
+                                    // (инсет пол-линии + срез)
+                                    readonly property real maskLeg:
+                                        Settings.line + cornerCut
+
                                     // опрос позиции трека
                                     Timer {
                                         interval: 500
@@ -1014,12 +954,11 @@ PanelWindow {
                                     }
 
                                     // фон и рамка карточки (стиль обоев)
-                                    Panel {
+                                    SPanel {
                                         anchors.fill: parent
                                         cornerCut: playerTile.cornerCut
                                         strokeColor: Settings.c1
                                         fillColor: Settings.c2
-                                        strokeWidth: Settings.line
                                     }
 
                                     // обложка
@@ -1190,8 +1129,8 @@ PanelWindow {
 
                                             startX: 0
                                             startY: 0
-                                            PathLine { x: playerTile.cornerCut; y: 0 }
-                                            PathLine { x: 0; y: playerTile.cornerCut }
+                                            PathLine { x: playerTile.maskLeg; y: 0 }
+                                            PathLine { x: 0; y: playerTile.maskLeg }
                                             PathLine { x: 0; y: 0 }
                                         }
 
@@ -1202,11 +1141,11 @@ PanelWindow {
                                             strokeColor: "transparent"
                                             fillColor: Settings.c2
 
-                                            startX: playerTile.width - playerTile.cornerCut
+                                            startX: playerTile.width - playerTile.maskLeg
                                             startY: 0
                                             PathLine { x: playerTile.width; y: 0 }
-                                            PathLine { x: playerTile.width; y: playerTile.cornerCut }
-                                            PathLine { x: playerTile.width - playerTile.cornerCut; y: 0 }
+                                            PathLine { x: playerTile.width; y: playerTile.maskLeg }
+                                            PathLine { x: playerTile.width - playerTile.maskLeg; y: 0 }
                                         }
 
                                         // НП
@@ -1217,10 +1156,10 @@ PanelWindow {
                                             fillColor: Settings.c2
 
                                             startX: playerTile.width
-                                            startY: playerTile.height - playerTile.cornerCut
+                                            startY: playerTile.height - playerTile.maskLeg
                                             PathLine { x: playerTile.width; y: playerTile.height }
-                                            PathLine { x: playerTile.width - playerTile.cornerCut; y: playerTile.height }
-                                            PathLine { x: playerTile.width; y: playerTile.height - playerTile.cornerCut }
+                                            PathLine { x: playerTile.width - playerTile.maskLeg; y: playerTile.height }
+                                            PathLine { x: playerTile.width; y: playerTile.height - playerTile.maskLeg }
                                         }
 
                                         // НЛ
@@ -1230,38 +1169,21 @@ PanelWindow {
                                             strokeColor: "transparent"
                                             fillColor: Settings.c2
 
-                                            startX: playerTile.cornerCut
+                                            startX: playerTile.maskLeg
                                             startY: playerTile.height
                                             PathLine { x: 0; y: playerTile.height }
-                                            PathLine { x: 0; y: playerTile.height - playerTile.cornerCut }
-                                            PathLine { x: playerTile.cornerCut; y: playerTile.height }
+                                            PathLine { x: 0; y: playerTile.height - playerTile.maskLeg }
+                                            PathLine { x: playerTile.maskLeg; y: playerTile.height }
                                         }
                                     }
 
-                                    // белая рамка
-                                    Shape {
-                                        preferredRendererType: Shape.CurveRenderer
+                                    // рамка поверх обложки
+                                    SPanel {
                                         anchors.fill: parent
                                         z: 5
-
-                                        SShapePath {
-                                            joinStyle: ShapePath.MiterJoin
-                                            capStyle: ShapePath.FlatCap
-                                            strokeColor: Settings.c1
-                                            strokeWidth: Settings.line
-                                            fillColor: "transparent"
-
-                                            startX: playerTile.cornerCut
-                                            startY: 0
-                                            PathLine { x: playerTile.width - playerTile.cornerCut; y: 0 }
-                                            PathLine { x: playerTile.width; y: playerTile.cornerCut }
-                                            PathLine { x: playerTile.width; y: playerTile.height - playerTile.cornerCut }
-                                            PathLine { x: playerTile.width - playerTile.cornerCut; y: playerTile.height }
-                                            PathLine { x: playerTile.cornerCut; y: playerTile.height }
-                                            PathLine { x: 0; y: playerTile.height - playerTile.cornerCut }
-                                            PathLine { x: 0; y: playerTile.cornerCut }
-                                            PathLine { x: playerTile.cornerCut; y: 0 }
-                                        }
+                                        cornerCut: playerTile.cornerCut
+                                        strokeColor: Settings.c1
+                                        fillColor: "transparent"
                                     }
 
                                     // нижняя полоса: прогресс — фон под
@@ -1497,7 +1419,7 @@ PanelWindow {
                                         Qt.point(0, 4), Qt.point(1, 4)
                                     ]
 
-                                    delegate: Panel {
+                                    delegate: SPanel {
                                         property int tileCol: modelData.x
                                         property int tileRow: modelData.y
 
@@ -1509,7 +1431,6 @@ PanelWindow {
                                         cornerCut: Settings.line * 2
                                         strokeColor: Settings.c1
                                         fillColor: "transparent"
-                                        strokeWidth: Settings.line
                                     }
                                 }
 
@@ -1527,12 +1448,11 @@ PanelWindow {
                                     readonly property real btnW: width / btnCount
 
                                     // коробка секции
-                                    Panel {
+                                    SPanel {
                                         anchors.fill: parent
                                         cornerCut: Settings.line * 2
                                         strokeColor: Settings.c1
                                         fillColor: Settings.c2
-                                        strokeWidth: Settings.line
                                     }
 
                                     // вертикальные перегородки между секторами
