@@ -32,24 +32,25 @@ Item {
     // наклон косых граней: константа контура, d-независимая
     readonly property real slopeK: 2 * InfexGeometry.notchFrac
 
-    // контур с отступом inset от границ и перпендикулярным сдвигом o
-    // (внутрь положительный): горизонтальный сдвиг косых — o·√(1+k²)
+    // контур: прямоугольник с отступом inset от границ, поверх него —
+    // параллельный сдвиг косых и кромок на shift (внутрь положительный).
+    // Выемка принадлежит самому прямоугольнику (глубина k·h/2), сдвиг
+    // двигает её пересечение на shift·k.
     component HexContour: SShapePath {
         id: hex
 
-        property real o: 0
+        property real inset: 0
+        property real shift: 0
 
         readonly property real k: frame.slopeK
-        readonly property real s: o * Math.sqrt(1 + k * k)
-        readonly property real t: frame.baseInset + o
-        readonly property real b: frame.height - frame.baseInset - o
-        readonly property real xL: frame.baseInset + o * k + s
-        readonly property real xR: frame.width - frame.baseInset
-            - o * k - s
-        // выемка: обе косые смещаются одинаково, их пересечение на
-        // середине Y уходит горизонтально на o·k — слагаемое s сокращается
+        readonly property real sq: Math.sqrt(1 + k * k)
+        readonly property real t: hex.inset + hex.shift
+        readonly property real b: frame.height - hex.inset - hex.shift
+        readonly property real xL: hex.inset + hex.shift * (k + sq)
+        readonly property real xR: frame.width - hex.inset
+            - hex.shift * (k + sq)
         readonly property real tipX:
-            k * (frame.height / 2 - frame.baseInset) - o * k
+            k * (frame.height / 2 - hex.inset) - hex.shift * k
 
         joinStyle: ShapePath.MiterJoin
         capStyle: ShapePath.FlatCap
@@ -72,7 +73,7 @@ Item {
         // тень-нарост: внешний пояс останется виден, внутренняя
         // половина вместе с шипами масок ниже заливкой
         HexContour {
-            o: 0
+            inset: frame.baseInset
             fillColor: "transparent"
             strokeColor: frame.shadow === "both"
                 ? frame.shadowColor : "transparent"
@@ -82,7 +83,8 @@ Item {
 
         // внешняя тень отдельным контуром
         HexContour {
-            o: -Settings.line
+            inset: frame.baseInset
+            shift: -Settings.line
             fillColor: "transparent"
             strokeColor: frame.shadow === "outside"
                 ? frame.shadowColor : "transparent"
@@ -92,15 +94,16 @@ Item {
 
         // заливка: маскирует внутреннюю половину нароста
         HexContour {
-            o: frame.fillInset
+            inset: frame.baseInset + frame.fillInset
             fillColor: frame.fillColor
             strokeColor: "transparent"
             strokeWidth: 0
         }
 
-        // внутренняя тень — поверх заливки
+        // внутренняя тень — параллельный сдвиг заливки внутрь на линию
         HexContour {
-            o: Settings.line
+            inset: frame.baseInset + frame.fillInset
+            shift: Settings.line
             fillColor: "transparent"
             strokeColor: frame.shadow === "inside"
                 ? frame.shadowColor : "transparent"
@@ -110,7 +113,7 @@ Item {
 
         // основная обводка
         HexContour {
-            o: 0
+            inset: frame.baseInset
             fillColor: "transparent"
             strokeColor: frame.strokeColor
             strokeWidth: Settings.line
