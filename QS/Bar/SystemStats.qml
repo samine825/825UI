@@ -30,8 +30,12 @@ Item {
         readonly property real point: height * InfexGeometry.notchFrac
 
         // границы фрейма = видимому внешнему краю обводки
+        // (старая обводка выпирала на пол-линии — компенсируем ростом)
         SFrame {
-            anchors.fill: parent
+            x: -Settings.line / 2
+            y: -Settings.line / 2
+            width: parent.width + Settings.line
+            height: parent.height + Settings.line
         }
 
         // 3. Строка контента: адаптивные ячейки и встроенные перегородки

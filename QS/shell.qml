@@ -164,7 +164,9 @@ ShellRoot {
                     id: chatRows
 
                     width: chatList.width
-                    spacing: 6
+                    // строки выросли на line (рамка = видимым границам):
+                    // видимый зазор остаётся как был
+                    spacing: Settings.line / 2
 
                     Repeater {
                         model: cat.chats
@@ -182,8 +184,10 @@ ShellRoot {
                             readonly property bool hot:
                                 active || renaming || rowHover.containsMouse
 
-                            width: chatRows.width
-                            height: chatMenu.rowHeight
+                            // рамка = старым видимым границам: рост на line
+                            x: -Settings.line / 2
+                            width: chatRows.width + Settings.line
+                            height: chatMenu.rowHeight + Settings.line
 
                             // гранёный фрейм строки: активная заливается
                             SFrame {

@@ -438,7 +438,10 @@ PanelWindow {
                     height: parent.height - tabBar.height - Settings.line*1.5
 
                     SPanel {
-                        anchors.fill: parent
+                        x: -Settings.line / 2
+                        y: -Settings.line / 2
+                        width: parent.width + Settings.line
+                        height: parent.height + Settings.line
                         cornerCut: Settings.line * 2
                         strokeColor: Settings.c1
                         fillColor: Settings.c2

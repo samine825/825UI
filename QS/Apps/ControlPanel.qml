@@ -611,7 +611,7 @@ PanelWindow {
                 Item {
                     id: contentArea
                     width: parent.width
-                    height: parent.height - dateBar.height - Settings.line * 3.5
+                    height: parent.height - dateBar.height - Settings.line * 3
 
                     // Панель основного контента, тень ровно в линию
                     SPanel {
@@ -635,7 +635,10 @@ PanelWindow {
                                     + columns * cell + (columns - 1) * gap
                                 height: parent.height
 
-                                property real margin: Settings.line * 2
+                                // плитки выросли на line (рамка = старым
+                                // видимым границам), поле — на пол-линии
+                                // с каждой стороны: зазор кольцо->плитка = 1 line
+                                property real margin: Settings.line * 2.5
                                 property real gap: Settings.line * 2
                                 property int columns: 6
 
@@ -652,10 +655,10 @@ PanelWindow {
 
                                 // Громкость 0x0, размер 3x1
                                 SliderTile {
-                                    x: leftPart.cellX(0)
-                                    y: leftPart.cellY(0)
-                                    width: leftPart.cell * 3 + leftPart.gap * 2
-                                    height: leftPart.cell
+                                    x: leftPart.cellX(0) - Settings.line / 2
+                                    y: leftPart.cellY(0) - Settings.line / 2
+                                    width: leftPart.cell * 3 + leftPart.gap * 2 + Settings.line
+                                    height: leftPart.cell + Settings.line
 
                                     value: root.volumeMuted
                                         ? 0 : root.volumeLevel
@@ -675,10 +678,10 @@ PanelWindow {
 
                                 // Яркость 0x1, размер 3x1
                                 SliderTile {
-                                    x: leftPart.cellX(0)
-                                    y: leftPart.cellY(1)
-                                    width: leftPart.cell * 3 + leftPart.gap * 2
-                                    height: leftPart.cell
+                                    x: leftPart.cellX(0) - Settings.line / 2
+                                    y: leftPart.cellY(1) - Settings.line / 2
+                                    width: leftPart.cell * 3 + leftPart.gap * 2 + Settings.line
+                                    height: leftPart.cell + Settings.line
 
                                     available: brightnessCtl.available
                                     value: brightnessCtl.ratio
@@ -691,10 +694,10 @@ PanelWindow {
 
                                 // Микрофон 2x0, размер 3x1
                                 SliderTile {
-                                    x: leftPart.cellX(0)
-                                    y: leftPart.cellY(2)
-                                    width: leftPart.cell * 3 + leftPart.gap * 2
-                                    height: leftPart.cell
+                                    x: leftPart.cellX(0) - Settings.line / 2
+                                    y: leftPart.cellY(2) - Settings.line / 2
+                                    width: leftPart.cell * 3 + leftPart.gap * 2 + Settings.line
+                                    height: leftPart.cell + Settings.line
 
                                     available: root.sourceAudio !== null
                                     value: root.micMuted
@@ -716,10 +719,10 @@ PanelWindow {
                                 // Плеер 3x3 у правого края верхней зоны
                                 Item {
                                     id: playerTile
-                                    x: leftPart.cellX(3)
-                                    y: leftPart.cellY(0)
-                                    width: leftPart.cell * 3 + leftPart.gap * 2
-                                    height: leftPart.cell * 3 + leftPart.gap * 2
+                                    x: leftPart.cellX(3) - Settings.line / 2
+                                    y: leftPart.cellY(0) - Settings.line / 2
+                                    width: leftPart.cell * 3 + leftPart.gap * 2 + Settings.line
+                                    height: leftPart.cell * 3 + leftPart.gap * 2 + Settings.line
 
                                     property var player: root.mprisPlayer
                                     property bool hasTrack:
@@ -993,7 +996,7 @@ PanelWindow {
                                         anchors.bottom: parent.bottom
                                         anchors.left: parent.left
                                         anchors.right: parent.right
-                                        anchors.margins: Settings.line / 2
+                                        anchors.margins: Settings.line
                                         height: 20
                                         clip: true
 
@@ -1160,10 +1163,10 @@ PanelWindow {
                                 // Wi-Fi и Bluetooth 1x1 — первые клетки
                                 // ряда пустышек, открывают свои колёса
                                 STile {
-                                    x: leftPart.cellX(0)
-                                    y: leftPart.cellY(3)
-                                    width: leftPart.cell
-                                    height: leftPart.cell
+                                    x: leftPart.cellX(0) - Settings.line / 2
+                                    y: leftPart.cellY(3) - Settings.line / 2
+                                    width: leftPart.cell + Settings.line
+                                    height: leftPart.cell + Settings.line
                                     iconFill: Glyphs.iconWifiDot
                                     iconStroke: Glyphs.iconWifi
 
@@ -1182,10 +1185,10 @@ PanelWindow {
                                 }
 
                                 STile {
-                                    x: leftPart.cellX(1)
-                                    y: leftPart.cellY(3)
-                                    width: leftPart.cell
-                                    height: leftPart.cell
+                                    x: leftPart.cellX(1) - Settings.line / 2
+                                    y: leftPart.cellY(3) - Settings.line / 2
+                                    width: leftPart.cell + Settings.line
+                                    height: leftPart.cell + Settings.line
                                     iconStroke: Glyphs.iconBluetooth
 
                                     active: Bluetooth.defaultAdapter !== null
@@ -1226,10 +1229,10 @@ PanelWindow {
                                         property int tileCol: modelData.x
                                         property int tileRow: modelData.y
 
-                                        x: leftPart.cellX(tileCol)
-                                        y: leftPart.cellY(tileRow)
-                                        width: leftPart.cell
-                                        height: leftPart.cell
+                                        x: leftPart.cellX(tileCol) - Settings.line / 2
+                                        y: leftPart.cellY(tileRow) - Settings.line / 2
+                                        width: leftPart.cell + Settings.line
+                                        height: leftPart.cell + Settings.line
 
                                         cornerCut: Settings.line * 2
                                         strokeColor: Settings.c1
@@ -1241,11 +1244,11 @@ PanelWindow {
                                 // перегородками на 5 секторов
                                 Item {
                                     id: powerRow
-                                    x: leftPart.margin
+                                    x: leftPart.margin - Settings.line / 2
                                     y: leftPart.height - leftPart.margin
-                                        - leftPart.cell
-                                    width: leftPart.width - leftPart.margin * 2
-                                    height: leftPart.cell
+                                        - leftPart.cell - Settings.line / 2
+                                    width: leftPart.width - leftPart.margin * 2 + Settings.line
+                                    height: leftPart.cell + Settings.line
 
                                     readonly property int btnCount: 5
                                     readonly property real btnW: width / btnCount
