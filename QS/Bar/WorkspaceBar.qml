@@ -50,22 +50,22 @@ Item {
             return -1
         }
         
-        // границы фрейма = видимому внешнему краю обводки
-        SFrame {
-            anchors.fill: parent
-        }
-
-        // контент живёт внутри обводки: отступ в линию с каждой стороны
         Item {
             id: workspaceBar
-
-            x: Settings.line / 2
-            y: Settings.line / 2
 
             width: root.workspaceCount * root.cellWidth
             height: Math.max(1, root.height - Settings.line)
 
             readonly property real point: height * InfexGeometry.notchFrac
+
+            // границы фрейма = видимому внешнему краю обводки:
+            // охватывает полосу с отступом в пол-линии
+            SFrame {
+                x: -Settings.line / 2
+                y: -Settings.line / 2
+                width: parent.width + Settings.line
+                height: parent.height + Settings.line
+            }
 
             readonly property real activeExtra:
                 root.currentIndex >= 0 ? 2 * point : 0

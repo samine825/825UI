@@ -495,6 +495,7 @@ PanelWindow {
                     strokeColor: "transparent"
                     shadow: "inside"
                     shadowColor: Settings.c2
+                    fillInset: -Settings.line / 2
                 }
 
                 VIcon {

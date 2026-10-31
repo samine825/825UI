@@ -25,6 +25,10 @@ Item {
     property color strokeColor: Settings.c1
     property color shadowColor: Settings.c2
 
+    // сдвиг заливки относительно базового контура: отрицательный
+    // заполняет до границ (слой заливки слайдера)
+    property real fillInset: 0
+
     // отступ базового контура от границ (обводка не выпирает)
     readonly property real baseInset: Settings.line / 2
 
@@ -84,7 +88,7 @@ Item {
 
         // заливка: маскирует внутреннюю половину нароста
         CutContour {
-            o: 0
+            o: panel.fillInset
             fillColor: panel.fillColor
             strokeColor: "transparent"
             strokeWidth: 0
