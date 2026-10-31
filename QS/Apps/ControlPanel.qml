@@ -659,11 +659,11 @@ PanelWindow {
                                     // отступы по 2 линии от зоны плиток: кромки c1 слайдера
                                     // совпадают с кромками плиток (у них срез углов)
                                     // слайдер занимает свою зону целиком
-                                    // (3 клетки + 2 зазора), рамка — как у плиток
-                                    x: leftPart.cellX(0) - Settings.line / 2
-                                    y: leftPart.cellY(0) - Settings.line / 2
-                                    width: leftPart.cell * 3 + leftPart.gap * 2 + Settings.line
-                                    height: leftPart.cell + Settings.line
+                                    // (3 клетки + 2 зазора), рамка = зоне
+                                    x: leftPart.cellX(0)
+                                    y: leftPart.cellY(0)
+                                    width: leftPart.cell * 3 + leftPart.gap * 2
+                                    height: leftPart.cell
 
                                     value: root.volumeMuted
                                         ? 0 : root.volumeLevel
@@ -686,11 +686,11 @@ PanelWindow {
                                     // отступы по 2 линии от зоны плиток: кромки c1 слайдера
                                     // совпадают с кромками плиток (у них срез углов)
                                     // слайдер занимает свою зону целиком
-                                    // (3 клетки + 2 зазора), рамка — как у плиток
-                                    x: leftPart.cellX(0) - Settings.line / 2
-                                    y: leftPart.cellY(1) - Settings.line / 2
-                                    width: leftPart.cell * 3 + leftPart.gap * 2 + Settings.line
-                                    height: leftPart.cell + Settings.line
+                                    // (3 клетки + 2 зазора), рамка = зоне
+                                    x: leftPart.cellX(0)
+                                    y: leftPart.cellY(1)
+                                    width: leftPart.cell * 3 + leftPart.gap * 2
+                                    height: leftPart.cell
 
                                     available: brightnessCtl.available
                                     value: brightnessCtl.ratio
@@ -706,11 +706,11 @@ PanelWindow {
                                     // отступы по 2 линии от зоны плиток: кромки c1 слайдера
                                     // совпадают с кромками плиток (у них срез углов)
                                     // слайдер занимает свою зону целиком
-                                    // (3 клетки + 2 зазора), рамка — как у плиток
-                                    x: leftPart.cellX(0) - Settings.line / 2
-                                    y: leftPart.cellY(2) - Settings.line / 2
-                                    width: leftPart.cell * 3 + leftPart.gap * 2 + Settings.line
-                                    height: leftPart.cell + Settings.line
+                                    // (3 клетки + 2 зазора), рамка = зоне
+                                    x: leftPart.cellX(0)
+                                    y: leftPart.cellY(2)
+                                    width: leftPart.cell * 3 + leftPart.gap * 2
+                                    height: leftPart.cell
 
                                     available: root.sourceAudio !== null
                                     value: root.micMuted
