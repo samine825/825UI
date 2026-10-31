@@ -796,98 +796,130 @@ PanelWindow {
                                                     ? u : "file://" + u
                                             }
                                         }
-                                    }
-                                        // нижняя полоса: прогресс — фон под
-                                        // бегущим текстом. Чёрное — не пройдено,
-                                        // белое — пройдено, текст инвертируется
-                                        // над белой частью.
-                                        Item {
-                                            id: captionStrip
-                                            z: 4
+                                    // нижняя полоса: прогресс — фон под
+                                    // бегущим текстом. Чёрное — не пройдено,
+                                    // белое — пройдено, текст инвертируется
+                                    // над белой частью.
+                                    Item {
+                                        id: captionStrip
+                                        z: 4
+                                        anchors.bottom: parent.bottom
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.margins: Settings.line / 2
+                                        height: 20
+                                        clip: true
+
+                                        // удержание позиции при перемотке
+                                        property real seekHold: -1
+
+                                        // медиа нельзя пролистать — белая
+                                        // заливка прогресса плавно исчезает
+                                        // (ширина к нулю), полоса остаётся
+                                        // фоном под текстом
+                                        readonly property bool seekable:
+                                            playerTile.hasTrack
+                                            && playerTile.player
+                                            && playerTile.player.canSeek
+
+                                        readonly property real ratio: seekHold >= 0 ? seekHold : (seekable && playerTile.player.length > 0 ? Math.max(0, Math.min(1, playerTile.polledPos / playerTile.player.length)) : 0)
+
+                                        readonly property string caption: playerTile.hasTrack ? (playerTile.player.trackArtist !== "" ? playerTile.player.trackArtist + " — " + playerTile.player.trackTitle : playerTile.player.trackTitle) : "Нет медиа"
+
+                                        // бегущая строка: текст листается
+                                        // вправо бесконечно, между
+                                        // повторами зазор marqueeGap
+                                        readonly property real marqueeGap: 40
+                                        readonly property real marqueePeriod: captionMetrics.width + marqueeGap
+                                        readonly property bool scrolling: captionMetrics.width > width - 20
+                                        property real marqueePhase: 0
+
+                                        TextMetrics {
+                                            id: captionMetrics
+                                            text: captionStrip.caption
+                                            font.pixelSize: Settings.textXs
+                                        }
+
+                                        NumberAnimation {
+                                            id: marqueeAnim
+                                            target: captionStrip
+                                            property: "marqueePhase"
+                                            loops: Animation.Infinite
+                                            from: 0
+                                            to: captionStrip.marqueePeriod
+                                            duration: captionStrip.marqueePeriod / 26 * 1000
+                                            running: captionStrip.scrolling
+                                        }
+
+                                        Connections {
+                                            target: captionMetrics
+                                            function onTextChanged() {
+                                                captionStrip.marqueePhase = 0
+                                                marqueeAnim.restart()
+                                            }
+                                        }
+
+                                        // чёрное — отсутствие прогресса
+                                        SRectangle {
+                                            anchors.fill: parent
+                                            color: Settings.c2
+                                        }
+
+                                        // белое — пройденная часть
+                                        SRectangle {
+                                            anchors.top: parent.top
                                             anchors.bottom: parent.bottom
                                             anchors.left: parent.left
-                                            anchors.right: parent.right
-                                            anchors.margins: Settings.line / 2
-                                            height: 20
+                                            width: parent.width * captionStrip.ratio
+                                            color: Settings.c1
+
+                                            Behavior on width {
+                                                NumberAnimation { duration: Settings.animBase }
+                                            }
+                                        }
+
+                                        // бегущий текст: белый по чёрному,
+                                        // две копии для бесшовного цикла
+                                        SText {
+                                            y: (parent.height - height) / 2
+                                            x: captionStrip.scrolling
+                                                ? -captionStrip.marqueePhase
+                                                : (captionStrip.width - captionMetrics.width) / 2
+                                            text: captionStrip.caption
+                                            color: Settings.c1
+                                            font.pixelSize: Settings.textXs
+                                        }
+
+                                        SText {
+                                            visible: captionStrip.scrolling
+                                            y: (parent.height - height) / 2
+                                            x: captionStrip.marqueePeriod
+                                                - captionStrip.marqueePhase
+                                            text: captionStrip.caption
+                                            color: Settings.c1
+                                            font.pixelSize: Settings.textXs
+                                        }
+
+                                        // чёрные копии, обрезанные до
+                                        // пройденной части
+                                        Item {
+                                            anchors.top: parent.top
+                                            anchors.bottom: parent.bottom
+                                            anchors.left: parent.left
+                                            width: parent.width * captionStrip.ratio
                                             clip: true
 
-                                            // удержание позиции при перемотке
-                                            property real seekHold: -1
-
-                                            // медиа нельзя пролистать — белая
-                                            // заливка прогресса плавно исчезает
-                                            // (ширина к нулю), полоса остаётся
-                                            // фоном под текстом
-                                            readonly property bool seekable:
-                                                playerTile.hasTrack
-                                                && playerTile.player
-                                                && playerTile.player.canSeek
-
-                                            readonly property real ratio: seekHold >= 0 ? seekHold : (seekable && playerTile.player.length > 0 ? Math.max(0, Math.min(1, playerTile.polledPos / playerTile.player.length)) : 0)
-
-                                            readonly property string caption: playerTile.hasTrack ? (playerTile.player.trackArtist !== "" ? playerTile.player.trackArtist + " — " + playerTile.player.trackTitle : playerTile.player.trackTitle) : "Нет медиа"
-
-                                            // бегущая строка: текст листается
-                                            // вправо бесконечно, между
-                                            // повторами зазор marqueeGap
-                                            readonly property real marqueeGap: 40
-                                            readonly property real marqueePeriod: captionMetrics.width + marqueeGap
-                                            readonly property bool scrolling: captionMetrics.width > width - 20
-                                            property real marqueePhase: 0
-
-                                            TextMetrics {
-                                                id: captionMetrics
-                                                text: captionStrip.caption
-                                                font.pixelSize: Settings.textXs
+                                            Behavior on width {
+                                                NumberAnimation { duration: Settings.animBase }
                                             }
 
-                                            NumberAnimation {
-                                                id: marqueeAnim
-                                                target: captionStrip
-                                                property: "marqueePhase"
-                                                loops: Animation.Infinite
-                                                from: 0
-                                                to: captionStrip.marqueePeriod
-                                                duration: captionStrip.marqueePeriod / 26 * 1000
-                                                running: captionStrip.scrolling
-                                            }
-
-                                            Connections {
-                                                target: captionMetrics
-                                                function onTextChanged() {
-                                                    captionStrip.marqueePhase = 0
-                                                    marqueeAnim.restart()
-                                                }
-                                            }
-
-                                            // чёрное — отсутствие прогресса
-                                            SRectangle {
-                                                anchors.fill: parent
-                                                color: Settings.c2
-                                            }
-
-                                            // белое — пройденная часть
-                                            SRectangle {
-                                                anchors.top: parent.top
-                                                anchors.bottom: parent.bottom
-                                                anchors.left: parent.left
-                                                width: parent.width * captionStrip.ratio
-                                                color: Settings.c1
-
-                                                Behavior on width {
-                                                    NumberAnimation { duration: Settings.animBase }
-                                                }
-                                            }
-
-                                            // бегущий текст: белый по чёрному,
-                                            // две копии для бесшовного цикла
                                             SText {
                                                 y: (parent.height - height) / 2
                                                 x: captionStrip.scrolling
                                                     ? -captionStrip.marqueePhase
                                                     : (captionStrip.width - captionMetrics.width) / 2
                                                 text: captionStrip.caption
-                                                color: Settings.c1
+                                                color: Settings.c2
                                                 font.pixelSize: Settings.textXs
                                             }
 
@@ -897,78 +929,46 @@ PanelWindow {
                                                 x: captionStrip.marqueePeriod
                                                     - captionStrip.marqueePhase
                                                 text: captionStrip.caption
-                                                color: Settings.c1
+                                                color: Settings.c2
                                                 font.pixelSize: Settings.textXs
                                             }
+                                        }
 
-                                            // чёрные копии, обрезанные до
-                                            // пройденной части
-                                            Item {
-                                                anchors.top: parent.top
-                                                anchors.bottom: parent.bottom
-                                                anchors.left: parent.left
-                                                width: parent.width * captionStrip.ratio
-                                                clip: true
+                                        // перемотка: клик и драг по полосе
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            enabled: captionStrip.seekable
+                                            cursorShape: Qt.PointingHandCursor
 
-                                                Behavior on width {
-                                                    NumberAnimation { duration: Settings.animBase }
-                                                }
-
-                                                SText {
-                                                    y: (parent.height - height) / 2
-                                                    x: captionStrip.scrolling
-                                                        ? -captionStrip.marqueePhase
-                                                        : (captionStrip.width - captionMetrics.width) / 2
-                                                    text: captionStrip.caption
-                                                    color: Settings.c2
-                                                    font.pixelSize: Settings.textXs
-                                                }
-
-                                                SText {
-                                                    visible: captionStrip.scrolling
-                                                    y: (parent.height - height) / 2
-                                                    x: captionStrip.marqueePeriod
-                                                        - captionStrip.marqueePhase
-                                                    text: captionStrip.caption
-                                                    color: Settings.c2
-                                                    font.pixelSize: Settings.textXs
-                                                }
+                                            function apply(mouse) {
+                                                captionStrip.seekHold =
+                                                    Math.max(0, Math.min(1,
+                                                        mouse.x / width))
                                             }
 
-                                            // перемотка: клик и драг по полосе
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                enabled: captionStrip.seekable
-                                                cursorShape: Qt.PointingHandCursor
-
-                                                function apply(mouse) {
-                                                    captionStrip.seekHold =
-                                                        Math.max(0, Math.min(1,
-                                                            mouse.x / width))
-                                                }
-
-                                                onPressed: (mouse) => apply(mouse)
-                                                onPositionChanged: (mouse) => {
-                                                    if (pressed)
-                                                        apply(mouse)
-                                                }
-                                                onReleased: {
-                                                    if (captionStrip.seekHold >= 0
-                                                            && playerTile.player)
-                                                        playerTile.player.position =
-                                                            captionStrip.seekHold
-                                                                * playerTile.player.length
-
-                                                    seekHoldReset.restart()
-                                                }
+                                            onPressed: (mouse) => apply(mouse)
+                                            onPositionChanged: (mouse) => {
+                                                if (pressed)
+                                                    apply(mouse)
                                             }
+                                            onReleased: {
+                                                if (captionStrip.seekHold >= 0
+                                                        && playerTile.player)
+                                                    playerTile.player.position =
+                                                        captionStrip.seekHold
+                                                            * playerTile.player.length
 
-                                            Timer {
-                                                id: seekHoldReset
-                                                interval: 500
-                                                onTriggered: captionStrip.seekHold = -1
+                                                seekHoldReset.restart()
                                             }
                                         }
+
+                                        Timer {
+                                            id: seekHoldReset
+                                            interval: 500
+                                            onTriggered: captionStrip.seekHold = -1
+                                        }
+                                    }
+                                    }
                                     }
 
                                     // Wi-Fi и Bluetooth 1x1 — первые клетки
