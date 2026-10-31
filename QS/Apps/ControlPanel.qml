@@ -739,34 +739,22 @@ PanelWindow {
                                     y: leftPart.cellY(0) - Settings.line / 2
                                     width: leftPart.cell * 3 + leftPart.gap * 2 + Settings.line
                                     height: leftPart.cell * 3 + leftPart.gap * 2 + Settings.line
-
+                                    
                                     property var player: root.mprisPlayer
                                     property bool hasTrack:
                                         player !== null && player.trackTitle !== ""
-
                                     property real polledPos: 0
-
-                                    readonly property real cornerCut:
-                                        Settings.line * 2
-
-
+                                    readonly property real cornerCut: Settings.line * 2
+                                    
                                     // опрос позиции трека
-                                    Timer {
-                                        interval: 500
-                                        repeat: true
-                                        running: playerTile.player !== null
-                                            && playerTile.player.positionSupported
-
-                                        onTriggered: {
-                                            if (playerTile.player)
-                                                playerTile.polledPos =
-                                                    playerTile.player.position
+                                        Timer {
+                                            id: seekHoldReset
+                                            interval: 500
+                                            onTriggered: captionStrip.seekHold = -1
                                         }
-                                    }
-
-                                    // фон и рамка карточки; обложка — контент
-                                    // панели: режется по силуэту и всегда
-                                    // остаётся под обводкой
+                                    
+                                    // фон и рамка карточки; обложка и полоса — контент
+                                    // панели: режутся по силуэту и остаются под обводкой
                                     SPanel {
                                         anchors.fill: parent
                                         cornerCut: playerTile.cornerCut
@@ -969,7 +957,135 @@ PanelWindow {
                                         }
                                     }
                                     }
+                                    
+                                    // иконка-заглушка без обложки — в зоне над кнопками
+                                    VIcon {
+                                        anchors.centerIn: fallbackArea
+                                        visible: !playerTile.hasTrack
+                                            || playerTile.player.trackArtUrl === ""
+                                        width: playerTile.width * 0.26
+                                        height: width
+                                        fillPath: Glyphs.iconNote
+                                        lineColor: Settings.c1
                                     }
+                                    
+                                    Item {
+                                        id: fallbackArea
+                                        x: 0
+                                        y: 0
+                                        width: parent.width
+                                        height: controls.y
+                                    }
+                                    
+                                    // кнопки: prev / play-pause / next —
+                                    // только иконки, без плошек
+                                    Item {
+                                        id: controls
+                                        z: 3
+                                        width: btnPrev.width + btnPlay.width
+                                            + btnNext.width + Settings.line * 4
+                                        height: Math.max(
+                                            btnPrev.height, btnPlay.height,
+                                            btnNext.height)
+                                        x: (parent.width - width) / 2
+                                        y: captionStrip.y - height
+                                            - Settings.line * 2
+
+                                        component PlayerButton: Item {
+                                            id: playerButton
+
+                                            property string iconFill: ""
+                                            property bool btnEnabled: true
+
+                                            signal activated()
+
+        // недоступная кнопка плавно исчезает целиком: в теме только два
+        // цвета, полупрозрачных состояний нет
+        opacity: btnEnabled ? 1 : 0
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Settings.animBase
+            }
+        }
+
+                                            VIcon {
+                                                anchors.centerIn: parent
+                                                width: parent.width
+                                                height: parent.height
+                                                fillPath: playerButton.iconFill
+                                            }
+
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                anchors.margins:
+                                                    -Settings.line * 2
+                                                cursorShape:
+                                                    Qt.PointingHandCursor
+                                                enabled:
+                                                    playerButton.btnEnabled
+
+                                                onClicked:
+                                                    playerButton.activated()
+                                            }
+                                        }
+
+                                        PlayerButton {
+                                            id: btnPrev
+                                            x: 0
+                                            anchors.verticalCenter:
+                                                parent.verticalCenter
+                                            width: playerTile.width * 0.13
+                                            height: playerTile.width * 0.13
+                                            iconFill: Glyphs.iconPrev
+                                            btnEnabled: playerTile.hasTrack
+                                                && playerTile.player.canGoPrevious
+
+                                            onActivated: {
+                                                if (playerTile.player)
+                                                    playerTile.player.previous()
+                                            }
+                                        }
+
+                                        PlayerButton {
+                                            id: btnPlay
+                                            x: btnPrev.width
+                                                + Settings.line * 2
+                                            anchors.verticalCenter:
+                                                parent.verticalCenter
+                                            width: playerTile.width * 0.16
+                                            height: playerTile.width * 0.16
+                                            iconFill: playerTile.hasTrack
+                                                && playerTile.player.isPlaying
+                                                ? Glyphs.iconPause : Glyphs.iconPlay
+                                            btnEnabled: playerTile.hasTrack
+                                                && playerTile.player.canTogglePlaying
+
+                                            onActivated: {
+                                                if (playerTile.player)
+                                                    playerTile.player.togglePlaying()
+                                            }
+                                        }
+
+                                        PlayerButton {
+                                            id: btnNext
+                                            x: btnPrev.width + btnPlay.width
+                                                + Settings.line * 4
+                                            anchors.verticalCenter:
+                                                parent.verticalCenter
+                                            width: playerTile.width * 0.13
+                                            height: playerTile.width * 0.13
+                                            iconFill: Glyphs.iconNext
+                                            btnEnabled: playerTile.hasTrack
+                                                && playerTile.player.canGoNext
+
+                                            onActivated: {
+                                                if (playerTile.player)
+                                                    playerTile.player.next()
+                                            }
+                                        }
+                                    }
+                                }
 
                                     // Wi-Fi и Bluetooth 1x1 — первые клетки
                                     // ряда пустышек, открывают свои колёса
