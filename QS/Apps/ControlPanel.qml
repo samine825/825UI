@@ -453,9 +453,10 @@ PanelWindow {
         // выключенный слайдер прячется целиком
         visible: available
 
-        // базовый слой
-        SFrame {
+        // базовый слой — одна форма с плитками (срез углов 2 линии)
+        SPanel {
             anchors.fill: parent
+            cornerCut: Settings.line * 2
             fillColor: Settings.c2
             strokeColor: Settings.c1
         }
@@ -488,9 +489,10 @@ PanelWindow {
 
                 // заливка c1 с зазором-тенью внутри: отделяет заливку
                 // от обводки слайдера ровно одной линией и на прямых,
-                // и на косых гранях
-                SFrame {
+                // и на срезах углов
+                SPanel {
                     anchors.fill: parent
+                    cornerCut: Settings.line * 2
                     fillColor: Settings.c1
                     strokeColor: "transparent"
                     shadow: "inside"
