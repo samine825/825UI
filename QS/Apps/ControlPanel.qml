@@ -263,6 +263,7 @@ PanelWindow {
 
     // элементы колеса: сети, отсортированные по уровню сигнала
     readonly property var wifiItems: {
+        const tick = root.statusTick // пересчёт по истечении меток failed
         const dev = root.wifiDevice
         if (!dev || !dev.networks)
             return []
@@ -276,11 +277,8 @@ PanelWindow {
                 continue
 
             arr.push({
-                label: n.name
-                    + (n.connected ? " •" : (n.stateChanging ? " …" : "")),
-                icon: "",
-                glyphFill: root.iconWifiDot,
-                glyphStroke: root.iconWifi,
+                label: n.name,
+                status: root.wifiStatus(n),
                 net: n
             })
         }
@@ -291,6 +289,7 @@ PanelWindow {
 
     // элементы колеса: спаренные и обнаруженные Bluetooth-устройства
     readonly property var btItems: {
+        const tick = root.statusTick // пересчёт по истечении меток failed
         const adapter = Bluetooth.defaultAdapter
         if (!adapter || !adapter.devices)
             return []
@@ -303,16 +302,9 @@ PanelWindow {
             if (!d)
                 continue
 
-            const busy = d.pairing
-                || d.state === BluetoothDeviceState.Connecting
-                || d.state === BluetoothDeviceState.Disconnecting
-
             arr.push({
-                label: (d.name !== "" ? d.name : d.address)
-                    + (d.connected ? " •" : (busy ? " …" : "")),
-                icon: "",
-                glyphFill: "",
-                glyphStroke: root.iconBluetooth,
+                label: (d.name !== "" ? d.name : d.address),
+                status: root.btStatus(d),
                 dev: d
             })
         }
@@ -333,11 +325,9 @@ PanelWindow {
                 continue
 
             arr.push({
-                label: (n.description !== "" ? n.description : n.nickname)
-                    + (n === Pipewire.defaultAudioSink ? " •" : ""),
-                icon: "",
-                glyphFill: root.iconVolumeBody,
-                glyphStroke: root.iconVolumeWaves,
+                label: (n.description !== "" ? n.description : n.nickname),
+                status: n === Pipewire.defaultAudioSink
+                    ? "connected" : "",
                 node: n
             })
         }
@@ -357,17 +347,120 @@ PanelWindow {
                 continue
 
             arr.push({
-                label: (n.description !== "" ? n.description : n.nickname)
-                    + (n === Pipewire.defaultAudioSource ? " •" : ""),
-                icon: "",
-                glyphFill: "",
-                glyphStroke: root.iconMic,
+                label: (n.description !== "" ? n.description : n.nickname),
+                status: n === Pipewire.defaultAudioSource
+                    ? "connected" : "",
                 node: n
             })
         }
 
         arr.sort((a, b) => a.label.localeCompare(b.label))
         return arr
+    }
+
+    // === СТАТУСЫ ПОДКЛЮЧЕНИЯ ===
+    // У модуля Quickshell.Networking подключённая сеть не помечается
+    // (connected=false, state=Disconnected), поэтому статус wifi берём
+    // из nmcli. Переход «подключается» -> «отключено» без успеха считается
+    // ошибкой: ключ (имя сети / адрес устройства) хранит, был ли он в
+    // процессе подключения, и метку времени, до которой показывается
+    // значок ошибки. Разрыв связи ошибкой не считается.
+    property var wifiWasBusy: ({})
+    property var btWasBusy: ({})
+    property var wifiFailUntil: ({})
+    property var btFailUntil: ({})
+    property int statusTick: 0
+
+    property string nmWifiRaw: ""
+
+    Process {
+        id: nmWifiProcess
+
+        command: ["nmcli", "-t", "-f", "DEVICE,STATE,CONNECTION", "device", "status"]
+
+        stdout: StdioCollector {
+            onStreamFinished: root.nmWifiRaw = this.text
+        }
+    }
+
+    Timer {
+        interval: 1000; repeat: true; running: true
+        onTriggered: if (!nmWifiProcess.running) nmWifiProcess.running = true
+    }
+
+    Timer {
+        id: statusFailTimer
+        interval: 3000
+        onTriggered: root.statusTick++
+    }
+
+    // активное подключение wifi-устройства: {name, busy};
+    // busy — «connecting (… nmcli)», деактивация ошибкой не считается
+    function nmWifiActive() {
+        const dev = root.wifiDevice
+        if (!dev)
+            return { name: "", busy: false }
+
+        const lines = root.nmWifiRaw.split("\n")
+
+        for (let i = 0; i < lines.length; i++) {
+            const parts = lines[i].split(":")
+
+            if (parts.length < 3 || parts[0] !== dev.name)
+                continue
+
+            // в -t режиме значения экранированы: "\:" -> ":"
+            const name = parts.slice(2).join(":").replace(/\\:/g, ":")
+
+            if (name === "")
+                return { name: "", busy: false }
+
+            if (parts[1] === "connected")
+                return { name: name, busy: false }
+
+            if (parts[1].startsWith("connecting"))
+                return { name: name, busy: true }
+        }
+
+        return { name: "", busy: false }
+    }
+
+    function applyFailMark(wasBusy, failUntil, key, s) {
+        if (s === "connecting") {
+            wasBusy[key] = true
+        } else if (s === "connected") {
+            delete wasBusy[key]
+            delete failUntil[key]
+        } else if (wasBusy[key]) {
+            wasBusy[key] = false
+            failUntil[key] = Date.now() + 3000
+            statusFailTimer.restart()
+        }
+
+        if (s === "" && failUntil[key] > Date.now())
+            return "failed"
+
+        return s
+    }
+
+    function wifiStatus(n) {
+        const act = root.nmWifiActive()
+
+        let s = ""
+        if (act.name === n.name)
+            s = act.busy ? "connecting" : "connected"
+
+        return applyFailMark(wifiWasBusy, wifiFailUntil, n.name, s)
+    }
+
+    function btStatus(d) {
+        let s = ""
+        if (d.connected || d.state === BluetoothDeviceState.Connected)
+            s = "connected"
+        else if (d.pairing || d.state === BluetoothDeviceState.Connecting)
+            s = "connecting"
+
+        return applyFailMark(btWasBusy, btFailUntil, d.address, s)
     }
 
     // === ПИТАНИЕ ===

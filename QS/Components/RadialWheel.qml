@@ -377,6 +377,11 @@ PanelWindow {
                             ? Settings.c2
                             : Settings.c1
 
+                    // у элементов с полем status место иконки показывает
+                    // статус подключения (wifi/bt/аудио), а не иконку
+                    readonly property bool hasStatus:
+                        appCell.modelData.status !== undefined
+                            && appCell.modelData.status !== null
 
                     Image {
                         id: cellIcon
@@ -393,6 +398,7 @@ PanelWindow {
                         fillMode: Image.PreserveAspectFit
                         smooth: true
                         visible: status === Image.Ready
+                            && !appCell.hasStatus
                     }
 
                     // векторный фолбэк, если иконка темы не загрузилась
@@ -410,6 +416,21 @@ PanelWindow {
 
                         visible: (fillPath !== "" || strokePath !== "")
                             && cellIcon.status !== Image.Ready
+                            && !appCell.hasStatus
+                    }
+
+                    // индикатор статуса: пусто / подключается / готово / ошибка
+                    StatusIcon {
+                        width: 30
+                        height: 30
+
+                        x: appCell.cx - width / 2
+                        y: appCell.cy + appCell.iconRadius + height - 10
+
+                        visible: appCell.hasStatus
+                            && appCell.modelData.status !== ""
+                        status: appCell.hasStatus
+                            ? appCell.modelData.status : ""
                     }
 
                     FontMetrics {
