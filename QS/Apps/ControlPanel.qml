@@ -633,9 +633,9 @@ PanelWindow {
                                 id: leftPart
                                 width: margin * 2
                                     + columns * cell + (columns - 1) * gap
-                                    // разделитель подтянут на пол-линии:
-                                    // зазор от плиток до линии = 1 line
-                                    - Settings.line / 2
+                                    // линия разделителя — в 1 line от
+                                    // кромки powerRow и плиток
+                                    - Settings.line * 1.25
                                 height: parent.height
 
                                 // плитки выросли на line (рамка = старым
@@ -797,6 +797,344 @@ PanelWindow {
                                             }
                                         }
                                     }
+                                        // нижняя полоса: прогресс — фон под
+                                        // бегущим текстом. Чёрное — не пройдено,
+                                        // белое — пройдено, текст инвертируется
+                                        // над белой частью.
+                                        Item {
+                                            id: captionStrip
+                                            z: 4
+                                            anchors.bottom: parent.bottom
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.margins: Settings.line / 2
+                                            height: 20
+                                            clip: true
+
+                                            // удержание позиции при перемотке
+                                            property real seekHold: -1
+
+                                            // медиа нельзя пролистать — белая
+                                            // заливка прогресса плавно исчезает
+                                            // (ширина к нулю), полоса остаётся
+                                            // фоном под текстом
+                                            readonly property bool seekable:
+                                                playerTile.hasTrack
+                                                && playerTile.player
+                                                && playerTile.player.canSeek
+
+                                            readonly property real ratio: seekHold >= 0 ? seekHold : (seekable && playerTile.player.length > 0 ? Math.max(0, Math.min(1, playerTile.polledPos / playerTile.player.length)) : 0)
+
+                                            readonly property string caption: playerTile.hasTrack ? (playerTile.player.trackArtist !== "" ? playerTile.player.trackArtist + " — " + playerTile.player.trackTitle : playerTile.player.trackTitle) : "Нет медиа"
+
+                                            // бегущая строка: текст листается
+                                            // вправо бесконечно, между
+                                            // повторами зазор marqueeGap
+                                            readonly property real marqueeGap: 40
+                                            readonly property real marqueePeriod: captionMetrics.width + marqueeGap
+                                            readonly property bool scrolling: captionMetrics.width > width - 20
+                                            property real marqueePhase: 0
+
+                                            TextMetrics {
+                                                id: captionMetrics
+                                                text: captionStrip.caption
+                                                font.pixelSize: Settings.textXs
+                                            }
+
+                                            NumberAnimation {
+                                                id: marqueeAnim
+                                                target: captionStrip
+                                                property: "marqueePhase"
+                                                loops: Animation.Infinite
+                                                from: 0
+                                                to: captionStrip.marqueePeriod
+                                                duration: captionStrip.marqueePeriod / 26 * 1000
+                                                running: captionStrip.scrolling
+                                            }
+
+                                            Connections {
+                                                target: captionMetrics
+                                                function onTextChanged() {
+                                                    captionStrip.marqueePhase = 0
+                                                    marqueeAnim.restart()
+                                                }
+                                            }
+
+                                            // чёрное — отсутствие прогресса
+                                            SRectangle {
+                                                anchors.fill: parent
+                                                color: Settings.c2
+                                            }
+
+                                            // белое — пройденная часть
+                                            SRectangle {
+                                                anchors.top: parent.top
+                                                anchors.bottom: parent.bottom
+                                                anchors.left: parent.left
+                                                width: parent.width * captionStrip.ratio
+                                                color: Settings.c1
+
+                                                Behavior on width {
+                                                    NumberAnimation { duration: Settings.animBase }
+                                                }
+                                            }
+
+                                            // бегущий текст: белый по чёрному,
+                                            // две копии для бесшовного цикла
+                                            SText {
+                                                y: (parent.height - height) / 2
+                                                x: captionStrip.scrolling
+                                                    ? -captionStrip.marqueePhase
+                                                    : (captionStrip.width - captionMetrics.width) / 2
+                                                text: captionStrip.caption
+                                                color: Settings.c1
+                                                font.pixelSize: Settings.textXs
+                                            }
+
+                                            SText {
+                                                visible: captionStrip.scrolling
+                                                y: (parent.height - height) / 2
+                                                x: captionStrip.marqueePeriod
+                                                    - captionStrip.marqueePhase
+                                                text: captionStrip.caption
+                                                color: Settings.c1
+                                                font.pixelSize: Settings.textXs
+                                            }
+
+                                            // чёрные копии, обрезанные до
+                                            // пройденной части
+                                            Item {
+                                                anchors.top: parent.top
+                                                anchors.bottom: parent.bottom
+                                                anchors.left: parent.left
+                                                width: parent.width * captionStrip.ratio
+                                                clip: true
+
+                                                Behavior on width {
+                                                    NumberAnimation { duration: Settings.animBase }
+                                                }
+
+                                                SText {
+                                                    y: (parent.height - height) / 2
+                                                    x: captionStrip.scrolling
+                                                        ? -captionStrip.marqueePhase
+                                                        : (captionStrip.width - captionMetrics.width) / 2
+                                                    text: captionStrip.caption
+                                                    color: Settings.c2
+                                                    font.pixelSize: Settings.textXs
+                                                }
+
+                                                SText {
+                                                    visible: captionStrip.scrolling
+                                                    y: (parent.height - height) / 2
+                                                    x: captionStrip.marqueePeriod
+                                                        - captionStrip.marqueePhase
+                                                    text: captionStrip.caption
+                                                    color: Settings.c2
+                                                    font.pixelSize: Settings.textXs
+                                                }
+                                            }
+
+                                            // перемотка: клик и драг по полосе
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                enabled: captionStrip.seekable
+                                                cursorShape: Qt.PointingHandCursor
+
+                                                function apply(mouse) {
+                                                    captionStrip.seekHold =
+                                                        Math.max(0, Math.min(1,
+                                                            mouse.x / width))
+                                                }
+
+                                                onPressed: (mouse) => apply(mouse)
+                                                onPositionChanged: (mouse) => {
+                                                    if (pressed)
+                                                        apply(mouse)
+                                                }
+                                                onReleased: {
+                                                    if (captionStrip.seekHold >= 0
+                                                            && playerTile.player)
+                                                        playerTile.player.position =
+                                                            captionStrip.seekHold
+                                                                * playerTile.player.length
+
+                                                    seekHoldReset.restart()
+                                                }
+                                            }
+
+                                            Timer {
+                                                id: seekHoldReset
+                                                interval: 500
+                                                onTriggered: captionStrip.seekHold = -1
+                                            }
+                                        }
+                                    }
+
+                                    // Wi-Fi и Bluetooth 1x1 — первые клетки
+                                    // ряда пустышек, открывают свои колёса
+                                    STile {
+                                        x: leftPart.cellX(0) - Settings.line / 2
+                                        y: leftPart.cellY(3) - Settings.line / 2
+                                        width: leftPart.cell + Settings.line
+                                        height: leftPart.cell + Settings.line
+                                        iconFill: Glyphs.iconWifiDot
+                                        iconStroke: Glyphs.iconWifi
+
+                                        active: Networking.wifiEnabled
+
+                                        onActivated: Networking.wifiEnabled =
+                                            !Networking.wifiEnabled
+
+                                        onSecondaryActivated: {
+                                            if (!active)
+                                                return
+
+                                            root.hide()
+                                            wifiWheel.show()
+                                        }
+                                    }
+
+                                    STile {
+                                        x: leftPart.cellX(1) - Settings.line / 2
+                                        y: leftPart.cellY(3) - Settings.line / 2
+                                        width: leftPart.cell + Settings.line
+                                        height: leftPart.cell + Settings.line
+                                        iconStroke: Glyphs.iconBluetooth
+
+                                        active: Bluetooth.defaultAdapter !== null
+                                            && Bluetooth.defaultAdapter.enabled
+
+                                        onActivated: {
+                                            const adapter = Bluetooth.defaultAdapter
+
+                                            if (!adapter)
+                                                return
+
+                                            if (adapter.enabled)
+                                                adapter.enabled = false
+                                            else
+                                                btUnblock.running = true
+                                        }
+
+                                        onSecondaryActivated: {
+                                            if (!active)
+                                                return
+
+                                            root.hide()
+                                            btWheel.show()
+                                        }
+                                    }
+
+                                    // Пустышки 1x1 (стиль плиток обоев), ниже
+                                    // плеера — первые две клетки ряда заняты
+                                    // Wi-Fi и Bluetooth
+                                    Repeater {
+                                        model: [
+                                            Qt.point(2, 3), Qt.point(3, 3),
+                                            Qt.point(4, 3), Qt.point(5, 3),
+                                            Qt.point(0, 4), Qt.point(1, 4)
+                                        ]
+
+                                        delegate: SPanel {
+                                            property int tileCol: modelData.x
+                                            property int tileRow: modelData.y
+
+                                            x: leftPart.cellX(tileCol) - Settings.line / 2
+                                            y: leftPart.cellY(tileRow) - Settings.line / 2
+                                            width: leftPart.cell + Settings.line
+                                            height: leftPart.cell + Settings.line
+
+                                            cornerCut: Settings.line * 2
+                                            strokeColor: Settings.c1
+                                            fillColor: "transparent"
+                                        }
+                                    }
+
+                                    // Нижняя панель питания: скосы, разбита
+                                    // перегородками на 5 секторов
+                                    Item {
+                                        id: powerRow
+                                        x: leftPart.margin - Settings.line / 2
+                                        y: leftPart.height - leftPart.margin
+                                            - leftPart.cell - Settings.line / 2
+                                        width: leftPart.columns * leftPart.cell
+                                            + (leftPart.columns - 1) * leftPart.gap
+                                            + Settings.line
+                                        height: leftPart.cell + Settings.line
+
+                                        readonly property int btnCount: 5
+                                        readonly property real btnW: width / btnCount
+
+                                        // коробка секции
+                                        SPanel {
+                                            anchors.fill: parent
+                                            cornerCut: Settings.line * 2
+                                            strokeColor: Settings.c1
+                                            fillColor: Settings.c2
+                                        }
+
+                                        // вертикальные перегородки между секторами
+                                        Repeater {
+                                            model: powerRow.btnCount - 1
+
+                                            delegate: Shape {
+                                                x: (index + 1)
+                                                    * powerRow.btnW
+                                                    - Settings.line / 2
+                                                width: Settings.line
+                                                height: parent.height
+
+                                                preferredRendererType: Shape.CurveRenderer
+
+                                                SShapePath {
+                                                    joinStyle: ShapePath.MiterJoin
+                                                    capStyle: ShapePath.FlatCap
+                                                    strokeColor: Settings.c1
+                                                    strokeWidth: Settings.line
+                                                    startX: Settings.line / 2
+                                                    startY: 0
+                                                    PathLine {
+                                                        x: Settings.line / 2
+                                                        y: parent.height
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // иконки и клики по секциям
+                                        Repeater {
+                                            model: [
+                                                { fill: "", stroke: Glyphs.iconPowerStroke, cmd: "poweroff" },
+                                                { fill: "", stroke: Glyphs.iconRebootStroke, cmd: "reboot" },
+                                                { fill: Glyphs.iconMoonFill, stroke: "", cmd: "suspend" },
+                                                { fill: "", stroke: Glyphs.iconHibernateStroke, cmd: "hibernate" },
+                                                { fill: Glyphs.iconLockFill, stroke: Glyphs.iconLockStroke, cmd: "" }
+                                            ]
+
+                                            delegate: Item {
+                                                x: index * powerRow.btnW
+                                                width: powerRow.btnW
+                                                height: parent.height
+
+                                                VIcon {
+                                                    anchors.centerIn: parent
+                                                    width: parent.height * 0.55
+                                                    height: width
+                                                    fillPath: modelData.fill
+                                                    strokePath: modelData.stroke
+                                                }
+
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+
+                                                    onClicked: root.powerAction(modelData.cmd)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
 
                                     // иконка-заглушка без обложки —
                                     // в зоне над кнопками
@@ -927,344 +1265,7 @@ PanelWindow {
                                         }
                                     }
 
-                                    // нижняя полоса: прогресс — фон под
-                                    // бегущим текстом. Чёрное — не пройдено,
-                                    // белое — пройдено, текст инвертируется
-                                    // над белой частью.
-                                    Item {
-                                        id: captionStrip
-                                        z: 4
-                                        anchors.bottom: parent.bottom
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        anchors.margins: Settings.line
-                                        height: 20
-                                        clip: true
 
-                                        // удержание позиции при перемотке
-                                        property real seekHold: -1
-
-                                        // медиа нельзя пролистать — белая
-                                        // заливка прогресса плавно исчезает
-                                        // (ширина к нулю), полоса остаётся
-                                        // фоном под текстом
-                                        readonly property bool seekable:
-                                            playerTile.hasTrack
-                                            && playerTile.player
-                                            && playerTile.player.canSeek
-
-                                        readonly property real ratio: seekHold >= 0 ? seekHold : (seekable && playerTile.player.length > 0 ? Math.max(0, Math.min(1, playerTile.polledPos / playerTile.player.length)) : 0)
-
-                                        readonly property string caption: playerTile.hasTrack ? (playerTile.player.trackArtist !== "" ? playerTile.player.trackArtist + " — " + playerTile.player.trackTitle : playerTile.player.trackTitle) : "Нет медиа"
-
-                                        // бегущая строка: текст листается
-                                        // вправо бесконечно, между
-                                        // повторами зазор marqueeGap
-                                        readonly property real marqueeGap: 40
-                                        readonly property real marqueePeriod: captionMetrics.width + marqueeGap
-                                        readonly property bool scrolling: captionMetrics.width > width - 20
-                                        property real marqueePhase: 0
-
-                                        TextMetrics {
-                                            id: captionMetrics
-                                            text: captionStrip.caption
-                                            font.pixelSize: Settings.textXs
-                                        }
-
-                                        NumberAnimation {
-                                            id: marqueeAnim
-                                            target: captionStrip
-                                            property: "marqueePhase"
-                                            loops: Animation.Infinite
-                                            from: 0
-                                            to: captionStrip.marqueePeriod
-                                            duration: captionStrip.marqueePeriod / 26 * 1000
-                                            running: captionStrip.scrolling
-                                        }
-
-                                        Connections {
-                                            target: captionMetrics
-                                            function onTextChanged() {
-                                                captionStrip.marqueePhase = 0
-                                                marqueeAnim.restart()
-                                            }
-                                        }
-
-                                        // чёрное — отсутствие прогресса
-                                        SRectangle {
-                                            anchors.fill: parent
-                                            color: Settings.c2
-                                        }
-
-                                        // белое — пройденная часть
-                                        SRectangle {
-                                            anchors.top: parent.top
-                                            anchors.bottom: parent.bottom
-                                            anchors.left: parent.left
-                                            width: parent.width * captionStrip.ratio
-                                            color: Settings.c1
-
-                                            Behavior on width {
-                                                NumberAnimation { duration: Settings.animBase }
-                                            }
-                                        }
-
-                                        // бегущий текст: белый по чёрному,
-                                        // две копии для бесшовного цикла
-                                        SText {
-                                            y: (parent.height - height) / 2
-                                            x: captionStrip.scrolling
-                                                ? -captionStrip.marqueePhase
-                                                : (captionStrip.width - captionMetrics.width) / 2
-                                            text: captionStrip.caption
-                                            color: Settings.c1
-                                            font.pixelSize: Settings.textXs
-                                        }
-
-                                        SText {
-                                            visible: captionStrip.scrolling
-                                            y: (parent.height - height) / 2
-                                            x: captionStrip.marqueePeriod
-                                                - captionStrip.marqueePhase
-                                            text: captionStrip.caption
-                                            color: Settings.c1
-                                            font.pixelSize: Settings.textXs
-                                        }
-
-                                        // чёрные копии, обрезанные до
-                                        // пройденной части
-                                        Item {
-                                            anchors.top: parent.top
-                                            anchors.bottom: parent.bottom
-                                            anchors.left: parent.left
-                                            width: parent.width * captionStrip.ratio
-                                            clip: true
-
-                                            Behavior on width {
-                                                NumberAnimation { duration: Settings.animBase }
-                                            }
-
-                                            SText {
-                                                y: (parent.height - height) / 2
-                                                x: captionStrip.scrolling
-                                                    ? -captionStrip.marqueePhase
-                                                    : (captionStrip.width - captionMetrics.width) / 2
-                                                text: captionStrip.caption
-                                                color: Settings.c2
-                                                font.pixelSize: Settings.textXs
-                                            }
-
-                                            SText {
-                                                visible: captionStrip.scrolling
-                                                y: (parent.height - height) / 2
-                                                x: captionStrip.marqueePeriod
-                                                    - captionStrip.marqueePhase
-                                                text: captionStrip.caption
-                                                color: Settings.c2
-                                                font.pixelSize: Settings.textXs
-                                            }
-                                        }
-
-                                        // перемотка: клик и драг по полосе
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            enabled: captionStrip.seekable
-                                            cursorShape: Qt.PointingHandCursor
-
-                                            function apply(mouse) {
-                                                captionStrip.seekHold =
-                                                    Math.max(0, Math.min(1,
-                                                        mouse.x / width))
-                                            }
-
-                                            onPressed: (mouse) => apply(mouse)
-                                            onPositionChanged: (mouse) => {
-                                                if (pressed)
-                                                    apply(mouse)
-                                            }
-                                            onReleased: {
-                                                if (captionStrip.seekHold >= 0
-                                                        && playerTile.player)
-                                                    playerTile.player.position =
-                                                        captionStrip.seekHold
-                                                            * playerTile.player.length
-
-                                                seekHoldReset.restart()
-                                            }
-                                        }
-
-                                        Timer {
-                                            id: seekHoldReset
-                                            interval: 500
-                                            onTriggered: captionStrip.seekHold = -1
-                                        }
-                                    }
-                                }
-
-                                // Wi-Fi и Bluetooth 1x1 — первые клетки
-                                // ряда пустышек, открывают свои колёса
-                                STile {
-                                    x: leftPart.cellX(0) - Settings.line / 2
-                                    y: leftPart.cellY(3) - Settings.line / 2
-                                    width: leftPart.cell + Settings.line
-                                    height: leftPart.cell + Settings.line
-                                    iconFill: Glyphs.iconWifiDot
-                                    iconStroke: Glyphs.iconWifi
-
-                                    active: Networking.wifiEnabled
-
-                                    onActivated: Networking.wifiEnabled =
-                                        !Networking.wifiEnabled
-
-                                    onSecondaryActivated: {
-                                        if (!active)
-                                            return
-
-                                        root.hide()
-                                        wifiWheel.show()
-                                    }
-                                }
-
-                                STile {
-                                    x: leftPart.cellX(1) - Settings.line / 2
-                                    y: leftPart.cellY(3) - Settings.line / 2
-                                    width: leftPart.cell + Settings.line
-                                    height: leftPart.cell + Settings.line
-                                    iconStroke: Glyphs.iconBluetooth
-
-                                    active: Bluetooth.defaultAdapter !== null
-                                        && Bluetooth.defaultAdapter.enabled
-
-                                    onActivated: {
-                                        const adapter = Bluetooth.defaultAdapter
-
-                                        if (!adapter)
-                                            return
-
-                                        if (adapter.enabled)
-                                            adapter.enabled = false
-                                        else
-                                            btUnblock.running = true
-                                    }
-
-                                    onSecondaryActivated: {
-                                        if (!active)
-                                            return
-
-                                        root.hide()
-                                        btWheel.show()
-                                    }
-                                }
-
-                                // Пустышки 1x1 (стиль плиток обоев), ниже
-                                // плеера — первые две клетки ряда заняты
-                                // Wi-Fi и Bluetooth
-                                Repeater {
-                                    model: [
-                                        Qt.point(2, 3), Qt.point(3, 3),
-                                        Qt.point(4, 3), Qt.point(5, 3),
-                                        Qt.point(0, 4), Qt.point(1, 4)
-                                    ]
-
-                                    delegate: SPanel {
-                                        property int tileCol: modelData.x
-                                        property int tileRow: modelData.y
-
-                                        x: leftPart.cellX(tileCol) - Settings.line / 2
-                                        y: leftPart.cellY(tileRow) - Settings.line / 2
-                                        width: leftPart.cell + Settings.line
-                                        height: leftPart.cell + Settings.line
-
-                                        cornerCut: Settings.line * 2
-                                        strokeColor: Settings.c1
-                                        fillColor: "transparent"
-                                    }
-                                }
-
-                                // Нижняя панель питания: скосы, разбита
-                                // перегородками на 5 секторов
-                                Item {
-                                    id: powerRow
-                                    x: leftPart.margin - Settings.line / 2
-                                    y: leftPart.height - leftPart.margin
-                                        - leftPart.cell - Settings.line / 2
-                                    width: leftPart.columns * leftPart.cell
-                                        + (leftPart.columns - 1) * leftPart.gap
-                                        + Settings.line
-                                    height: leftPart.cell + Settings.line
-
-                                    readonly property int btnCount: 5
-                                    readonly property real btnW: width / btnCount
-
-                                    // коробка секции
-                                    SPanel {
-                                        anchors.fill: parent
-                                        cornerCut: Settings.line * 2
-                                        strokeColor: Settings.c1
-                                        fillColor: Settings.c2
-                                    }
-
-                                    // вертикальные перегородки между секторами
-                                    Repeater {
-                                        model: powerRow.btnCount - 1
-
-                                        delegate: Shape {
-                                            x: (index + 1)
-                                                * powerRow.btnW
-                                                - Settings.line / 2
-                                            width: Settings.line
-                                            height: parent.height
-
-                                            preferredRendererType: Shape.CurveRenderer
-
-                                            SShapePath {
-                                                joinStyle: ShapePath.MiterJoin
-                                                capStyle: ShapePath.FlatCap
-                                                strokeColor: Settings.c1
-                                                strokeWidth: Settings.line
-                                                startX: Settings.line / 2
-                                                startY: 0
-                                                PathLine {
-                                                    x: Settings.line / 2
-                                                    y: parent.height
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // иконки и клики по секциям
-                                    Repeater {
-                                        model: [
-                                            { fill: "", stroke: Glyphs.iconPowerStroke, cmd: "poweroff" },
-                                            { fill: "", stroke: Glyphs.iconRebootStroke, cmd: "reboot" },
-                                            { fill: Glyphs.iconMoonFill, stroke: "", cmd: "suspend" },
-                                            { fill: "", stroke: Glyphs.iconHibernateStroke, cmd: "hibernate" },
-                                            { fill: Glyphs.iconLockFill, stroke: Glyphs.iconLockStroke, cmd: "" }
-                                        ]
-
-                                        delegate: Item {
-                                            x: index * powerRow.btnW
-                                            width: powerRow.btnW
-                                            height: parent.height
-
-                                            VIcon {
-                                                anchors.centerIn: parent
-                                                width: parent.height * 0.55
-                                                height: width
-                                                fillPath: modelData.fill
-                                                strokePath: modelData.stroke
-                                            }
-
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                cursorShape: Qt.PointingHandCursor
-
-                                                onClicked: root.powerAction(modelData.cmd)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
 
                             // Вертикальный разделитель между зонами.
                             // Штрих от левой кромки элемента: элемент
