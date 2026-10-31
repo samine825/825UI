@@ -585,7 +585,7 @@ PanelWindow {
                 Item {
                     id: dateBar
                     width: parent.width - (InfexGeometry.tipMult * Settings.line / 2)
-                    height: Settings.barHeight - Settings.line
+                    height: Settings.barHeight
                     anchors.horizontalCenter: parent.horizontalCenter
 
                     property real point: height * InfexGeometry.notchFrac
@@ -633,6 +633,9 @@ PanelWindow {
                                 id: leftPart
                                 width: margin * 2
                                     + columns * cell + (columns - 1) * gap
+                                    // разделитель подтянут на пол-линии:
+                                    // зазор от плиток до линии = 1 line
+                                    - Settings.line / 2
                                 height: parent.height
 
                                 // плитки выросли на line (рамка = старым
@@ -1185,7 +1188,9 @@ PanelWindow {
                                     x: leftPart.margin - Settings.line / 2
                                     y: leftPart.height - leftPart.margin
                                         - leftPart.cell - Settings.line / 2
-                                    width: leftPart.width - leftPart.margin * 2 + Settings.line
+                                    width: leftPart.columns * leftPart.cell
+                                        + (leftPart.columns - 1) * leftPart.gap
+                                        + Settings.line
                                     height: leftPart.cell + Settings.line
 
                                     readonly property int btnCount: 5

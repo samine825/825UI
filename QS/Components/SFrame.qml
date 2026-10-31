@@ -104,9 +104,9 @@ Item {
             strokeWidth: 0
         }
 
-        // внутренняя тень — параллельный сдвиг заливки внутрь на линию
+        // внутренняя тень — в линию внутрь от основной обводки
         HexContour {
-            inset: frame.baseInset + frame.fillInset
+            inset: frame.baseInset
             shift: Settings.line
             fillColor: "transparent"
             strokeColor: frame.shadow === "inside"

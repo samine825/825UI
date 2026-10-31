@@ -98,9 +98,9 @@ Item {
             strokeWidth: 0
         }
 
-        // внутренняя тень — параллельный сдвиг заливки внутрь на линию
+        // внутренняя тень — в линию внутрь от основной обводки
         CutContour {
-            o: panel.fillInset + Settings.line
+            o: Settings.line
             fillColor: "transparent"
             strokeColor: panel.shadow === "inside"
                 ? panel.shadowColor : "transparent"
