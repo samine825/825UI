@@ -231,11 +231,11 @@ PanelWindow {
                 // --- Tabs ---
                 Item {
                     id: tabBar
-                    width: parent.width - ((313.856 / 150) * Settings.line/2)
+                    width: parent.width - (InfexGeometry.tipMult * Settings.line/2)
                     height: Settings.barHeight - Settings.line
                     anchors.horizontalCenter: parent.horizontalCenter
 
-                    property real point: height * (403.16 / 1000)
+                    property real point: height * InfexGeometry.notchFrac
                     property real tabWidth: width / root.tabNames.length
 
                     property real tabBorderWidth: Settings.line
@@ -312,7 +312,7 @@ PanelWindow {
                         preferredRendererType: Shape.CurveRenderer
 
                         property real indH: tabBar.height - Settings.line * 3
-                        property real indPoint: indH * (403.16 / 1000)
+                        property real indPoint: indH * InfexGeometry.notchFrac
 
                         width: tabBar.tabWidth - Settings.line * 6
                         height: indH

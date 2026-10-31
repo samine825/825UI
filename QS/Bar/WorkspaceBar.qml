@@ -7,7 +7,7 @@ import "../Components"
 import "../"
 Item {
     id: r
-    width: root.workspaceCount * root.cellWidth + Settings.barGap + Settings.line * (192.773/150) * 1.5
+    width: root.workspaceCount * root.cellWidth + Settings.barGap + Settings.line * InfexGeometry.edgeMult * 1.5
     WheelHandler {
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         onWheel: (event) => {
@@ -31,7 +31,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         height: Settings.barHeight
         readonly property int workspaceCount: 10
-        readonly property real cellWidth: Settings.barHeight - Settings.line * 2 + Settings.line * (192.773/150) * 2
+        readonly property real cellWidth: Settings.barHeight - Settings.line * 2 + Settings.line * InfexGeometry.edgeMult * 2
 
 
         readonly property int currentIndex: {
@@ -58,7 +58,7 @@ Item {
             width: root.workspaceCount * root.cellWidth
             height: Math.max(1, root.height - Settings.line)
 
-            readonly property real point: height * (403.16 / 1000)
+            readonly property real point: height * InfexGeometry.notchFrac
 
             readonly property real activeExtra:
                 root.currentIndex >= 0 ? 2 * point : 0
@@ -171,8 +171,8 @@ Item {
                 preferredRendererType: Shape.CurveRenderer
                 visible: root.currentIndex >= 0
 
-                readonly property real inset: Settings.line * (313.857/150) * 1.5
-                readonly property real point: height * (403.16 / 1000)
+                readonly property real inset: Settings.line * InfexGeometry.tipMult * 1.5
+                readonly property real point: height * InfexGeometry.notchFrac
 
                 width: Math.max(1,
                     workspaceBar.cellWidth + workspaceBar.activeExtra
@@ -347,10 +347,10 @@ Item {
                                 || root.currentIndex <= index
 
                             if (leftNotch && !rightNotch)
-                                return Settings.line * (192.773/150)
+                                return Settings.line * InfexGeometry.edgeMult
 
                             if (rightNotch && !leftNotch)
-                                return -Settings.line * (192.773/150)
+                                return -Settings.line * InfexGeometry.edgeMult
 
                             return 0
                         }

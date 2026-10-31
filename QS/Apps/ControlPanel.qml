@@ -487,7 +487,7 @@ PanelWindow {
         property color fillColor: "transparent"
         property color strokeColor: "transparent"
         property real strokeWidth: Settings.line
-        property real pointRatio: 403.16 / 1000
+        property real pointRatio: InfexGeometry.notchFrac
 
         readonly property real notchPt: height * pointRatio
 
@@ -585,7 +585,7 @@ PanelWindow {
                     anchors.fill: parent
                     preferredRendererType: Shape.CurveRenderer
 
-                    readonly property real k: 2 * (403.16 / 1000)
+                    readonly property real k: 2 * InfexGeometry.notchFrac
                     // горизонтальный сдвиг косой грани при
                     // перпендикулярном зазоре в одну линию
                     readonly property real s:
@@ -798,11 +798,11 @@ PanelWindow {
                 // --- Большой бар с датой (в стиле табов из настроек, но без табов) ---
                 Item {
                     id: dateBar
-                    width: parent.width - ((313.856 / 150) * Settings.line / 2)
+                    width: parent.width - (InfexGeometry.tipMult * Settings.line / 2)
                     height: Settings.barHeight - Settings.line
                     anchors.horizontalCenter: parent.horizontalCenter
 
-                    property real point: height * (403.16 / 1000)
+                    property real point: height * InfexGeometry.notchFrac
                     property real tabBorderWidth: Settings.line
                     property real blackOutlineWidth: Settings.line
 

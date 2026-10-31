@@ -15,7 +15,7 @@ Item {
 
     Item {
         id: root
-        x: Settings.barGap + Settings.line * (192.773/150) * 1.5
+        x: Settings.barGap + Settings.line * InfexGeometry.edgeMult * 1.5
         width: parent.width
         height: Settings.barHeight
         anchors.verticalCenter: parent.verticalCenter
@@ -27,7 +27,7 @@ Item {
         property double previousTotal: 0
         property double previousIdle: 0
 
-        readonly property real point: height * (403.16 / 1000)
+        readonly property real point: height * InfexGeometry.notchFrac
 
         // 1. Внешний Shape (Фон панели и толстая обводка)
         Shape {

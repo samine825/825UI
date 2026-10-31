@@ -156,7 +156,7 @@ PanelWindow {
                     anchors.fill: parent
                     z: 1
 
-                    property real pointCoef: (403.16 / 1000)
+                    property real pointCoef: InfexGeometry.notchFrac
 
                     // Перегородка j лежит между секторами d = (half - j) mod N
                     // и d + 1. В секторе r показывается клетка
@@ -290,7 +290,7 @@ PanelWindow {
                         }
 
                         readonly property real rMid: (rr + r) / 2
-                        readonly property real pointCoef: 403.16 / 1000
+                        readonly property real pointCoef: InfexGeometry.notchFrac
                         readonly property real notchDepth: pointCoef
                             * (wheel.thickness - wheel.line * 3)
 

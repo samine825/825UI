@@ -6,7 +6,7 @@ import "../Components"
 import "../"
 Item {
     id: r
-    width: textContainer.width + Settings.line * (313.857/150) * 3 + 1
+    width: textContainer.width + Settings.line * InfexGeometry.tipMult * 3 + 1
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
@@ -24,7 +24,7 @@ Item {
 
         property date currentTime: new Date()
 
-        readonly property real workspaceBarPoint: backgroundContainer.height * (403.16 / 1000)
+        readonly property real workspaceBarPoint: backgroundContainer.height * InfexGeometry.notchFrac
 
         Item {
             id: backgroundContainer

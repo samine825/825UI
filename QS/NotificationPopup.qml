@@ -51,7 +51,7 @@ Rectangle {
                 visible: false
 
                 property real point: parent.height * 0.5
-                property real pad: parent.height * (313.857/2000)
+                property real pad: parent.height * InfexGeometry.tipFrac / 2
 
                 ShapePath {
                     joinStyle: ShapePath.MiterJoin
@@ -94,8 +94,8 @@ Rectangle {
 
                     anchors.topMargin: 10
                     anchors.bottomMargin: 10
-                    anchors.leftMargin: (popupWindow.startSize*(popupWindow.width + popupWindow.startSize - (2*popupWindow.maxWidth)))/(2*(popupWindow.startSize - popupWindow.maxWidth)) + (313.857/150) * popupWindow.line
-                    anchors.rightMargin: (popupWindow.startSize*(popupWindow.width + popupWindow.startSize - (2*popupWindow.maxWidth)))/(2*(popupWindow.startSize - popupWindow.maxWidth)) + (313.857/150) * popupWindow.line
+                    anchors.leftMargin: (popupWindow.startSize*(popupWindow.width + popupWindow.startSize - (2*popupWindow.maxWidth)))/(2*(popupWindow.startSize - popupWindow.maxWidth)) + InfexGeometry.tipMult * popupWindow.line
+                    anchors.rightMargin: (popupWindow.startSize*(popupWindow.width + popupWindow.startSize - (2*popupWindow.maxWidth)))/(2*(popupWindow.startSize - popupWindow.maxWidth)) + InfexGeometry.tipMult * popupWindow.line
                     //(startSize*(width + startSize - 2*maxWidth))/(2*(startSize - maxWidth))
                     Image {
                         id: notifImage
@@ -330,7 +330,7 @@ Rectangle {
         target: popupWindow
         property: "x"
         from: popupWindow.x
-        to: popupWindow.screenX - maxWidth - ((20*(313.857/2000) * popupWindow.line) / 1.5)
+        to: popupWindow.screenX - maxWidth - ((1.5 * InfexGeometry.tipMult * popupWindow.line) / 1.5)
         duration: 700
         running: ugolFinished !== false && closeClicked !== true
         easing.type: Easing.OutBack
@@ -374,7 +374,7 @@ Rectangle {
         target: popupWindow
         property: "x"
         from: popupWindow.x
-        to: popupWindow.screenX - (maxWidth+startSize+((20*(313.857/2000) * popupWindow.line) / 1.5))/2
+        to: popupWindow.screenX - (maxWidth+startSize+((1.5 * InfexGeometry.tipMult * popupWindow.line) / 1.5))/2
         duration: 1000
         running: uhod !== false || closeClicked !== false
         easing.type: Easing.InBack
@@ -408,7 +408,7 @@ Rectangle {
         enabled: false
 
         property real center: parent.height * 0.5
-        property real padX: (20*(313.857/2000) * popupWindow.line) / 3
+        property real padX: (1.5 * InfexGeometry.tipMult * popupWindow.line) / 3
         property real padY: popupWindow.line/2
 
         ShapePath {
@@ -439,7 +439,7 @@ Rectangle {
         
 
         property real center: parent.height * 0.5
-        property real padX: (20*(313.857/2000) * popupWindow.line) / 3
+        property real padX: (1.5 * InfexGeometry.tipMult * popupWindow.line) / 3
         property real padY: popupWindow.line/2
         
         ShapePath {

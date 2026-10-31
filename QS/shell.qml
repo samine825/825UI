@@ -28,7 +28,7 @@ ShellRoot {
 
         // высота строки — как у заголовка из ControlPanel
         readonly property real rowHeight: Settings.barHeight - Settings.line
-        readonly property real rowPoint: rowHeight * (403.16 / 1000)
+        readonly property real rowPoint: rowHeight * InfexGeometry.notchFrac
 
         // всплывающие действия над чатом
         property string actionId: ""
