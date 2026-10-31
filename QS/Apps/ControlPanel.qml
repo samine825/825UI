@@ -453,10 +453,9 @@ PanelWindow {
         // выключенный слайдер прячется целиком
         visible: available
 
-        // базовый слой — одна форма с плитками (срез углов 2 линии)
-        SPanel {
+        // базовый слой
+        SFrame {
             anchors.fill: parent
-            cornerCut: Settings.line * 2
             fillColor: Settings.c2
             strokeColor: Settings.c1
         }
@@ -489,10 +488,9 @@ PanelWindow {
 
                 // заливка c1 с зазором-тенью внутри: отделяет заливку
                 // от обводки слайдера ровно одной линией и на прямых,
-                // и на срезах углов
-                SPanel {
+                // и на косых гранях
+                SFrame {
                     anchors.fill: parent
-                    cornerCut: Settings.line * 2
                     fillColor: Settings.c1
                     strokeColor: "transparent"
                     shadow: "inside"
@@ -657,9 +655,11 @@ PanelWindow {
 
                                 // Громкость 0x0, размер 3x1
                                 SliderTile {
-                                    x: leftPart.cellX(0) - Settings.line / 2
+                                    // отступы по 2 линии от зоны плиток: кромки c1 слайдера
+                                    // совпадают с кромками плиток (у них срез углов)
+                                    x: leftPart.cellX(0) + 1.5 * Settings.line
                                     y: leftPart.cellY(0) - Settings.line / 2
-                                    width: leftPart.cell * 3 + leftPart.gap * 2 + Settings.line
+                                    width: leftPart.cell * 3 + leftPart.gap * 2 - 3 * Settings.line
                                     height: leftPart.cell + Settings.line
 
                                     value: root.volumeMuted
@@ -680,9 +680,11 @@ PanelWindow {
 
                                 // Яркость 0x1, размер 3x1
                                 SliderTile {
-                                    x: leftPart.cellX(0) - Settings.line / 2
+                                    // отступы по 2 линии от зоны плиток: кромки c1 слайдера
+                                    // совпадают с кромками плиток (у них срез углов)
+                                    x: leftPart.cellX(0) + 1.5 * Settings.line
                                     y: leftPart.cellY(1) - Settings.line / 2
-                                    width: leftPart.cell * 3 + leftPart.gap * 2 + Settings.line
+                                    width: leftPart.cell * 3 + leftPart.gap * 2 - 3 * Settings.line
                                     height: leftPart.cell + Settings.line
 
                                     available: brightnessCtl.available
@@ -696,9 +698,11 @@ PanelWindow {
 
                                 // Микрофон 2x0, размер 3x1
                                 SliderTile {
-                                    x: leftPart.cellX(0) - Settings.line / 2
+                                    // отступы по 2 линии от зоны плиток: кромки c1 слайдера
+                                    // совпадают с кромками плиток (у них срез углов)
+                                    x: leftPart.cellX(0) + 1.5 * Settings.line
                                     y: leftPart.cellY(2) - Settings.line / 2
-                                    width: leftPart.cell * 3 + leftPart.gap * 2 + Settings.line
+                                    width: leftPart.cell * 3 + leftPart.gap * 2 - 3 * Settings.line
                                     height: leftPart.cell + Settings.line
 
                                     available: root.sourceAudio !== null
