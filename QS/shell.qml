@@ -74,30 +74,19 @@ ShellRoot {
             width: chatMenu.menuWidth - Settings.barGap
             height: parent.height
 
-            // вторая, тёмная обводка: её внешние кромки лежат
-            // ровно на краях экрана и не обрезаются
-            Panel {
-                x: Settings.line / 2
-                y: Settings.line / 2
-                width: parent.width - Settings.line
-                height: parent.height - Settings.line
-                cornerCut: Settings.line * (2 + Math.sqrt(2) / 2)
-                flatRight: true
-                strokeColor: Settings.c2
-                fillColor: Settings.c2
-                strokeWidth: Settings.line
-            }
-
-            Panel {
-                x: Settings.line * 1.5
-                y: Settings.line * 1.5
-                width: parent.width - Settings.line * 3
-                height: parent.height - Settings.line * 3
+            // границы = видимому внешнему краю обводки, тень лежит
+            // ровно в линию и достаёт до края экрана
+            SPanel {
+                x: Settings.line
+                y: Settings.line
+                width: parent.width - Settings.line * 2
+                height: parent.height - Settings.line * 2
                 cornerCut: Settings.line * 2
                 flatRight: true
                 strokeColor: Settings.c1
                 fillColor: Settings.c2
-                strokeWidth: Settings.line
+                shadow: "outside"
+                shadowColor: Settings.c2
             }
 
             // новый чат — голый плюс в углу
@@ -196,51 +185,12 @@ ShellRoot {
                             width: chatRows.width
                             height: chatMenu.rowHeight
 
-                            // внешняя тёмная обводка — как у заголовка
-                            Shape {
+                            // гранёный фрейм строки: активная заливается
+                            SFrame {
                                 anchors.fill: parent
                                 z: -1
-                                preferredRendererType: Shape.CurveRenderer
-
-                                SShapePath {
-                                    joinStyle: ShapePath.MiterJoin
-                                    capStyle: ShapePath.FlatCap
-                                    strokeColor: Settings.c2
-                                    strokeWidth: Settings.line * 3
-                                    fillColor: "transparent"
-
-                                    startX: 0
-                                    startY: 0
-                                    PathLine { x: chatRow.width;                    y: 0 }
-                                    PathLine { x: chatRow.width - chatMenu.rowPoint; y: chatRow.height / 2 }
-                                    PathLine { x: chatRow.width;                    y: chatRow.height }
-                                    PathLine { x: 0;                                 y: chatRow.height }
-                                    PathLine { x: chatMenu.rowPoint;                  y: chatRow.height / 2 }
-                                    PathLine { x: 0; y: 0 }
-                                }
-                            }
-
-                            Shape {
-                                anchors.fill: parent
-                                preferredRendererType: Shape.CurveRenderer
-
-                                SShapePath {
-                                    joinStyle: ShapePath.MiterJoin
-                                    capStyle: ShapePath.FlatCap
-                                    strokeColor: Settings.c1
-                                    strokeWidth: Settings.line
-                                    fillColor: chatRow.hot
-                                        ? Settings.c1 : Settings.c2
-
-                                    startX: 0
-                                    startY: 0
-                                    PathLine { x: chatRow.width;                    y: 0 }
-                                    PathLine { x: chatRow.width - chatMenu.rowPoint; y: chatRow.height / 2 }
-                                    PathLine { x: chatRow.width;                    y: chatRow.height }
-                                    PathLine { x: 0;                                 y: chatRow.height }
-                                    PathLine { x: chatMenu.rowPoint;                  y: chatRow.height / 2 }
-                                    PathLine { x: 0; y: 0 }
-                                }
+                                fillColor: chatRow.hot
+                                    ? Settings.c1 : Settings.c2
                             }
 
                             SText {
@@ -321,7 +271,7 @@ ShellRoot {
                                     Repeater {
                                         model: 3
 
-                                        delegate: Rectangle {
+                                        delegate: SRectangle {
                                             width: 3
                                             height: 3
                                             radius: 1.5
@@ -355,7 +305,7 @@ ShellRoot {
             }
 
             // меню действий над чатом
-            Panel {
+            SPanel {
                 id: actionsPanel
 
                 visible: chatMenu.actionId !== ""
@@ -367,7 +317,6 @@ ShellRoot {
                 cornerCut: Settings.line * 2
                 strokeColor: Settings.c1
                 fillColor: Settings.c2
-                strokeWidth: Settings.line
 
                 readonly property var target: cat.findChat(
                     chatMenu.actionId)
@@ -407,15 +356,6 @@ ShellRoot {
                             width: parent.width
                             height: 28
 
-                            readonly property bool hovered:
-                                actionHover.containsMouse
-
-                            Rectangle {
-                                anchors.fill: parent
-                                color: Settings.c1
-                                opacity: actionRow.hovered ? 1 : 0
-                            }
-
                             SText {
                                 x: 8
                                 y: 0
@@ -423,17 +363,13 @@ ShellRoot {
                                 height: parent.height
                                 verticalAlignment: Text.AlignVCenter
                                 text: actionRow.modelData.label
-                                color: actionRow.hovered
-                                    ? Settings.c2 : Settings.c1
-                                font.pixelSize: 12
+                                color: Settings.c1
+                                font.pixelSize: Settings.textXs
                                 elide: Text.ElideRight
                             }
 
                             MouseArea {
-                                id: actionHover
-
                                 anchors.fill: parent
-                                hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
 
                                 onClicked: {

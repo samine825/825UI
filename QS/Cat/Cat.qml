@@ -52,7 +52,7 @@ PanelWindow {
         id: cIcon
 
         property color lineColor: Settings.c1
-        property real strokeWidth: 2
+        property real strokeWidth: Settings.line / 2
         property string fillPath: ""
         property string strokePath: ""
 
@@ -156,7 +156,7 @@ PanelWindow {
                     width: 20
                     height: 20
                     lineColor: Settings.c1
-                    strokeWidth: 1.6
+                    strokeWidth: Settings.line / 2
                     strokePath: chip.iconPath
                 }
             }
@@ -218,7 +218,7 @@ PanelWindow {
                 verticalAlignment: Text.AlignVCenter
                 text: chip.baseName(chip.name)
                 color: Settings.c1
-                font.pixelSize: 11
+                font.pixelSize: Settings.textXs
                 elide: Text.ElideMiddle
             }
 
@@ -231,13 +231,13 @@ PanelWindow {
                 verticalAlignment: Text.AlignVCenter
                 text: chip.extName(chip.name)
                 color: Settings.c1
-                font.pixelSize: 9
+                font.pixelSize: Settings.textXs
                 font.bold: true
                 elide: Text.ElideRight
             }
 
             // удаление вложения — только в поле ввода
-            Rectangle {
+            SRectangle {
                 visible: chip.removable
                 z: 4
                 x: chip.tileW - 16
@@ -247,14 +247,14 @@ PanelWindow {
                 radius: 7
                 color: Settings.c2
                 border.color: Settings.c1
-                border.width: 1
+                border.width: Settings.line / 2
 
                 SText {
                     anchors.centerIn: parent
                     y: -1
                     text: "×"
                     color: Settings.c1
-                    font.pixelSize: 11
+                    font.pixelSize: Settings.textXs
                     font.bold: true
                 }
 
@@ -2233,7 +2233,7 @@ PanelWindow {
 
                                     text: msgRoot.mtext
                                     color: Settings.c1
-                                    font.pixelSize: 14
+                                    font.pixelSize: Settings.textSm
                                     wrapMode: msgRoot.attCount > 0
                                         || msgRoot.overflow
                                         ? TextEdit.WrapAtWordBoundaryOrAnywhere
@@ -2336,7 +2336,7 @@ PanelWindow {
 
                                 text: streamFooter.shownText
                                 color: Settings.c1
-                                font.pixelSize: 14
+                                font.pixelSize: Settings.textSm
                                 wrapMode: streamMetrics.width + 28 > 272
                                     ? Text.WrapAtWordBoundaryOrAnywhere
                                     : Text.NoWrap
@@ -2629,7 +2629,7 @@ PanelWindow {
                         width: parent.width
                         y: inputClip.bottomY() - cat.inputScroll
                         color: Settings.c1
-                        font.pixelSize: 14
+                        font.pixelSize: Settings.textSm
                         wrapMode: TextInput.WrapAtWordBoundaryOrAnywhere
                         selectByMouse: true
                         selectionColor: Settings.c1
@@ -2677,9 +2677,8 @@ PanelWindow {
                         x: 0
                         y: inputClip.bottomY()
                         text: "hmm..."
-                        color: Settings.c1
-                        opacity: 0.45
-                        font.pixelSize: 14
+                        color: Settings.c2
+                        font.pixelSize: Settings.textSm
                     }
                 }
 
@@ -2733,7 +2732,7 @@ PanelWindow {
                         CatIcon {
                             anchors.fill: parent
                             lineColor: Settings.c1
-                            strokeWidth: 1.8
+                            strokeWidth: Settings.line / 2
                             strokePath: cat.iconAttach
                         }
 
@@ -2766,8 +2765,7 @@ PanelWindow {
                             horizontalAlignment: Text.AlignHCenter
                             text: cat.modelShort(cat.aiModel)
                             color: Settings.c1
-                            opacity: modelBtn.hovered ? 1 : 0.8
-                            font.pixelSize: 12
+                            font.pixelSize: Settings.textXs
                             elide: Text.ElideMiddle
                         }
 
@@ -2817,8 +2815,7 @@ PanelWindow {
                             verticalAlignment: Text.AlignVCenter
                             text: cat.reasoningLabel()
                             color: Settings.c1
-                            opacity: reasonBtn.hovered ? 1 : 0.8
-                            font.pixelSize: 12
+                            font.pixelSize: Settings.textXs
                         }
 
                         MouseArea {
@@ -2964,13 +2961,6 @@ PanelWindow {
                                     ? cat.aiModel === val
                                     : cat.reasoningValue === val
 
-                                Rectangle {
-                                    anchors.fill: parent
-                                    color: Settings.c1
-                                    opacity: rowHover.containsMouse
-                                        ? 0.15 : 0
-                                }
-
                                 SText {
                                     x: 10
                                     y: 0
@@ -2979,7 +2969,7 @@ PanelWindow {
                                     verticalAlignment: Text.AlignVCenter
                                     text: popupRow.modelData.label
                                     color: Settings.c1
-                                    font.pixelSize: 12
+                                    font.pixelSize: Settings.textXs
                                     font.bold: popupRow.current
                                     elide: Text.ElideMiddle
                                 }
@@ -3067,9 +3057,8 @@ PanelWindow {
                 width: 20
                 height: 20
                 lineColor: cat.menuOpen ? Settings.c2 : Settings.c1
-                strokeWidth: 2
+                strokeWidth: Settings.line / 2
                 strokePath: cat.iconMenu
-                opacity: menuHover.containsMouse || cat.menuOpen ? 1 : 0.8
             }
 
             MouseArea {
