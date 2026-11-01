@@ -2,69 +2,260 @@
 #include <fstream>
 #include <filesystem>
 #include <cstdlib>
+#include <cstdio>
 #include <vector>
+#include <string>
 #include <format>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
 
+namespace {
+
+// убрать хвостовые \n, \r
+void rtrim(std::string& s) {
+    while (!s.empty() && (s.back() == '\n' || s.back() == '\r'))
+        s.pop_back();
+}
+
+// жива ли оболочка 825UI. [.] в паттерне — чтобы pgrep не совпал
+// с собственной обёрткой sh -c, которую порождает popen
+bool shellRunning(std::vector<std::string>* lines = nullptr) {
+    FILE* p = popen("pgrep -af 'qs -p .*[.]825UI' 2>/dev/null", "r");
+
+    if (!p)
+        return false;
+
+    bool found = false;
+    char buf[512];
+
+    while (fgets(buf, sizeof(buf), p)) {
+        found = true;
+
+        if (lines) {
+            std::string line(buf);
+            rtrim(line);
+            lines->push_back(line);
+        }
+    }
+
+    pclose(p);
+    return found;
+}
+
+// ipc-команды имеют смысл только у живой оболочки
+bool requireShell() {
+    if (shellRunning())
+        return true;
+
+    std::cout << "825ctl: оболочка не запущена — попробуй: 825ctl start"
+        << std::endl;
+    return false;
+}
+
+void ipc(const std::string& call) {
+    std::string cmd = "qs -p ~/.825UI ipc call main " + call;
+    std::system(cmd.c_str());
+}
+
+void printHelp() {
+    std::cout << std::endl;
+    std::cout << "825ctl — пульт оболочки 825UI" << std::endl;
+    std::cout << std::endl;
+    std::cout << "Оболочка:" << std::endl;
+    std::cout << "  start       запустить оболочку; повторный запуск"
+        " копию не плодит" << std::endl;
+    std::cout << "  restart     перечитать конфиг работающей оболочки"
+        << std::endl;
+    std::cout << "  stop        остановить оболочку" << std::endl;
+    std::cout << "  status      жива ли оболочка, и если да — её процессы"
+        << std::endl;
+    std::cout << std::endl;
+    std::cout << "Панели (одновременно открыта только одна, открытие"
+        << std::endl;
+    std::cout << "  новой закрывает предыдущую; кот не считается):"
+        << std::endl;
+    std::cout << "  toggle_app <панель>   control_panel | app_launcher"
+        " | settings | cat" << std::endl;
+    std::cout << std::endl;
+    std::cout << "Экран:" << std::endl;
+    std::cout << "  lock        экран блокировки; пароль — системный,"
+        " Enter — отправить" << std::endl;
+    std::cout << std::endl;
+    std::cout << "Железо (результат приходит уведомлением):" << std::endl;
+    std::cout << "  toggle <что>   wifi | bluetooth — включить/выключить"
+        << std::endl;
+    std::cout << "  audio <что>    out | in — следующее устройство"
+        " вывода/ввода по кругу" << std::endl;
+    std::cout << std::endl;
+    std::cout << "Кот:" << std::endl;
+    std::cout << "  labudabudabdab <что>   scubes | сcubes | pconway"
+        " | cconway" << std::endl;
+    std::cout << "  cursor        демон позиции курсора — кот запускает"
+        " его сам, руками не трогать" << std::endl;
+    std::cout << std::endl;
+}
+
+} // namespace
+
 int main(int argc, char* argv[]) {
     #ifndef VERSION_STR
-    #define VERSION_STR "dev (unversioned build)"
+    #define VERSION_STR "dev"
     #endif
 
 	std::setlocale(LC_ALL, "");
     std::cout << std::format("825ctl {}\n", VERSION_STR/*при сборке, симейк ставит эту переменную*/) << std::endl;
-    
+
     std::vector<std::string> args;
 
     for (int i = 1; i < argc; ++i) {
         args.push_back(std::string(argv[i]));
     }
+
     if (argc > 1) {
         if (args[0] == "-h" || args[0] == "--help" || args[0] == "help"){
-            std::cout << "help"
-            "menu" << std::endl;
+            printHelp();
         }
         else if (args[0] == "start") {
-            std::string command = "qs -p ~/.825UI > /dev/null 2>&1 &";
-            int result = std::system(command.c_str());
+            // второй инстанс не запускаем: ipc и сервисы встанут в позу
+            std::vector<std::string> procs;
+
+            if (shellRunning(&procs)) {
+                std::cout << "825ctl: оболочка уже запущена:"
+                    << std::endl;
+
+                for (const auto& l : procs)
+                    std::cout << "  " << l << std::endl;
+
+                std::cout << std::endl;
+            } else {
+                std::string command =
+                    "qs -p ~/.825UI > /dev/null 2>&1 &";
+                int result = std::system(command.c_str());
+                std::cout << "825ctl: оболочка запускается"
+                    << std::endl;
+            }
         }
         else if (args[0] == "restart") {
-            std::string command = "qs -p ~/.825UI ipc call main forceReload && notify-send -t 10000 -a '825' 'Reloaded' ':3' -i ~/.825UI/Textures/4.jpg";
-            int result = std::system(command.c_str());
+            if (requireShell()) {
+                std::string command = "qs -p ~/.825UI ipc call main forceReload && notify-send -t 10000 -a '825' '825UI reloaded' ':3' -i ~/.825UI/Textures/4.jpg";
+                int result = std::system(command.c_str());
+            }
         }
         else if (args[0] == "stop") {
-            std::string command = "killall -9 qs";
-            int result = std::system(command.c_str());
+            if (!shellRunning()) {
+                std::cout << "825ctl: оболочка и так не запущена"
+                    << std::endl;
+            } else {
+                std::string command = "killall -9 qs";
+                int result = std::system(command.c_str());
+                std::cout << "825ctl: оболочка остановлена"
+                    << std::endl;
+            }
+        }
+        else if (args[0] == "status") {
+            std::vector<std::string> procs;
+            shellRunning(&procs);
+
+            if (procs.empty()) {
+                std::cout << "825ctl: оболочка не запущена — попробуй:"
+                    " 825ctl start" << std::endl;
+            } else {
+                std::cout << "825ctl: оболочка работает:" << std::endl;
+
+                for (const auto& l : procs)
+                    std::cout << "  " << l << std::endl;
+
+                std::cout << std::endl;
+            }
+        }
+        else if (args[0] == "lock") {
+            if (requireShell()) {
+                std::string command = "qs -p ~/.825UI ipc call main lock";
+                int result = std::system(command.c_str());
+            }
         }
         else if (args[0] == "toggle_app") {
-            if (argc > 2) {
-                if (args[1] == "control_panel") {
+            if (argc <= 2) {
+                std::cout << "825ctl: укажи панель — control_panel,"
+                    " app_launcher, settings или cat" << std::endl;
+            }
+            else if (args[1] == "control_panel") {
+                if (requireShell()) {
                     std::string command = "qs -p ~/.825UI ipc call main toggleControl";
                     int result = std::system(command.c_str());
                 }
-                else if (args[1] == "app_launcher") {
+            }
+            else if (args[1] == "app_launcher") {
+                if (requireShell()) {
                     std::string command = "qs -p ~/.825UI ipc call main toggleLauncher";
                     int result = std::system(command.c_str());
                 }
-                else if (args[1] == "settings") {
+            }
+            else if (args[1] == "settings") {
+                if (requireShell()) {
                     std::string command = "qs -p ~/.825UI ipc call main toggleSettings";
                     int result = std::system(command.c_str());
                 }
-                else if (args[1] == "cat") {
-                    std::string command = "qs -p ~/.825UI ipc call main toggleCat";
-                    int result = std::system(command.c_str());
-                }
-                else if (args[1] == "cat") {
+            }
+            else if (args[1] == "cat") {
+                if (requireShell()) {
                     std::string command = "qs -p ~/.825UI ipc call main toggleCat";
                     int result = std::system(command.c_str());
                 }
             }
+            else {
+                std::cout << std::format(
+                    "825ctl: панели \"{}\" нет; есть control_panel,"
+                    " app_launcher, settings, cat\n",
+                    args[1]) << std::endl;
+            }
         }
-        else if (args[0] == "lock") {
-            std::string command = "qs -p ~/.825UI ipc call main lock";
-            int result = std::system(command.c_str());
+        else if (args[0] == "toggle") {
+            if (argc <= 2) {
+                std::cout << "825ctl: укажи, что тоглать — wifi"
+                    " или bluetooth" << std::endl;
+            }
+            else if (args[1] == "wifi") {
+                if (requireShell()) {
+                    std::string command = "qs -p ~/.825UI ipc call main toggleWifi";
+                    int result = std::system(command.c_str());
+                }
+            }
+            else if (args[1] == "bluetooth") {
+                if (requireShell()) {
+                    std::string command = "qs -p ~/.825UI ipc call main toggleBluetooth";
+                    int result = std::system(command.c_str());
+                }
+            }
+            else {
+                std::cout << std::format(
+                    "825ctl: не тоглаю \"{}\"; есть wifi и bluetooth\n",
+                    args[1]) << std::endl;
+            }
+        }
+        else if (args[0] == "audio") {
+            if (argc <= 2) {
+                std::cout << "825ctl: укажи, что переключать — out"
+                    " (вывод) или in (ввод)" << std::endl;
+            }
+            else if (args[1] == "out" || args[1] == "output") {
+                if (requireShell()) {
+                    std::string command = "qs -p ~/.825UI ipc call main cycleAudioOutput";
+                    int result = std::system(command.c_str());
+                }
+            }
+            else if (args[1] == "in" || args[1] == "input") {
+                if (requireShell()) {
+                    std::string command = "qs -p ~/.825UI ipc call main cycleAudioInput";
+                    int result = std::system(command.c_str());
+                }
+            }
+            else {
+                std::cout << std::format(
+                    "825ctl: \"{}\"? есть out (вывод) и in (ввод)\n",
+                    args[1]) << std::endl;
+            }
         }
         else if (args[0] == "cursor") {
             // демон позиции курсора для кота: строки "X Y" в stdout, ~60 Гц.
@@ -103,24 +294,45 @@ int main(int argc, char* argv[]) {
             }
         }
         else if (args[0] == "labudabudabdab") {
-            if (argc > 2) {
-                if (args[1] == "scubes") {
+            if (argc <= 2) {
+                std::cout << "825ctl: укажи что — scubes, сcubes,"
+                    " pconway или cconway" << std::endl;
+            }
+            else if (args[1] == "scubes") {
+                if (requireShell()) {
                     std::string command = "qs -p ~/.825UI ipc call main spawnCube";
                     int result = std::system(command.c_str());
                 }
-                else if (args[1] == "сcubes") {
+            }
+            else if (args[1] == "сcubes") {
+                if (requireShell()) {
                     std::string command = "qs -p ~/.825UI ipc call main clearCubes";
                     int result = std::system(command.c_str());
                 }
-                else if (args[1] == "pconway") {
+            }
+            else if (args[1] == "pconway") {
+                if (requireShell()) {
                     std::string command = "qs -p ~/.825UI ipc call main toggleConwayPause";
                     int result = std::system(command.c_str());
                 }
-                else if (args[1] == "cconway") {
+            }
+            else if (args[1] == "cconway") {
+                if (requireShell()) {
                     std::string command = "qs -p ~/.825UI ipc call main clearConway";
                     int result = std::system(command.c_str());
                 }
             }
+            else {
+                std::cout << std::format(
+                    "825ctl: \"{}\" не знаю; есть scubes, сcubes,"
+                    " pconway, cconway\n",
+                    args[1]) << std::endl;
+            }
+        }
+        else {
+            std::cout << std::format(
+                "825ctl: не знаю команду \"{}\" — список: 825ctl help\n",
+                args[0]) << std::endl;
         }
     }
 
