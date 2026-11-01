@@ -33,6 +33,13 @@ Singleton {
     readonly property int textMd: line * 5
     readonly property int textLg: line * 6
 
+    // тестовый хук: X825_NOMASK=1 отключает маски контента в
+    // SPanel/SFrame — в софтверном рендере Xvfb шейдер OpacityMask
+    // не исполняется и замаскированный контент невидим; на реальной
+    // системе переменной нет, маскирование работает как всегда
+    readonly property bool unmaskedTest:
+        Quickshell.env("X825_NOMASK") === "1"
+
     FileView {
         id: configFile
 

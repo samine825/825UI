@@ -52,4 +52,60 @@ Singleton {
         "M 10.7,19.4 A 1.3,1.3 0 1,0 13.3,19.4 A 1.3,1.3 0 1,0 10.7,19.4 Z"
     readonly property string iconBluetooth:
         "M 7,7.5 L 17,16.5 L 12,21 L 12,3 L 17,7.5 L 7,16.5"
+
+    // === приложения ===
+
+    readonly property string iconClipboard:
+        "M 8.5,4 L 6,4 A 1.5,1.5 0 0,0 4.5,5.5 L 4.5,19.5 A 1.5,1.5 0 0,0 6,21"
+        + " L 18,21 A 1.5,1.5 0 0,0 19.5,19.5 L 19.5,5.5 A 1.5,1.5 0 0,0 18,4 L 15.5,4"
+        + " M 8.5,2.5 L 15.5,2.5 A 1,1 0 0,1 16.5,3.5 L 16.5,5 A 1,1 0 0,1 15.5,6"
+        + " L 8.5,6 A 1,1 0 0,1 7.5,5 L 7.5,3.5 A 1,1 0 0,1 8.5,2.5 Z"
+        + " M 8,10.5 L 16,10.5 M 8,14 L 16,14 M 8,17.5 L 13,17.5"
+    readonly property string iconCalculator:
+        "M 6.5,2.5 L 17.5,2.5 A 1.5,1.5 0 0,1 19,4 L 19,20 A 1.5,1.5 0 0,1 17.5,21.5"
+        + " L 6.5,21.5 A 1.5,1.5 0 0,1 5,20 L 5,4 A 1.5,1.5 0 0,1 6.5,2.5 Z"
+        + " M 7.5,5.5 L 16.5,5.5 L 16.5,9.5 L 7.5,9.5 Z"
+        + " M 8.5,13 L 8.5,13.1 M 12,13 L 12,13.1 M 15.5,13 L 15.5,13.1"
+        + " M 8.5,16.5 L 8.5,16.6 M 12,16.5 L 12,16.6 M 15.5,16.5 L 15.5,16.6"
+    readonly property string iconEmoji:
+        "M 12,2.5 A 9.5,9.5 0 1,0 12,21.5 A 9.5,9.5 0 1,0 12,2.5 Z"
+        + " M 8.7,9.5 L 8.7,9.6 M 15.3,9.5 L 15.3,9.6"
+        + " M 7.8,14 A 5,5 0 0,0 16.2,14"
+    readonly property string iconClock:
+        "M 12,3 A 9,9 0 1,0 12,21 A 9,9 0 1,0 12,3 Z"
+        + " M 12,7 L 12,12 L 15.5,14"
+    readonly property string iconCamera:
+        "M 4,7.5 L 8,7.5 L 10,5 L 14,5 L 16,7.5 L 20,7.5"
+        + " A 1.5,1.5 0 0,1 21.5,9 L 21.5,18 A 1.5,1.5 0 0,1 20,19.5"
+        + " L 4,19.5 A 1.5,1.5 0 0,1 2.5,18 L 2.5,9 A 1.5,1.5 0 0,1 4,7.5 Z"
+        + " M 12,9.5 A 3.75,3.75 0 1,0 12,17 A 3.75,3.75 0 1,0 12,9.5 Z"
+    readonly property string iconPin:
+        "M 9.5,3 L 14.5,3 L 14.5,10 L 16.5,12.5 L 7.5,12.5 L 9.5,10 Z"
+        + " M 12,12.5 L 12,21"
+    readonly property string iconTrash:
+        "M 4.5,6.5 L 19.5,6.5"
+        + " M 9,6.5 L 9,4.5 A 1,1 0 0,1 10,3.5 L 14,3.5 A 1,1 0 0,1 15,4.5 L 15,6.5"
+        + " M 6.5,6.5 L 7.5,20 A 1.2,1.2 0 0,0 8.7,21 L 15.3,21 A 1.2,1.2 0 0,0 16.5,20"
+        + " L 17.5,6.5 M 10.3,10 L 10.3,17 M 13.7,10 L 13.7,17"
+    readonly property string iconPlus: "M 12,5 L 12,19 M 5,12 L 19,12"
+    readonly property string iconStop: "M 7,7 L 17,7 L 17,17 L 7,17 Z"
+    readonly property string iconRecord:
+        "M 12,6 A 6,6 0 1,0 12,18 A 6,6 0 1,0 12,6 Z"
+    readonly property string iconStopwatch:
+        "M 12,4.5 A 8,8 0 1,0 12,20.5 A 8,8 0 1,0 12,4.5 Z"
+        + " M 10,2 L 14,2 M 12,2 L 12,4.5"
+        + " M 12,8 L 12,12 L 15,14"
+    readonly property string iconTimer:
+        "M 7,3 L 17,3 M 7,21 L 17,21"
+        + " M 8,3 L 8,7 A 4,4 0 0,0 12,12 A 4,4 0 0,1 16,17 L 16,21"
+        + " M 16,3 L 16,7 A 4,4 0 0,1 12,12 A 4,4 0 0,0 8,17 L 8,21"
+    readonly property string iconBackspace:
+        "M 8,5 L 21,5 L 21,19 L 8,19 L 2.5,12 Z"
+        + " M 11.5,9.5 L 17,14.5 M 17,9.5 L 11.5,14.5"
+    readonly property string iconCheck: "M 5,12.5 L 10,17.5 L 19,7"
+    readonly property string iconBell:
+        "M 12,3 A 6,6 0 0,1 18,9 L 18,14 L 20,16.5 L 4,16.5 L 6,14 L 6,9"
+        + " A 6,6 0 0,1 12,3 Z M 10,19.5 A 2,2 0 0,0 14,19.5"
+    readonly property string iconChevronUp: "M 6,14.5 L 12,9 L 18,14.5"
+    readonly property string iconChevronDown: "M 6,9.5 L 12,15 L 18,9.5"
 }

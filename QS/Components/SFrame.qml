@@ -132,6 +132,7 @@ Item {
 
         anchors.fill: parent
         layer.enabled: contentMasked
+            && !Settings.unmaskedTest
             && contentHolder.children.length > 0
         layer.effect: OpacityMask {
             maskSource: silhouetteSource

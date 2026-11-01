@@ -36,6 +36,11 @@ Item {
     // отступ базового контура от границ (обводка не выпирает)
     readonly property real baseInset: Settings.line / 2
 
+    // маскировать ли контент по силуэту. Выключается, когда контент
+    // сам вырезан точно по контуру; тестовый хук Settings.unmaskedTest
+    // снимает маску для снимков в софтверном рендере
+    property bool contentMasked: true
+
     component CutContour: SShapePath {
         id: cut
 
@@ -105,7 +110,9 @@ Item {
         id: contentHolder
 
         anchors.fill: parent
-        layer.enabled: contentHolder.children.length > 0
+        layer.enabled: contentMasked
+            && !Settings.unmaskedTest
+            && contentHolder.children.length > 0
         layer.effect: OpacityMask {
             maskSource: silhouetteSource
         }
