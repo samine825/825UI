@@ -71,22 +71,18 @@ void printHelp() {
     std::cout << "  status      жива ли оболочка, и если да — её процессы"
         << std::endl;
     std::cout << std::endl;
-    std::cout << "Панели (одновременно открыта только одна, открытие"
+    std::cout << "Панели и колёса устройств (одновременно открыто только"
         << std::endl;
-    std::cout << "  новой закрывает предыдущую; кот не считается):"
-        << std::endl;
-    std::cout << "  toggle_app <панель>   control_panel | app_launcher"
+    std::cout << "  одно окно: открытие нового закрывает предыдущее;"
+        " кот не считается):" << std::endl;
+    std::cout << "  toggle_app <что>   control_panel | app_launcher"
         " | settings | cat" << std::endl;
+    std::cout << "                     wifi | bluetooth | output"
+        " | input — колёса устройств" << std::endl;
     std::cout << std::endl;
     std::cout << "Экран:" << std::endl;
     std::cout << "  lock        экран блокировки; пароль — системный,"
         " Enter — отправить" << std::endl;
-    std::cout << std::endl;
-    std::cout << "Железо (результат приходит уведомлением):" << std::endl;
-    std::cout << "  toggle <что>   wifi | bluetooth — включить/выключить"
-        << std::endl;
-    std::cout << "  audio <что>    out | in — следующее устройство"
-        " вывода/ввода по кругу" << std::endl;
     std::cout << std::endl;
     std::cout << "Кот:" << std::endl;
     std::cout << "  labudabudabdab <что>   scubes | сcubes | pconway"
@@ -177,8 +173,10 @@ int main(int argc, char* argv[]) {
         }
         else if (args[0] == "toggle_app") {
             if (argc <= 2) {
-                std::cout << "825ctl: укажи панель — control_panel,"
-                    " app_launcher, settings или cat" << std::endl;
+                std::cout << "825ctl: укажи, что тоглать — панель"
+                    " (control_panel, app_launcher, settings, cat)"
+                    " или колесо устройств (wifi, bluetooth,"
+                    " output, input)" << std::endl;
             }
             else if (args[1] == "control_panel") {
                 if (requireShell()) {
@@ -204,56 +202,35 @@ int main(int argc, char* argv[]) {
                     int result = std::system(command.c_str());
                 }
             }
-            else {
-                std::cout << std::format(
-                    "825ctl: панели \"{}\" нет; есть control_panel,"
-                    " app_launcher, settings, cat\n",
-                    args[1]) << std::endl;
-            }
-        }
-        else if (args[0] == "toggle") {
-            if (argc <= 2) {
-                std::cout << "825ctl: укажи, что тоглать — wifi"
-                    " или bluetooth" << std::endl;
-            }
             else if (args[1] == "wifi") {
                 if (requireShell()) {
-                    std::string command = "qs -p ~/.825UI ipc call main toggleWifi";
+                    std::string command = "qs -p ~/.825UI ipc call main toggleWifiWheel";
                     int result = std::system(command.c_str());
                 }
             }
             else if (args[1] == "bluetooth") {
                 if (requireShell()) {
-                    std::string command = "qs -p ~/.825UI ipc call main toggleBluetooth";
+                    std::string command = "qs -p ~/.825UI ipc call main toggleBtWheel";
+                    int result = std::system(command.c_str());
+                }
+            }
+            else if (args[1] == "output") {
+                if (requireShell()) {
+                    std::string command = "qs -p ~/.825UI ipc call main toggleSinkWheel";
+                    int result = std::system(command.c_str());
+                }
+            }
+            else if (args[1] == "input") {
+                if (requireShell()) {
+                    std::string command = "qs -p ~/.825UI ipc call main toggleSourceWheel";
                     int result = std::system(command.c_str());
                 }
             }
             else {
                 std::cout << std::format(
-                    "825ctl: не тоглаю \"{}\"; есть wifi и bluetooth\n",
-                    args[1]) << std::endl;
-            }
-        }
-        else if (args[0] == "audio") {
-            if (argc <= 2) {
-                std::cout << "825ctl: укажи, что переключать — out"
-                    " (вывод) или in (ввод)" << std::endl;
-            }
-            else if (args[1] == "out" || args[1] == "output") {
-                if (requireShell()) {
-                    std::string command = "qs -p ~/.825UI ipc call main cycleAudioOutput";
-                    int result = std::system(command.c_str());
-                }
-            }
-            else if (args[1] == "in" || args[1] == "input") {
-                if (requireShell()) {
-                    std::string command = "qs -p ~/.825UI ipc call main cycleAudioInput";
-                    int result = std::system(command.c_str());
-                }
-            }
-            else {
-                std::cout << std::format(
-                    "825ctl: \"{}\"? есть out (вывод) и in (ввод)\n",
+                    "825ctl: \"{}\" не знаю; панели — control_panel,"
+                    " app_launcher, settings, cat; колёса — wifi,"
+                    " bluetooth, output, input\n",
                     args[1]) << std::endl;
             }
         }

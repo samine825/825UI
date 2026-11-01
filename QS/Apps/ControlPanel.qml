@@ -1383,6 +1383,78 @@ PanelWindow {
             Pipewire.preferredDefaultAudioSource = item.node
     }
 
+    // колёса устройств: открыто максимум одно; 825ctl toggle_app
+    // тоглит их так же, как клетки панели. Возвращает true, если
+    // колесо в итоге открыто (заголовок выше прячет из-за этого панели)
+    function toggleWheel(name) {
+        const wheels = {
+            "wifi": wifiWheel,
+            "bluetooth": btWheel,
+            "output": sinkWheel,
+            "input": sourceWheel
+        }
+
+        const target = wheels[name]
+
+        if (!target)
+            return false
+
+        for (const key in wheels) {
+            if (key !== name && wheels[key].visible)
+                wheels[key].hide()
+        }
+
+        if (target.visible) {
+            target.hide()
+            return false
+        }
+
+        // клетки отказываются открывать колесо выключенного модуля —
+        // CLI вместо молчания отвечает уведомлением
+        if (name === "wifi" && !Networking.wifiEnabled) {
+            shellNotify("Wi-Fi", "выключен — колесо не открыть")
+            return false
+        }
+
+        if (name === "bluetooth"
+                && (Bluetooth.defaultAdapter === null
+                    || !Bluetooth.defaultAdapter.enabled)) {
+            shellNotify("Bluetooth", "выключен — колесо не открыть")
+            return false
+        }
+
+        // как у клеток: панель прячется, колесо открывается
+        root.hide()
+        target.show()
+        return true
+    }
+
+    // колёса закрываются при открытии любой панели приложения
+    function hideWheels() {
+        wifiWheel.hide()
+        btWheel.hide()
+        sinkWheel.hide()
+        sourceWheel.hide()
+    }
+
+    // уведомление как обратная связь команд 825ctl
+    function shellNotify(summary, body) {
+        notifyCmd.summary = summary
+        notifyCmd.body = body
+        notifyCmd.running = true
+    }
+
+    Process {
+        id: notifyCmd
+
+        property string summary: ""
+        property string body: ""
+
+        command: ["notify-send", "-a", "825", "-t", "3000",
+                  "-i", Quickshell.env("HOME") + "/.825UI/Textures/4.jpg",
+                  summary, body]
+    }
+
     // сканирование активно, только пока открыто колесо
     Connections {
         target: wifiWheel

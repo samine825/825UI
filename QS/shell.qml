@@ -2,9 +2,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
-import Quickshell.Services.Pipewire
-import Quickshell.Networking
-import Quickshell.Bluetooth
 import QtQuick.Window
 import QtQuick.Shapes
 
@@ -21,6 +18,10 @@ ShellRoot {
     // одновременное открытие только одной панели приложения:
     // открывая одну, закрываем остальные (кот и его меню не в счёте)
     function showOnly(panel) {
+        // колёса устройств — в той же семье: панель открывается
+        // на чистом экране
+        controlPanel.hideWheels()
+
         const panels = {
             "launcher": appLauncher,
             "control": controlPanel,
@@ -35,115 +36,16 @@ ShellRoot {
         }
     }
 
-    // уведомление как обратная связь команд 825ctl
-    function notify(summary, body) {
-        notifyCmd.summary = summary
-        notifyCmd.body = body
-        notifyCmd.running = true
-    }
+    // тогл колеса устройства: открытое колесо закрывает панели
+    // приложений — колёса в одной семье с панелями
+    function toggleWheel(name) {
+        if (controlPanel.toggleWheel(name)) {
+            if (appLauncher.visible)
+                appLauncher.hide()
 
-    // === тоглы железа: дублируют клетки панели управления ===
-
-    function toggleWifi(): void {
-        Networking.wifiEnabled = !Networking.wifiEnabled
-        notify("Wi-Fi", Networking.wifiEnabled ? "включён" : "выключен")
-    }
-
-    function toggleBluetooth(): void {
-        const adapter = Bluetooth.defaultAdapter
-
-        if (!adapter) {
-            notify("Bluetooth", "адаптер не найден")
-            return
+            if (settingsMenu.visible)
+                settingsMenu.hide()
         }
-
-        if (adapter.enabled) {
-            adapter.enabled = false
-            notify("Bluetooth", "выключен")
-        } else {
-            // rfkill софт-блок не даёт включить адаптер —
-            // снять его и включить в onExited
-            btUnblock.running = true
-        }
-    }
-
-    // следующее устройство вывода (sink) или ввода по кругу —
-    // тот же список, что в колесе панели управления
-    function cycleAudio(sink): void {
-        const nodes = Pipewire.nodes.values
-        const arr = []
-
-        for (let i = 0; i < nodes.length; i++) {
-            const n = nodes[i]
-
-            if (!n || !n.audio || n.isStream)
-                continue
-
-            if (sink ? !n.isSink : n.isSink)
-                continue
-
-            arr.push({
-                label: (n.description !== ""
-                    ? n.description : n.nickname),
-                node: n
-            })
-        }
-
-        if (arr.length === 0) {
-            notify("825ctl audio", sink
-                ? "устройства вывода не найдены"
-                : "устройства ввода не найдены")
-            return
-        }
-
-        arr.sort((a, b) => a.label.localeCompare(b.label))
-
-        const cur = sink
-            ? Pipewire.defaultAudioSink : Pipewire.defaultAudioSource
-        let idx = -1
-
-        for (let i = 0; i < arr.length; i++) {
-            if (arr[i].node === cur) {
-                idx = i
-                break
-            }
-        }
-
-        // не найден в списке — берём первый
-        const next = arr[(idx + 1) % arr.length]
-
-        if (sink)
-            Pipewire.preferredDefaultAudioSink = next.node
-        else
-            Pipewire.preferredDefaultAudioSource = next.node
-
-        notify(sink ? "Вывод" : "Ввод", next.label)
-    }
-
-    // rfkill софт-блок не даёт включить Bluetooth (PowerState:
-    // off-blocked) — снимаем его и только потом включаем адаптер
-    Process {
-        id: btUnblock
-
-        command: ["rfkill", "unblock", "bluetooth"]
-
-        onExited: {
-            if (Bluetooth.defaultAdapter) {
-                Bluetooth.defaultAdapter.enabled = true
-                shell.notify("Bluetooth", "включён")
-            }
-        }
-    }
-
-    Process {
-        id: notifyCmd
-
-        property string summary: ""
-        property string body: ""
-
-        command: ["notify-send", "-a", "825", "-t", "3000",
-                  "-i", Quickshell.env("HOME") + "/.825UI/Textures/4.jpg",
-                  summary, body]
     }
 
     // === меню сохранённых чатов ===
@@ -641,21 +543,21 @@ ShellRoot {
                     : showOnly("launcher")
             }
 
-            // === железо ===
-            function toggleWifi(): void {
-                shell.toggleWifi()
+            // === колёса устройств ===
+            function toggleWifiWheel(): void {
+                toggleWheel("wifi")
             }
 
-            function toggleBluetooth(): void {
-                shell.toggleBluetooth()
+            function toggleBtWheel(): void {
+                toggleWheel("bluetooth")
             }
 
-            function cycleAudioOutput(): void {
-                shell.cycleAudio(true)
+            function toggleSinkWheel(): void {
+                toggleWheel("output")
             }
 
-            function cycleAudioInput(): void {
-                shell.cycleAudio(false)
+            function toggleSourceWheel(): void {
+                toggleWheel("input")
             }
 
             function lock(): void {
