@@ -508,6 +508,10 @@ ShellRoot {
                     ? appLauncher.hide()
                     : appLauncher.show()
             }
+
+            function lock(): void {
+                lockScreen.lock()
+            }
             // 3D
             function spawnCube(): void {
                 physicsScene.addCube({
@@ -731,6 +735,7 @@ ShellRoot {
 
     ControlPanel {id: controlPanel}
     AppLauncher {id: appLauncher}
+    LockScreen {id: lockScreen}
     Cat {
         id: cat
 

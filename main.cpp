@@ -62,6 +62,10 @@ int main(int argc, char* argv[]) {
                 }
             }
         }
+        else if (args[0] == "lock") {
+            std::string command = "qs -p ~/.825UI ipc call main lock";
+            int result = std::system(command.c_str());
+        }
         else if (args[0] == "cursor") {
             // демон позиции курсора для кота: строки "X Y" в stdout, ~60 Гц.
             // Hyprland IPC отвечает на "cursorpos" (без перевода строки)
