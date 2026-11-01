@@ -35,36 +35,28 @@ Item {
 
         readonly property real point: height * InfexGeometry.notchFrac
 
-        // ячейка статистики: два слоя, как у всплывающих уведомлений —
-        // базовый (фон c2, текст c1) и заполняющийся снизу вверх
-        // (фон c1, текст c2). Высота заливки = доля метрики, между
-        // итерациями меняется плавно
-        component StatCell: Item {
-            id: statCell
+        // границы фрейма = видимому внешнему краю обводки
+        // (старая обводка выпирала на пол-линии — компенсируем ростом).
+        // Заливки секций — дети фрейма: маска силуэта режет их по
+        // контуру, внутренняя тень и обводка лежат поверх (как
+        // обложка в плеере панели управления)
+        SFrame {
+            x: -Settings.line / 2
+            y: -Settings.line / 2
+            width: parent.width + Settings.line
+            height: parent.height + Settings.line
+            shadowOverContent: true
 
-            property string text: ""
-            property real fraction: 0
-
-            width: labelItem.implicitWidth + Settings.line * 6
-            height: root.height
-
-            SText {
-                id: labelItem
-
-                anchors.centerIn: parent
-                text: statCell.text
-                color: Settings.c1
-                font.pixelSize: Settings.textSm
-                font.bold: true
-                verticalAlignment: Text.AlignVCenter
-            }
-
+            // заливка секции: снизу вверх на долю метрики, между
+            // итерациями — плавно; внутри полноразмерный слепок зоны
+            // (фон c1 + текст c2), совпадающий с базовым текстом
             Item {
+                id: cpuFill
+
+                x: statsRow.x + cpuCell.x + Settings.line / 2
+                width: cpuCell.width
                 anchors.bottom: parent.bottom
-                anchors.left: parent.left
-                anchors.right: parent.right
-                height: Math.max(0, Math.min(1, statCell.fraction))
-                    * parent.height
+                height: root.cpuFraction * parent.height
                 clip: true
 
                 Behavior on height {
@@ -74,12 +66,10 @@ Item {
                     }
                 }
 
-                // полная копия ячейки, прижата к низу: совпадает с
-                // оригиналом пик в пиксель, видна только в заливке
                 Item {
                     anchors.bottom: parent.bottom
                     width: parent.width
-                    height: root.height
+                    height: parent.height
 
                     Rectangle {
                         anchors.fill: parent
@@ -88,7 +78,81 @@ Item {
 
                     SText {
                         anchors.centerIn: parent
-                        text: statCell.text
+                        text: root.cpuText
+                        color: Settings.c2
+                        font.pixelSize: Settings.textSm
+                        font.bold: true
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+            }
+
+            Item {
+                id: tempFill
+
+                x: statsRow.x + tempCell.x + Settings.line / 2
+                width: tempCell.width
+                anchors.bottom: parent.bottom
+                height: root.tempFraction * parent.height
+                clip: true
+
+                Behavior on height {
+                    NumberAnimation {
+                        duration: Settings.animSlow
+                        easing.type: Easing.InOutQuad
+                    }
+                }
+
+                Item {
+                    anchors.bottom: parent.bottom
+                    width: parent.width
+                    height: parent.height
+
+                    Rectangle {
+                        anchors.fill: parent
+                        color: Settings.c1
+                    }
+
+                    SText {
+                        anchors.centerIn: parent
+                        text: root.tempText
+                        color: Settings.c2
+                        font.pixelSize: Settings.textSm
+                        font.bold: true
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+            }
+
+            Item {
+                id: ramFill
+
+                x: statsRow.x + ramCell.x + Settings.line / 2
+                width: ramCell.width
+                anchors.bottom: parent.bottom
+                height: root.ramFraction * parent.height
+                clip: true
+
+                Behavior on height {
+                    NumberAnimation {
+                        duration: Settings.animSlow
+                        easing.type: Easing.InOutQuad
+                    }
+                }
+
+                Item {
+                    anchors.bottom: parent.bottom
+                    width: parent.width
+                    height: parent.height
+
+                    Rectangle {
+                        anchors.fill: parent
+                        color: Settings.c1
+                    }
+
+                    SText {
+                        anchors.centerIn: parent
+                        text: root.ramText
                         color: Settings.c2
                         font.pixelSize: Settings.textSm
                         font.bold: true
@@ -98,15 +162,6 @@ Item {
             }
         }
 
-        // границы фрейма = видимому внешнему краю обводки
-        // (старая обводка выпирала на пол-линии — компенсируем ростом)
-        SFrame {
-            x: -Settings.line / 2
-            y: -Settings.line / 2
-            width: parent.width + Settings.line
-            height: parent.height + Settings.line
-        }
-
         // 3. Строка контента: адаптивные ячейки и встроенные перегородки
         Row {
             id: statsRow
@@ -114,9 +169,22 @@ Item {
             spacing: 0 
 
             // --- [ЯЧЕЙКА 1: CPU] ---
-            StatCell {
-                text: root.cpuText
-                fraction: root.cpuFraction
+            Item {
+                id: cpuCell
+
+                width: cpuItem.implicitWidth + Settings.line * 6
+                height: root.height
+
+                SText {
+                    id: cpuItem
+
+                    anchors.centerIn: parent
+                    text: root.cpuText
+                    color: Settings.c1
+                    font.pixelSize: Settings.textSm
+                    font.bold: true
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
 
             // --- [ПЕРЕГОРОДКА 1] ---
@@ -140,9 +208,22 @@ Item {
             }
 
             // --- [ЯЧЕЙКА 2: TEMP] ---
-            StatCell {
-                text: root.tempText
-                fraction: root.tempFraction
+            Item {
+                id: tempCell
+
+                width: tempItem.implicitWidth + Settings.line * 6
+                height: root.height
+
+                SText {
+                    id: tempItem
+
+                    anchors.centerIn: parent
+                    text: root.tempText
+                    color: Settings.c1
+                    font.pixelSize: Settings.textSm
+                    font.bold: true
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
 
             // --- [ПЕРЕГОРОДКА 2] ---
@@ -166,9 +247,22 @@ Item {
             }
 
             // --- [ЯЧЕЙКА 3: RAM] ---
-            StatCell {
-                text: root.ramText
-                fraction: root.ramFraction
+            Item {
+                id: ramCell
+
+                width: ramItem.implicitWidth + Settings.line * 6
+                height: root.height
+
+                SText {
+                    id: ramItem
+
+                    anchors.centerIn: parent
+                    text: root.ramText
+                    color: Settings.c1
+                    font.pixelSize: Settings.textSm
+                    font.bold: true
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
         }
 

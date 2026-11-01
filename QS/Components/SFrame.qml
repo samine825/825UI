@@ -26,6 +26,11 @@ Item {
     property color strokeColor: Settings.c1
     property color shadowColor: Settings.c2
 
+    // внутренняя тень поверх контента: для фреймов, у которых дети —
+    // полноформатные заливки (бар статуса), тень обязана лежать на
+    // них, а не прятаться под ними
+    property bool shadowOverContent: false
+
     // сдвиг заливки относительно базового контура: отрицательный
     // заполняет до границ (слой заливки слайдера)
     property real fillInset: 0
@@ -160,6 +165,21 @@ Item {
             fillColor: "transparent"
             strokeColor: frame.strokeColor
             strokeWidth: Settings.line
+        }
+
+        // внутренняя тень поверх контента — по запросу потребителя
+        HexContour {
+            inset: frame.baseInset
+            shift: Settings.line
+            fillColor: "transparent"
+            strokeColor: frame.shadowOverContent
+                && (frame.shadow === "both"
+                    || frame.shadow === "inside")
+                ? frame.shadowColor : "transparent"
+            strokeWidth: frame.shadowOverContent
+                && (frame.shadow === "both"
+                    || frame.shadow === "inside")
+                ? Settings.line : 0
         }
     }
 }

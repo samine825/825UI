@@ -1314,32 +1314,49 @@ PanelWindow {
                                         font.bold: true
                                     }
 
-                                    SRectangle {
+                                    // кнопка в стиле плиток: скосы,
+                                    // спокойная заливка, подсветка по ховеру
+                                    SPanel {
+                                        id: clearAllBtn
+
                                         anchors.right: parent.right
                                         anchors.verticalCenter: parent.verticalCenter
                                         width: clearAllLabel.implicitWidth
-                                            + Settings.line * 4
-                                        height: Settings.textMd
-                                        radius: height / 2
-                                        color: "transparent"
-                                        border.color: Settings.c1
-                                        border.width: Settings.line / 2
+                                            + Settings.line * 5
+                                        height: Settings.textLg
+                                        cornerCut: Settings.line
+                                        strokeColor: Settings.c1
+
+                                        property bool hot:
+                                            clearHover.containsMouse
+
+                                        fillColor: hot
+                                            ? Settings.c1 : Settings.c2
 
                                         SText {
                                             id: clearAllLabel
 
                                             anchors.centerIn: parent
                                             text: "Clear all"
-                                            color: Settings.c1
+                                            color: clearAllBtn.hot
+                                                ? Settings.c2 : Settings.c1
                                             font.pixelSize: Settings.textXs
                                         }
 
                                         MouseArea {
+                                            id: clearHover
+
                                             anchors.fill: parent
+                                            hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
 
-                                            onClicked:
-                                                Notifications.clearHistory()
+                                            onClicked: {
+                                                for (let i = 0; i
+                                                    < Notifications.history.length;
+                                                    i++)
+                                                    root.markRemoving(
+                                                        Notifications.history[i].notificationId)
+                                            }
                                         }
                                     }
                                 }
@@ -1376,14 +1393,29 @@ PanelWindow {
                                                 required property var modelData
                                                 required property int index
 
+                                                // появление — рост из нуля,
+                                                // удаление — схлопывание
+                                                readonly property bool removing:
+                                                    modelData
+                                                    ? root.removingIds[
+                                                        modelData.notificationId]
+                                                        === true : false
+                                                property bool appeared: false
+
+                                                Component.onCompleted:
+                                                    appeared = true
+
                                                 width: notifColumn.width
                                                 // свёрнутая — строка бара,
                                                 // развёрнутая — как попап
-                                                height: expanded
-                                                    ? Settings.barHeight * 2
-                                                    : Settings.barHeight
+                                                height: appeared && !removing
+                                                    ? (expanded
+                                                        ? Settings.barHeight * 2
+                                                        : Settings.barHeight)
+                                                    : 0
                                                 cornerCut: Settings.line * 2
-                                                fillColor: Settings.c1
+                                                opacity: appeared && !removing
+                                                    ? 1 : 0
 
                                                 property bool expanded: false
 
@@ -1391,6 +1423,26 @@ PanelWindow {
                                                     NumberAnimation {
                                                         duration: Settings.animBase
                                                         easing.type: Easing.OutCubic
+                                                    }
+                                                }
+
+                                                Behavior on opacity {
+                                                    NumberAnimation {
+                                                        duration: Settings.animBase
+                                                    }
+                                                }
+
+                                                // после схлопывания —
+                                                // убрать из истории
+                                                Timer {
+                                                    interval: Settings.animBase + 50
+                                                    running: card.removing
+
+                                                    onTriggered: {
+                                                        Notifications.removeHistory(
+                                                            card.modelData.notificationId)
+                                                        root.unmarkRemoving(
+                                                            card.modelData.notificationId)
                                                     }
                                                 }
 
@@ -1439,7 +1491,7 @@ PanelWindow {
                                                                 anchors.rightMargin: Settings.line
                                                                 text: card.modelData
                                                                     ? card.modelData.appName : ""
-                                                                color: Settings.c2
+                                                                color: Settings.c1
                                                                 font.pixelSize: Settings.textXs
                                                                 elide: Text.ElideRight
                                                             }
@@ -1453,7 +1505,7 @@ PanelWindow {
                                                                     ? Qt.formatTime(
                                                                         new Date(card.modelData.time),
                                                                         "HH:mm") : ""
-                                                                color: Settings.c2
+                                                                color: Settings.c1
                                                                 font.pixelSize: Settings.textXs
                                                                 opacity: 0.6
                                                             }
@@ -1463,7 +1515,7 @@ PanelWindow {
                                                             width: parent.width
                                                             text: card.modelData
                                                                 ? card.modelData.summary : ""
-                                                            color: Settings.c2
+                                                            color: Settings.c1
                                                             font.pixelSize: Settings.textSm
                                                             font.bold: true
                                                             elide: Text.ElideRight
@@ -1474,7 +1526,7 @@ PanelWindow {
                                                             visible: card.expanded
                                                             text: card.modelData
                                                                 ? card.modelData.body : ""
-                                                            color: Settings.c2
+                                                            color: Settings.c1
                                                             font.pixelSize: Settings.textXs
                                                             wrapMode: Text.Wrap
                                                             elide: Text.ElideRight
@@ -1507,7 +1559,7 @@ PanelWindow {
                                                         strokePath:
                                                             "M 7,7 L 17,17"
                                                             + " M 17,7 L 7,17"
-                                                        lineColor: Settings.c2
+                                                        lineColor: Settings.c1
                                                     }
 
                                                     MouseArea {
@@ -1666,6 +1718,24 @@ PanelWindow {
         notifyCmd.summary = summary
         notifyCmd.body = body
         notifyCmd.running = true
+    }
+
+    // === плавное появление/исчезновение карточек уведомлений ===
+    // модель меняется мгновенно, поэтому удаление двухфазное: карточка
+    // помечается и схлопывается анимацией, и только потом уходит из
+    // истории; появление делает сам делегат (рост из нуля)
+    property var removingIds: ({})
+
+    function markRemoving(id) {
+        const copy = Object.assign({}, removingIds)
+        copy[id] = true
+        removingIds = copy
+    }
+
+    function unmarkRemoving(id) {
+        const copy = Object.assign({}, removingIds)
+        delete copy[id]
+        removingIds = copy
     }
 
     Process {
