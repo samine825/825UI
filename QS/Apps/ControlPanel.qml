@@ -633,9 +633,10 @@ PanelWindow {
                                 id: leftPart
                                 width: margin * 2
                                     + columns * cell + (columns - 1) * gap
-                                    // линия разделителя — в 1 line от
-                                    // кромки powerRow и плиток
-                                    - Settings.line * 1.25
+                                    // пояс разделителя — в 1 line от
+                                    // кромки плиток и powerRow
+                                    // (центр штриха на +1.5 линии от кромки)
+                                    - Settings.line * 0.75
                                 height: parent.height
 
                                 // плитки выросли на line (рамка = старым
