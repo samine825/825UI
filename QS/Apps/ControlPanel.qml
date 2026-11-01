@@ -1287,18 +1287,242 @@ PanelWindow {
                                 }
                             }
 
-                            // Правая часть: Уведомления (остаток ширины)
+                            // Правая часть: сохранённые уведомления —
+                            // карточки в стиле попапов (заливка c1,
+                            // текст c2), разворот кликом, крестик — удаление
                             Item {
                                 width: parent.width - leftPart.width
                                     - Settings.line
                                 height: parent.height
 
-                                SText {
-                                    anchors.centerIn: parent
-                                    text: "Notifications"
-                                    color: Settings.c1
-                                    font.pixelSize: Settings.textLg
-                                    font.bold: true
+                                // заголовок: название и «Clear all»
+                                Item {
+                                    id: notifHeader
+
+                                    anchors.top: parent.top
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.margins: Settings.line * 2
+                                    height: Settings.textLg
+
+                                    SText {
+                                        anchors.left: parent.left
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: "Notifications"
+                                        color: Settings.c1
+                                        font.pixelSize: Settings.textMd
+                                        font.bold: true
+                                    }
+
+                                    SRectangle {
+                                        anchors.right: parent.right
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: clearAllLabel.implicitWidth
+                                            + Settings.line * 4
+                                        height: Settings.textMd
+                                        radius: height / 2
+                                        color: "transparent"
+                                        border.color: Settings.c1
+                                        border.width: Settings.line / 2
+
+                                        SText {
+                                            id: clearAllLabel
+
+                                            anchors.centerIn: parent
+                                            text: "Clear all"
+                                            color: Settings.c1
+                                            font.pixelSize: Settings.textXs
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+
+                                            onClicked:
+                                                Notifications.clearHistory()
+                                        }
+                                    }
+                                }
+
+                                // список карточек, новые сверху
+                                Flickable {
+                                    id: notifList
+
+                                    anchors.top: notifHeader.bottom
+                                    anchors.bottom: parent.bottom
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.topMargin: Settings.line
+                                    anchors.bottomMargin: Settings.line * 2
+                                    anchors.leftMargin: Settings.line * 2
+                                    anchors.rightMargin: Settings.line * 2
+                                    contentWidth: width
+                                    contentHeight: notifColumn.height
+                                    boundsBehavior: Flickable.StopAtBounds
+                                    clip: true
+
+                                    Column {
+                                        id: notifColumn
+
+                                        width: notifList.width
+                                        spacing: Settings.line
+
+                                        Repeater {
+                                            model: Notifications.history
+
+                                            delegate: SPanel {
+                                                id: card
+
+                                                required property var modelData
+                                                required property int index
+
+                                                width: notifColumn.width
+                                                // свёрнутая — строка бара,
+                                                // развёрнутая — как попап
+                                                height: expanded
+                                                    ? Settings.barHeight * 2
+                                                    : Settings.barHeight
+                                                cornerCut: Settings.line * 2
+                                                fillColor: Settings.c1
+
+                                                property bool expanded: false
+
+                                                Behavior on height {
+                                                    NumberAnimation {
+                                                        duration: Settings.animBase
+                                                        easing.type: Easing.OutCubic
+                                                    }
+                                                }
+
+                                                // контент: под обводкой,
+                                                // режется по силуэту панели
+                                                Item {
+                                                    anchors.fill: parent
+                                                    anchors.margins: Settings.line * 2
+
+                                                    Image {
+                                                        id: thumb
+
+                                                        anchors.left: parent.left
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        width: Settings.barHeight
+                                                            - Settings.line * 4
+                                                        height: width
+                                                        fillMode: Image.PreserveAspectCrop
+                                                        asynchronous: true
+                                                        visible: card.modelData
+                                                            && card.modelData.image !== ""
+                                                        source: card.modelData
+                                                            ? card.modelData.image
+                                                            : ""
+                                                    }
+
+                                                    Column {
+                                                        anchors.left: thumb.visible
+                                                            ? thumb.right : parent.left
+                                                        anchors.leftMargin: thumb.visible
+                                                            ? Settings.line * 2 : 0
+                                                        anchors.right: parent.right
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        spacing: 2
+
+                                                        // приложение и время
+                                                        Item {
+                                                            width: parent.width
+                                                            height: appNameLabel.implicitHeight
+
+                                                            SText {
+                                                                id: appNameLabel
+
+                                                                anchors.left: parent.left
+                                                                anchors.right: timeLabel.left
+                                                                anchors.rightMargin: Settings.line
+                                                                text: card.modelData
+                                                                    ? card.modelData.appName : ""
+                                                                color: Settings.c2
+                                                                font.pixelSize: Settings.textXs
+                                                                elide: Text.ElideRight
+                                                            }
+
+                                                            SText {
+                                                                id: timeLabel
+
+                                                                anchors.right: parent.right
+                                                                anchors.verticalCenter: parent.verticalCenter
+                                                                text: card.modelData
+                                                                    ? Qt.formatTime(
+                                                                        new Date(card.modelData.time),
+                                                                        "HH:mm") : ""
+                                                                color: Settings.c2
+                                                                font.pixelSize: Settings.textXs
+                                                                opacity: 0.6
+                                                            }
+                                                        }
+
+                                                        SText {
+                                                            width: parent.width
+                                                            text: card.modelData
+                                                                ? card.modelData.summary : ""
+                                                            color: Settings.c2
+                                                            font.pixelSize: Settings.textSm
+                                                            font.bold: true
+                                                            elide: Text.ElideRight
+                                                        }
+
+                                                        SText {
+                                                            width: parent.width
+                                                            visible: card.expanded
+                                                            text: card.modelData
+                                                                ? card.modelData.body : ""
+                                                            color: Settings.c2
+                                                            font.pixelSize: Settings.textXs
+                                                            wrapMode: Text.Wrap
+                                                            elide: Text.ElideRight
+                                                            maximumLineCount: 4
+                                                        }
+                                                    }
+
+                                                    // разворот/сворачивание кликом
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        cursorShape: Qt.PointingHandCursor
+
+                                                        onClicked:
+                                                            card.expanded =
+                                                                !card.expanded
+                                                    }
+                                                }
+
+                                                // крестик удаления — поверх,
+                                                // чтобы клик не разворачивал
+                                                Item {
+                                                    anchors.top: parent.top
+                                                    anchors.right: parent.right
+                                                    anchors.margins: Settings.line / 2
+                                                    width: Settings.textSm
+                                                    height: width
+
+                                                    VIcon {
+                                                        anchors.fill: parent
+                                                        strokePath:
+                                                            "M 7,7 L 17,17"
+                                                            + " M 17,7 L 7,17"
+                                                        lineColor: Settings.c2
+                                                    }
+
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        anchors.margins: -Settings.line
+                                                        cursorShape: Qt.PointingHandCursor
+
+                                                        onClicked:
+                                                            Notifications.removeHistory(
+                                                                card.modelData.notificationId)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }

@@ -24,10 +24,79 @@ Item {
         property string tempText: "TEMP --°C"
         property string ramText: "RAM --.-/--.- GB"
 
+        // доли заполнения секций снизу вверх: cpu и ram — сами проценты,
+        // температура — от 0 до 100°C
+        property real cpuFraction: 0
+        property real tempFraction: 0
+        property real ramFraction: 0
+
         property double previousTotal: 0
         property double previousIdle: 0
 
         readonly property real point: height * InfexGeometry.notchFrac
+
+        // ячейка статистики: два слоя, как у всплывающих уведомлений —
+        // базовый (фон c2, текст c1) и заполняющийся снизу вверх
+        // (фон c1, текст c2). Высота заливки = доля метрики, между
+        // итерациями меняется плавно
+        component StatCell: Item {
+            id: statCell
+
+            property string text: ""
+            property real fraction: 0
+
+            width: labelItem.implicitWidth + Settings.line * 6
+            height: root.height
+
+            SText {
+                id: labelItem
+
+                anchors.centerIn: parent
+                text: statCell.text
+                color: Settings.c1
+                font.pixelSize: Settings.textSm
+                font.bold: true
+                verticalAlignment: Text.AlignVCenter
+            }
+
+            Item {
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: Math.max(0, Math.min(1, statCell.fraction))
+                    * parent.height
+                clip: true
+
+                Behavior on height {
+                    NumberAnimation {
+                        duration: Settings.animSlow
+                        easing.type: Easing.InOutQuad
+                    }
+                }
+
+                // полная копия ячейки, прижата к низу: совпадает с
+                // оригиналом пик в пиксель, видна только в заливке
+                Item {
+                    anchors.bottom: parent.bottom
+                    width: parent.width
+                    height: root.height
+
+                    Rectangle {
+                        anchors.fill: parent
+                        color: Settings.c1
+                    }
+
+                    SText {
+                        anchors.centerIn: parent
+                        text: statCell.text
+                        color: Settings.c2
+                        font.pixelSize: Settings.textSm
+                        font.bold: true
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+            }
+        }
 
         // границы фрейма = видимому внешнему краю обводки
         // (старая обводка выпирала на пол-линии — компенсируем ростом)
@@ -45,18 +114,9 @@ Item {
             spacing: 0 
 
             // --- [ЯЧЕЙКА 1: CPU] ---
-            Item {
-                width: cpuItem.implicitWidth + Settings.line * 6 // Добавили отступ слева и справа
-                height: root.height
-                SText {
-                    id: cpuItem
-                    anchors.centerIn: parent
-                    text: root.cpuText
-                    color: Settings.c1
-                    font.pixelSize: Settings.textSm
-                    font.bold: true
-                    verticalAlignment: Text.AlignVCenter
-                }
+            StatCell {
+                text: root.cpuText
+                fraction: root.cpuFraction
             }
 
             // --- [ПЕРЕГОРОДКА 1] ---
@@ -80,18 +140,9 @@ Item {
             }
 
             // --- [ЯЧЕЙКА 2: TEMP] ---
-            Item {
-                width: tempItem.implicitWidth + Settings.line * 6
-                height: root.height
-                SText {
-                    id: tempItem
-                    anchors.centerIn: parent
-                    text: root.tempText
-                    color: Settings.c1
-                    font.pixelSize: Settings.textSm
-                    font.bold: true
-                    verticalAlignment: Text.AlignVCenter
-                }
+            StatCell {
+                text: root.tempText
+                fraction: root.tempFraction
             }
 
             // --- [ПЕРЕГОРОДКА 2] ---
@@ -115,18 +166,9 @@ Item {
             }
 
             // --- [ЯЧЕЙКА 3: RAM] ---
-            Item {
-                width: ramItem.implicitWidth + Settings.line * 6
-                height: root.height
-                SText {
-                    id: ramItem
-                    anchors.centerIn: parent
-                    text: root.ramText
-                    color: Settings.c1
-                    font.pixelSize: Settings.textSm
-                    font.bold: true
-                    verticalAlignment: Text.AlignVCenter
-                }
+            StatCell {
+                text: root.ramText
+                fraction: root.ramFraction
             }
         }
 
@@ -172,7 +214,9 @@ Item {
                             var deltaIdle = cpuIdle - root.previousIdle
                             if (deltaTotal > 0) {
                                 var usage = (1 - deltaIdle / deltaTotal) * 100
-                                root.cpuText = "CPU " + Math.round(Math.max(0, Math.min(100, usage))) + "%"
+                                var cpuPct = Math.round(Math.max(0, Math.min(100, usage)))
+                                root.cpuText = "CPU " + cpuPct + "%"
+                                root.cpuFraction = cpuPct / 100
                             }
                         }
                         root.previousTotal = cpuTotal; root.previousIdle = cpuIdle
@@ -184,11 +228,19 @@ Item {
                             var usedGiB = usedKiB / 1024 / 1024
                             var totalGiB = totalKiB / 1024 / 1024
                             root.ramText = "RAM " + usedGiB.toFixed(1) + "/" + totalGiB.toFixed(1) + " GB"
+                            root.ramFraction = Math.max(0, Math.min(1, usedKiB / totalKiB))
                         }
                     }
                     if (tempMatch) {
                         var rawTemp = Number(tempMatch[1])
-                        root.tempText = rawTemp >= 0 ? "TEMP " + Math.round(rawTemp >= 1000 ? rawTemp / 1000 : rawTemp) + "°C" : "TEMP --°C"
+                        if (rawTemp >= 0) {
+                            var deg = rawTemp >= 1000 ? rawTemp / 1000 : rawTemp
+                            root.tempText = "TEMP " + Math.round(deg) + "°C"
+                            root.tempFraction = Math.max(0, Math.min(1, deg / 100))
+                        } else {
+                            root.tempText = "TEMP --°C"
+                            root.tempFraction = 0
+                        }
                     }
                 }
             }

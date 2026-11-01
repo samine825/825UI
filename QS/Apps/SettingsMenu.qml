@@ -755,32 +755,6 @@ PanelWindow {
                                 }
                             }
                         }
-
-                        // кнопка обновления
-                        SRectangle {
-                            anchors.top: parent.top
-                            anchors.left: parent.left
-                            anchors.margins: Settings.line
-                            width: 100
-                            height: 24
-                            radius: 12
-                            color: "transparent"
-                            border.color: Settings.c1
-                            z: 3
-
-                            SText {
-                                anchors.centerIn: parent
-                                text: wallpaperScanner.running ? "Скан…" : "Обновить"
-                                color: Settings.c1
-                                font.pixelSize: 12
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.rescanWallpapers()
-                            }
-                        }
                     }
 
                     // monitor

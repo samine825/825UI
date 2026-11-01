@@ -9,7 +9,12 @@ Singleton {
     
     property list<var> notifications: []
     property int unread: 0
-    
+
+    // архив для панели управления: всё, что приходило, новое сверху.
+    // signal historyChanged генерируется автоматически из свойства
+    property list<var> history: []
+    readonly property int historyMax: 50
+
     signal notificationAdded(notification: var)
     signal notificationRemoved(notificationId: int)
     signal allCleared
@@ -41,6 +46,7 @@ Singleton {
             root.notifications = [...root.notifications, entry]
             root.unread++
             root.notificationAdded(entry)
+            root.pushHistory(entry)
             
             let timeout = notification.expireTimeout > 0 ? notification.expireTimeout : 5000
             if (notification.urgency === NotificationUrgency.Critical) timeout = 0
@@ -78,5 +84,25 @@ Singleton {
         root.notifications = []
         root.unread = 0
         root.allCleared()
+    }
+
+    // === архив ===
+
+    function pushHistory(entry) {
+        const copy = Object.assign({}, entry)
+        root.history = [copy].concat(root.history)
+            .slice(0, root.historyMax)
+    }
+
+    function removeHistory(id) {
+        root.history = root.history.filter(
+            h => h.notificationId !== id)
+    }
+
+    function clearHistory() {
+        if (root.history.length === 0)
+            return
+
+        root.history = []
     }
 }
