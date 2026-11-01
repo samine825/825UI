@@ -16,6 +16,7 @@ cat > "$probe" <<'EOF'
 import QtQuick
 import Quickshell
 import "QS/Apps/Calc.js" as Calc
+import "QS/Apps/EmojiData.js" as EmojiData
 
 ShellRoot {
     Item {
@@ -93,6 +94,19 @@ ShellRoot {
             eq("format neg", Calc.format(-7), "-7")
             eq("format null", Calc.format(null), "")
 
+            // === EmojiData: поиск ===
+            ok("search dog", EmojiData.search("dog", "").length > 0)
+            ok("search cat", EmojiData.search("cat", "animals")
+                .some(e => e.ch === "🐱"))
+            eq("search empty", EmojiData.search("zzzznope", "").length, 0)
+            ok("search by kw", EmojiData.search("thumbs up", "")
+                .some(e => e.ch === "👍"))
+            eq("byCategory smileys", EmojiData.byCategory("smileys")
+                .every(e => e.cat === "smileys") ? 1 : 0, 1)
+            eq("nameOf", EmojiData.nameOf("😀"), "grinning face")
+            eq("nameOf unknown", EmojiData.nameOf("🜛"), "")
+            ok("categories 9", EmojiData.categories.length === 9)
+
             console.log("TEST_TOTAL " + total + " FAILS " + fails)
             Qt.quit()
         }
@@ -119,4 +133,84 @@ if ! echo "$out" | grep -qa "TEST_TOTAL"; then
     echo "=== TESTS DID NOT RUN ==="
     exit 1
 fi
+
+# === фаза 2: недавние эмодзи, персист состояния ===
+mkdir -p /tmp/825testhome/.825UI/state
+rm -f /tmp/825testhome/.825UI/state/emoji.json
+
+cat > "$probe" <<'EOF'
+import QtQuick
+import Quickshell
+import "QS/Apps"
+
+ShellRoot {
+    EmojiPickerContent {
+        id: app
+        x: 0; y: 0
+        stateFile: "/tmp/825testhome/.825UI/state/emoji.json"
+    }
+
+    Timer { id: t1; interval: 1200; running: true
+        onTriggered: { app.pick("😀"); t2.start() } }
+    Timer { id: t2; interval: 400
+        onTriggered: { app.pick("😂"); t3.start() } }
+    Timer { id: t3; interval: 400
+        onTriggered: { app.pick("👍"); t4.start() } }
+    // повторный выбор существующего — поднимается наверх без дубля
+    Timer { id: t4; interval: 400
+        onTriggered: { app.pick("😀"); t5.start() } }
+    // файл асинхронный — даём дописать, затем проверяем перезагрузкой
+    Timer { id: t5; interval: 1200
+        onTriggered: {
+            if (app.recentList.length !== 3
+                    || app.recentList[0] !== "😀"
+                    || app.recentList[1] !== "👍"
+                    || app.recentList[2] !== "😂") {
+                console.log("TEST2_FAIL recent order "
+                    + JSON.stringify(app.recentList))
+                Qt.quit()
+                return
+            }
+            console.log("TEST2_OK recent order")
+            app.destroy()
+            loader.active = true
+        } }
+
+    Loader {
+        id: loader
+        active: false
+        sourceComponent: EmojiPickerContent {
+            stateFile: "/tmp/825testhome/.825UI/state/emoji.json"
+            onRecentListChanged: {
+                if (recentList.length === 3
+                        && recentList[0] === "😀") {
+                    console.log("TEST2_OK reload persist")
+                    Qt.quit()
+                }
+            }
+        }
+    }
+
+    Timer { interval: 8000; running: true
+        onTriggered: {
+            console.log("TEST2_FAIL timeout")
+            Qt.quit()
+        } }
+}
+EOF
+
+out2=$(env -i HOME=/tmp/825testhome PATH=/usr/bin:/bin \
+    QT_QPA_PLATFORM=xcb QT_QUICK_BACKEND=software \
+    LIBGL_ALWAYS_SOFTWARE=1 \
+    xvfb-run -a -s "-screen 0 800x600x24" \
+    timeout 20 /usr/bin/qs -p "$(pwd)" 2>&1)
+
+echo "$out2" | grep -aE "TEST2_OK|TEST2_FAIL|ERROR|FATAL" | head -10
+
+if echo "$out2" | grep -qa "TEST2_FAIL" || echo "$out2" | grep -qaE "ERROR|FATAL" \
+   || ! echo "$out2" | grep -qa "TEST2_OK reload persist"; then
+    echo "=== TESTS FAIL (phase 2) ==="
+    exit 1
+fi
+
 echo "=== TESTS PASS ==="
