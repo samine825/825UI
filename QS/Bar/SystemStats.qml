@@ -35,46 +35,113 @@ Item {
 
         readonly property real point: height * InfexGeometry.notchFrac
 
+        // x на диагонали перегородки (dvx — её левый край в координатах
+        // фрейма) на высоте y. Диагональ идёт от (dvx + point, line/2)
+        // через вершину (dvx, H/2) к (dvx + point, H − line/2); за
+        // пределами рисуемой линии — линейное продолжение под обводки
+        function diagX(dvx, y) {
+            const H = statsFrame.height
+            const mid = H / 2
+            const top = Settings.line / 2
+            const bot = H - Settings.line / 2
+
+            if (y <= mid)
+                return dvx + root.point * (mid - y) / (mid - top)
+
+            return dvx + root.point * (y - mid) / (bot - mid)
+        }
+
+        // контур заливки секции ниже уровня level: верхняя кромка —
+        // горизонталь уровня, боковые — диагонали перегородок (null —
+        // край фрейма, его точно дорежет маска силуэта)
+        function sectionPath(leftDv, rightDv, level) {
+            const H = statsFrame.height
+            const W = statsFrame.width
+            const mid = H / 2
+            const f = function (v) { return v.toFixed(2) }
+
+            const xl = leftDv === null ? 0 : diagX(leftDv, level)
+            const xr = rightDv === null ? W : diagX(rightDv, level)
+
+            let s = "M " + f(xl) + "," + f(level)
+                + " L " + f(xr) + "," + f(level)
+
+            // правая кромка вниз до дна
+            if (rightDv === null) {
+                s += " L " + f(W) + "," + f(level)
+                    + " L " + f(W) + "," + f(H)
+            } else {
+                if (level < mid)
+                    s += " L " + f(diagX(rightDv, mid)) + "," + f(mid)
+
+                s += " L " + f(diagX(rightDv, H)) + "," + f(H)
+            }
+
+            // низ и левая кромка вверх до уровня
+            if (leftDv === null) {
+                s += " L " + f(0) + "," + f(H)
+            } else {
+                s += " L " + f(diagX(leftDv, H)) + "," + f(H)
+
+                if (level < mid)
+                    s += " L " + f(diagX(leftDv, mid)) + "," + f(mid)
+            }
+
+            return s + " Z"
+        }
+
         // границы фрейма = видимому внешнему краю обводки
         // (старая обводка выпирала на пол-линии — компенсируем ростом).
         // Заливки секций — дети фрейма: маска силуэта режет их по
-        // контуру, внутренняя тень и обводка лежат поверх (как
-        // обложка в плеере панели управления)
+        // контуру бара, внутренняя тень и обводка лежат поверх (как
+        // обложка в плеере)
         SFrame {
+            id: statsFrame
+
             x: -Settings.line / 2
             y: -Settings.line / 2
             width: parent.width + Settings.line
             height: parent.height + Settings.line
             shadowOverContent: true
 
-            // заливка секции: снизу вверх на долю метрики, между
-            // итерациями — плавно; внутри полноразмерный слепок зоны
-            // (фон c1 + текст c2), совпадающий с базовым текстом
+            // === заливка CPU ===
             Item {
-                id: cpuFill
+                anchors.fill: parent
 
-                x: statsRow.x + cpuCell.x + Settings.line / 2
-                width: cpuCell.width
-                anchors.bottom: parent.bottom
-                height: root.cpuFraction * parent.height
-                clip: true
+                // y верхней кромки заливки; анимируется между итерациями
+                property real level:
+                    parent.height * (1 - root.cpuFraction)
 
-                Behavior on height {
+                Behavior on level {
                     NumberAnimation {
                         duration: Settings.animSlow
                         easing.type: Easing.InOutQuad
                     }
                 }
 
-                Item {
-                    anchors.bottom: parent.bottom
-                    width: parent.width
-                    height: parent.height
+                Shape {
+                    anchors.fill: parent
+                    preferredRendererType: Shape.CurveRenderer
 
-                    Rectangle {
-                        anchors.fill: parent
-                        color: Settings.c1
+                    SShapePath {
+                        fillColor: Settings.c1
+                        strokeColor: "transparent"
+                        strokeWidth: 0
+
+                        PathSvg {
+                            path: root.sectionPath(null,
+                                statsRow.x + div1.x + Settings.line / 2,
+                                level)
+                        }
                     }
+                }
+
+                // копия текста c2: видна только там, где под ней заливка
+                // (над фоном c2 и тенью c2 она сливается с фоном)
+                Item {
+                    x: statsRow.x + cpuCell.x + Settings.line / 2
+                    width: cpuCell.width
+                    height: parent.height
 
                     SText {
                         anchors.centerIn: parent
@@ -87,31 +154,42 @@ Item {
                 }
             }
 
+            // === заливка TEMP ===
             Item {
-                id: tempFill
+                anchors.fill: parent
 
-                x: statsRow.x + tempCell.x + Settings.line / 2
-                width: tempCell.width
-                anchors.bottom: parent.bottom
-                height: root.tempFraction * parent.height
-                clip: true
+                property real level:
+                    parent.height * (1 - root.tempFraction)
 
-                Behavior on height {
+                Behavior on level {
                     NumberAnimation {
                         duration: Settings.animSlow
                         easing.type: Easing.InOutQuad
                     }
                 }
 
-                Item {
-                    anchors.bottom: parent.bottom
-                    width: parent.width
-                    height: parent.height
+                Shape {
+                    anchors.fill: parent
+                    preferredRendererType: Shape.CurveRenderer
 
-                    Rectangle {
-                        anchors.fill: parent
-                        color: Settings.c1
+                    SShapePath {
+                        fillColor: Settings.c1
+                        strokeColor: "transparent"
+                        strokeWidth: 0
+
+                        PathSvg {
+                            path: root.sectionPath(
+                                statsRow.x + div1.x + Settings.line / 2,
+                                statsRow.x + div2.x + Settings.line / 2,
+                                level)
+                        }
                     }
+                }
+
+                Item {
+                    x: statsRow.x + tempCell.x + Settings.line / 2
+                    width: tempCell.width
+                    height: parent.height
 
                     SText {
                         anchors.centerIn: parent
@@ -124,31 +202,42 @@ Item {
                 }
             }
 
+            // === заливка RAM ===
             Item {
-                id: ramFill
+                anchors.fill: parent
 
-                x: statsRow.x + ramCell.x + Settings.line / 2
-                width: ramCell.width
-                anchors.bottom: parent.bottom
-                height: root.ramFraction * parent.height
-                clip: true
+                property real level:
+                    parent.height * (1 - root.ramFraction)
 
-                Behavior on height {
+                Behavior on level {
                     NumberAnimation {
                         duration: Settings.animSlow
                         easing.type: Easing.InOutQuad
                     }
                 }
 
-                Item {
-                    anchors.bottom: parent.bottom
-                    width: parent.width
-                    height: parent.height
+                Shape {
+                    anchors.fill: parent
+                    preferredRendererType: Shape.CurveRenderer
 
-                    Rectangle {
-                        anchors.fill: parent
-                        color: Settings.c1
+                    SShapePath {
+                        fillColor: Settings.c1
+                        strokeColor: "transparent"
+                        strokeWidth: 0
+
+                        PathSvg {
+                            path: root.sectionPath(
+                                statsRow.x + div2.x + Settings.line / 2,
+                                null,
+                                level)
+                        }
                     }
+                }
+
+                Item {
+                    x: statsRow.x + ramCell.x + Settings.line / 2
+                    width: ramCell.width
+                    height: parent.height
 
                     SText {
                         anchors.centerIn: parent
@@ -189,6 +278,8 @@ Item {
 
             // --- [ПЕРЕГОРОДКА 1] ---
             Shape {
+                id: div1
+
                 width: root.point // Ширина равна шагу наклона, чтобы не было наложений
                 height: root.height
                 preferredRendererType: Shape.CurveRenderer
@@ -228,6 +319,8 @@ Item {
 
             // --- [ПЕРЕГОРОДКА 2] ---
             Shape {
+                id: div2
+
                 width: root.point
                 height: root.height
                 preferredRendererType: Shape.CurveRenderer
