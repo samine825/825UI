@@ -237,9 +237,9 @@ PanelWindow {
             width: lockScreen.avatarSize
             height: lockScreen.avatarSize
             cornerCut: lockScreen.line * 2
-            innerStroke: true
+            shadow: "inside"
+            shadowColor: Settings.c2
             fillColor: Settings.c2
-            shadow: "none"
 
             Image {
                 anchors.fill: parent
