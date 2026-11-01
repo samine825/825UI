@@ -9,16 +9,17 @@ import ".."
 // Экран блокировки. Окно живёт всегда (прозрачный оверлей, как у
 // уведомлений) — геометрия известна с старта, анимациям не с чем
 // гоняться. Пока не заблокировано: маска ввода пуста (клики проходят
-// насквозь), клавиатура не наша, всё прозрачно. По блокировке:
-// чёрный фон и контент проявляются, а форма пароля повторяет жизнь
-// уведомления, только доком не в угол, а в центр экрана: приезд
-// (OutCubic 600 + полуоборот OutSine), док (InOutCubic 1200 + догон
-// до полного оборота InOutBack), раскрытие — по символу OutBack 700.
-// Закрытая форма = startSize уведомления, контент растянут на весь
-// контейнер с зазором от кончиков выемок, без курсора. На время
-// PAM-проверки ввод замораживается и стирается только по результату.
-// Проверка пароля — PAM (дефолтный конфиг login), ошибка PAM
-// отпирает, чтобы не запереть пользователя навсегда.
+// насквозь), клавиатура не наша, всё прозрачно. По блокировке форма
+// пароля начинается как анимация уведомления: приезд OutCubic 600 +
+// полуоборот OutSine, обводка видна сразу, тело проявляется 1500
+// InCubic; когда форма дошла до нижней точки Y по середине X —
+// начинается затемнение (чёрный фон и контент). Раскрытие — по
+// символу OutBack 700. Закрытая форма = startSize уведомления с той
+// же геометрией контура (кончики сходятся в центре), пароль по
+// центру, без курсора. На время PAM-проверки ввод замораживается и
+// стирается только по результату. Проверка пароля — PAM (дефолтный
+// конфиг login), ошибка PAM отпирает, чтобы не запереть пользователя
+// навсегда.
 PanelWindow {
     id: lockScreen
 
@@ -62,10 +63,9 @@ PanelWindow {
     readonly property real blockTop: Math.round((height - blockH) / 2)
 
     // === форма пароля ===
-    // кончики выемок рамки infex (глубина от кромки на середине высоты)
-    readonly property real tipX: 2 * InfexGeometry.notchFrac
-        * (formH / 2 - line / 2)
-    // закрытая форма = startSize уведомления: квадрат formH × formH
+    // закрытая форма = startSize уведомления; контур формы — контур
+    // уведомления 1:1 (см. NotificationPopup): кончики выемок на
+    // height/2, при ширине height они сходятся в центре
     readonly property real formClosedW: formH
     readonly property real formCharW: line * 4
     readonly property int formMaxLen: 32
@@ -89,8 +89,6 @@ PanelWindow {
             return
 
         exitAnim.stop()
-        dockYAnim.stop()
-        dockRotAnim.stop()
 
         locked = true
         checking = false
@@ -98,13 +96,14 @@ PanelWindow {
         clockNow = new Date()
         passInput.text = ""
 
-        // фон и контент проявляются (Behavior на opacity)
-        blackBg.opacity = 1
-        content.opacity = 1
-        form.opacity = 1
+        // экран прозрачен: затемнение начнётся, когда форма долетит
+        blackBg.opacity = 0
+        content.opacity = 0
 
-        // форма прилетает как уведомление: из-за верхней кромки,
-        // потом доком к центру экрана
+        // форма прилетает как уведомление: обводка видна сразу,
+        // тело проявляется, полёт из-за верхней кромки в центр экрана
+        form.opacity = 1
+        formBody.opacity = 1
         form.y = -formH
         form.rotation = 0
         arriveYAnim.restart()
@@ -119,8 +118,6 @@ PanelWindow {
 
         arriveYAnim.stop()
         arriveRotAnim.stop()
-        dockYAnim.stop()
-        dockRotAnim.stop()
 
         // ввод и клавиатура отпускаются сразу, картинка гаснет плавно
         locked = false
@@ -260,10 +257,12 @@ PanelWindow {
         }
     }
 
-    // форма ввода пароля: фрейм инфекса — та же форма, что у
-    // уведомления; при пустом пароле — её состояние до раскрытия
-    // (квадрат startSize), с символами раскрывается в стороны
-    SFrame {
+    // форма ввода пароля: контур уведомления 1:1 — padX =
+    // 0.5·tipMult·line, padY = line/2, кончики выемок на height/2
+    // (при ширине height сходятся в центре, как у уведомления до
+    // раскрытия). Обводки (тёмный нарост + c1) видны сразу, тело
+    // с точками проявляется, как цвет уведомления
+    Item {
         id: form
 
         x: Math.round((lockScreen.width - width) / 2)
@@ -272,9 +271,11 @@ PanelWindow {
             + Math.min(passInput.text.length, lockScreen.formMaxLen)
                 * lockScreen.formCharW
         height: lockScreen.formH
-        fillColor: Settings.c2
-        shadow: "both"
         opacity: 0
+
+        readonly property real padX:
+            0.5 * InfexGeometry.tipMult * lockScreen.line
+        readonly property real padY: lockScreen.line / 2
 
         // раскрытие — как расширение уведомления (OutBack, 700)
         Behavior on width {
@@ -284,49 +285,111 @@ PanelWindow {
             }
         }
 
-        // проявление — как цветовое проявление уведомления (1500, InCubic)
-        Behavior on opacity {
-            NumberAnimation {
-                duration: 1500
-                easing.type: Easing.InCubic
-            }
-        }
-
         transform: Translate {
             id: formShake
         }
 
-        // контент просто растягивается на весь контейнер; зазор от
-        // кончиков выемок, иначе точки на середине высоты срежет
-        // маской силуэта; без курсора-разделителя
-        TextInput {
-            id: passInput
+        component NotifContour: SShapePath {
+            joinStyle: ShapePath.MiterJoin
+            capStyle: ShapePath.FlatCap
+
+            startX: form.padX
+            startY: form.padY
+
+            PathLine { x: form.width - form.padX; y: form.padY }
+            // правый кончик зажат к центру: OutBack при схлопывании
+            // промахивается ниже закрытой ширины — без клампа контур
+            // пересекается сам на себе
+            PathLine {
+                x: Math.max(form.height / 2,
+                    form.width - form.height / 2)
+                y: form.height / 2
+            }
+            PathLine { x: form.width - form.padX; y: form.height - form.padY }
+            PathLine { x: form.padX; y: form.height - form.padY }
+            PathLine { x: form.height / 2; y: form.height / 2 }
+            PathLine { x: form.padX; y: form.padY }
+        }
+
+        // тело: заливка + точки, проявляется как цвет уведомления
+        Item {
+            id: formBody
 
             anchors.fill: parent
-            leftPadding: lockScreen.tipX + Settings.line / 2
-            rightPadding: lockScreen.tipX + Settings.line / 2
-            verticalAlignment: TextInput.AlignVCenter
-            horizontalAlignment: TextInput.AlignLeft
-            readOnly: lockScreen.checking
-            echoMode: TextInput.Password
-            font.pixelSize: Settings.textLg
-            color: Settings.c1
-            selectionColor: Settings.c1
-            selectedTextColor: Settings.c2
-            cursorVisible: false
-            opacity: lockScreen.checking ? 0.45 : 1
+            opacity: 0
 
             Behavior on opacity {
-                NumberAnimation { duration: Settings.animBase }
+                NumberAnimation {
+                    duration: 1500
+                    easing.type: Easing.InCubic
+                }
             }
 
-            onAccepted: lockScreen.submit()
+            Shape {
+                anchors.fill: parent
+                preferredRendererType: Shape.CurveRenderer
+
+                NotifContour {
+                    fillColor: Settings.c2
+                    strokeColor: "transparent"
+                    strokeWidth: 0
+                }
+            }
+
+            // пароль по центру талии контура, без курсора
+            TextInput {
+                id: passInput
+
+                anchors.fill: parent
+                leftPadding: form.height / 2
+                rightPadding: form.height / 2
+                verticalAlignment: TextInput.AlignVCenter
+                horizontalAlignment: TextInput.AlignHCenter
+                readOnly: lockScreen.checking
+                echoMode: TextInput.Password
+                font.pixelSize: Settings.textLg
+                color: Settings.c1
+                selectionColor: Settings.c1
+                selectedTextColor: Settings.c2
+                cursorVisible: false
+                opacity: lockScreen.checking ? 0.45 : 1
+
+                Behavior on opacity {
+                    NumberAnimation { duration: Settings.animBase }
+                }
+
+                onAccepted: lockScreen.submit()
+            }
+        }
+
+        // тёмная обводка-нарост снаружи, как у уведомления
+        Shape {
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+
+            NotifContour {
+                fillColor: "transparent"
+                strokeColor: Settings.c2
+                strokeWidth: lockScreen.line * 3
+            }
+        }
+
+        // основная обводка c1 — поверх всего
+        Shape {
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+
+            NotifContour {
+                fillColor: "transparent"
+                strokeColor: Settings.c1
+                strokeWidth: lockScreen.line
+            }
         }
     }
 
-    // приезд: дуга прихода уведомления — OutCubic вниз до промежуточной
-    // точки + полуоборот OutSine (600 мс), затем док к центру экрана:
-    // InOutCubic 1200 мс и догон до полного оборота InOutBack
+    // приезд: дуга прихода уведомления — OutCubic вниз + полуоборот
+    // OutSine (600 мс), полёт из-за верхней кромки сразу в центр
+    // экрана (нижняя точка Y, середина X)
     PropertyAnimation {
         id: arriveYAnim
 
@@ -335,14 +398,16 @@ PanelWindow {
         from: -(lockScreen.formH)
         duration: 600
         easing.type: Easing.OutCubic
-        to: lockScreen.formH * 2 + 20
+        to: lockScreen.formFinalY
 
         onFinished: {
             if (!lockScreen.locked)
                 return
 
-            dockYAnim.restart()
-            dockRotAnim.restart()
+            // форма долетела до нижней точки по центру X —
+            // начинается затемнение
+            blackBg.opacity = 1
+            content.opacity = 1
         }
     }
 
@@ -355,27 +420,6 @@ PanelWindow {
         to: 180
         duration: 600
         easing.type: Easing.OutSine
-    }
-
-    PropertyAnimation {
-        id: dockYAnim
-
-        target: form
-        property: "y"
-        duration: 1200
-        easing.type: Easing.InOutCubic
-        to: lockScreen.formFinalY
-    }
-
-    PropertyAnimation {
-        id: dockRotAnim
-
-        target: form
-        property: "rotation"
-        from: 180
-        to: 360
-        duration: 1200
-        easing.type: Easing.InOutBack
     }
 
     // уход разблокированной формы вверх, как уход уведомления
@@ -391,6 +435,7 @@ PanelWindow {
         onFinished: {
             // сброс на следующий показ, экран к этому моменту прозрачен
             form.opacity = 0
+            formBody.opacity = 0
         }
     }
 
