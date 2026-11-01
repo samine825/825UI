@@ -17,6 +17,7 @@ import QtQuick
 import Quickshell
 import "QS/Apps/Calc.js" as Calc
 import "QS/Apps/EmojiData.js" as EmojiData
+import "QS/Apps/TimeMath.js" as TimeMath
 
 ShellRoot {
     Item {
@@ -106,6 +107,78 @@ ShellRoot {
             eq("nameOf", EmojiData.nameOf("😀"), "grinning face")
             eq("nameOf unknown", EmojiData.nameOf("🜛"), "")
             ok("categories 9", EmojiData.categories.length === 9)
+
+            // === TimeMath: следующее срабатывание ===
+            // среда 2026-03-04 10:00:00 UTC-локаль — берём
+            // конструктор с компонентами, локаль не важна
+            const now = new Date(2026, 2, 4, 10, 0, 0, 0)
+
+            eq("next today later",
+                TimeMath.nextOccurrence(now,
+                    { enabled: true, hours: 15, minutes: 30 })
+                    .getDate(), 4)
+            eq("next tomorrow",
+                TimeMath.nextOccurrence(now,
+                    { enabled: true, hours: 9, minutes: 0 })
+                    .getDate(), 5)
+            eq("disabled null",
+                TimeMath.nextOccurrence(now,
+                    { enabled: false, hours: 23, minutes: 0 }), null)
+            eq("days filter",
+                TimeMath.nextOccurrence(now,
+                    { enabled: true, hours: 11, minutes: 0,
+                        days: [4] }).getDate(), 5)
+            eq("days today ok",
+                TimeMath.nextOccurrence(now,
+                    { enabled: true, hours: 11, minutes: 0,
+                        days: [3] }).getDate(), 4)
+            eq("empty days every day",
+                TimeMath.nextOccurrence(now,
+                    { enabled: true, hours: 11, minutes: 0,
+                        days: [] }).getDate(), 4)
+
+            // snooze в будущем приоритетнее обычного времени
+            const snz = new Date(2026, 2, 4, 12, 0, 0, 0)
+
+            eq("snooze priority",
+                TimeMath.nextOccurrence(now, {
+                    enabled: true, hours: 23, minutes: 0,
+                    snoozeUntil: snz.toISOString()
+                }).getHours(), 12)
+            eq("snooze past ignored",
+                TimeMath.nextOccurrence(now, {
+                    enabled: true, hours: 9, minutes: 0,
+                    snoozeUntil: new Date(2026, 2, 3, 12, 0)
+                        .toISOString()
+                }).getDate(), 5)
+
+            // неделя вперёд: воскресный будильник из среды
+            eq("week wrap",
+                TimeMath.nextOccurrence(now, {
+                    enabled: true, hours: 8, minutes: 0,
+                    days: [0] }).getDate(), 8)
+
+            // === TimeMath: форматирование ===
+            eq("formatMS", TimeMath.formatMS(65 * 1000), "01:05")
+            eq("formatMS big", TimeMath.formatMS(90 * 60000), "90:00")
+            eq("formatMS zero", TimeMath.formatMS(0), "00:00")
+            eq("formatHMSCC", TimeMath.formatHMSCC(12034), "00:12:03")
+            eq("formatHMSCC min", TimeMath.formatHMSCC(61234),
+                "01:01:23")
+            eq("pad2", TimeMath.pad2(7), "07")
+            eq("daysLabel empty", TimeMath.daysLabel([]), "Every day")
+            eq("daysLabel weekdays",
+                TimeMath.daysLabel([1, 2, 3, 4, 5]), "Weekdays")
+            eq("daysLabel weekend",
+                TimeMath.daysLabel([6, 0]), "Weekends")
+            eq("daysLabel mix", TimeMath.daysLabel([1, 3]),
+                "Mon, Wed")
+            eq("snoozeFrom",
+                TimeMath.snoozeFrom(new Date(2026, 2, 4, 10, 0), 5)
+                    .getMinutes(), 5)
+            eq("occurrenceKey",
+                TimeMath.occurrenceKey(new Date(2026, 2, 4, 7, 5)),
+                "2026-2-4 07:05")
 
             console.log("TEST_TOTAL " + total + " FAILS " + fails)
             Qt.quit()
