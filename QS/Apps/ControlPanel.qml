@@ -26,6 +26,9 @@ PanelWindow {
     }
     color: "transparent"
 
+    // запрос на открытие приложения (showOnly в shell)
+    signal appRequested(string app)
+
     // === АУДИО (PipeWire) ===
     PwObjectTracker {
         objects: [Pipewire.defaultAudioSink, Pipewire.defaultAudioSource]
@@ -1151,28 +1154,33 @@ PanelWindow {
                                         }
                                     }
 
-                                    // Пустышки 1x1 (стиль плиток обоев), ниже
-                                    // плеера — первые две клетки ряда заняты
-                                    // Wi-Fi и Bluetooth
+                                    // Плитки приложений 1x1 (на месте
+                                    // бывших пустышек): буфер, калькулятор,
+                                    // эмодзи, часы, камера, диктофон
                                     Repeater {
                                         model: [
-                                            Qt.point(2, 3), Qt.point(3, 3),
-                                            Qt.point(4, 3), Qt.point(5, 3),
-                                            Qt.point(0, 4), Qt.point(1, 4)
+                                            { col: 2, row: 3, app: "clipboard",  icon: Glyphs.iconClipboard },
+                                            { col: 3, row: 3, app: "calculator", icon: Glyphs.iconCalculator },
+                                            { col: 4, row: 3, app: "emoji",      icon: Glyphs.iconEmoji },
+                                            { col: 5, row: 3, app: "clock",      icon: Glyphs.iconClock },
+                                            { col: 0, row: 4, app: "camera",     icon: Glyphs.iconCamera },
+                                            { col: 1, row: 4, app: "recorder",   icon: Glyphs.iconMic }
                                         ]
 
-                                        delegate: SPanel {
-                                            property int tileCol: modelData.x
-                                            property int tileRow: modelData.y
+                                        delegate: STile {
+                                            required property var modelData
 
-                                            x: leftPart.cellX(tileCol) - Settings.line / 2
-                                            y: leftPart.cellY(tileRow) - Settings.line / 2
+                                            x: leftPart.cellX(modelData.col) - Settings.line / 2
+                                            y: leftPart.cellY(modelData.row) - Settings.line / 2
                                             width: leftPart.cell + Settings.line
                                             height: leftPart.cell + Settings.line
+                                            iconStroke: modelData.icon
 
-                                            cornerCut: Settings.line * 2
-                                            strokeColor: Settings.c1
-                                            fillColor: "transparent"
+                                            onActivated: {
+                                                root.hide()
+                                                root.appRequested(
+                                                    modelData.app)
+                                            }
                                         }
                                     }
 

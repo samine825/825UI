@@ -53,13 +53,11 @@ Item {
     }
 
     function pick(ch) {
-        // наверх и без дублей, максимум 24
+        // наверх и без дублей, максимум 24; копирование в буфер —
+        // забота обёртки (сигнал emojiPicked)
         recentList = [ch].concat(
             recentList.filter(c => c !== ch)).slice(0, 24)
         saveRecent()
-
-        copyProc.command = ["wl-copy", ch]
-        copyProc.running = true
 
         emojiPicked(ch)
     }
@@ -95,10 +93,6 @@ Item {
         onLoadFailed: (error) => {
             // первого запуска файл ещё нет — это норма
         }
-    }
-
-    Process {
-        id: copyProc
     }
 
     Column {

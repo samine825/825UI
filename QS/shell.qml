@@ -25,7 +25,13 @@ ShellRoot {
         const panels = {
             "launcher": appLauncher,
             "control": controlPanel,
-            "settings": settingsMenu
+            "settings": settingsMenu,
+            "clipboard": clipboardPanel,
+            "calculator": calculatorPanel,
+            "emoji": emojiPickerPanel,
+            "clock": clockApp,
+            "camera": cameraPanel,
+            "recorder": recorderPanel
         }
 
         for (const key in panels) {
@@ -543,6 +549,43 @@ ShellRoot {
                     : showOnly("launcher")
             }
 
+            // === приложения ===
+            function toggleClipboard(): void {
+                clipboardPanel.visible
+                    ? clipboardPanel.hide()
+                    : showOnly("clipboard")
+            }
+
+            function toggleCalculator(): void {
+                calculatorPanel.visible
+                    ? calculatorPanel.hide()
+                    : showOnly("calculator")
+            }
+
+            function toggleEmoji(): void {
+                emojiPickerPanel.visible
+                    ? emojiPickerPanel.hide()
+                    : showOnly("emoji")
+            }
+
+            function toggleClock(): void {
+                clockApp.visible
+                    ? clockApp.hide()
+                    : showOnly("clock")
+            }
+
+            function toggleCamera(): void {
+                cameraPanel.visible
+                    ? cameraPanel.hide()
+                    : showOnly("camera")
+            }
+
+            function toggleRecorder(): void {
+                recorderPanel.visible
+                    ? recorderPanel.hide()
+                    : showOnly("recorder")
+            }
+
             // === колёса устройств ===
             function toggleWifiWheel(): void {
                 toggleWheel("wifi")
@@ -784,9 +827,27 @@ ShellRoot {
 
     SettingsMenu {id: settingsMenu}
 
-    ControlPanel {id: controlPanel}
+    ControlPanel {
+        id: controlPanel
+
+        onAppRequested: (app) => showOnly(app)
+    }
     AppLauncher {id: appLauncher}
     LockScreen {id: lockScreen}
+
+    // === приложения ===
+    AlarmBanner { id: alarmBanner }
+
+    Clipboard { id: clipboardPanel }
+    Calculator { id: calculatorPanel }
+    EmojiPicker { id: emojiPickerPanel }
+    ClockApp {
+        id: clockApp
+
+        banner: alarmBanner
+    }
+    Camera { id: cameraPanel }
+    Recorder { id: recorderPanel }
     Cat {
         id: cat
 

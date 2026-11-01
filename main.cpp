@@ -77,8 +77,25 @@ void printHelp() {
         " кот не считается):" << std::endl;
     std::cout << "  toggle_app <что>   control_panel | app_launcher"
         " | settings | cat" << std::endl;
+    std::cout << "                     clipboard | calculator | emoji"
+        << std::endl;
+    std::cout << "                     clock | camera | recorder"
+        " — приложения" << std::endl;
     std::cout << "                     wifi | bluetooth | output"
         " | input — колёса устройств" << std::endl;
+    std::cout << std::endl;
+    std::cout << "Приложения:" << std::endl;
+    std::cout << "  clipboard       буфер обмена: текст и картинки,"
+        " закрепы" << std::endl;
+    std::cout << "  calculator      калькулятор" << std::endl;
+    std::cout << "  emoji           эмодзи с поиском и недавними"
+        << std::endl;
+    std::cout << "  clock           часы: будильники, секундомер,"
+        " таймер" << std::endl;
+    std::cout << "  camera          камера: фото и видео"
+        " (~/Pictures/825UI)" << std::endl;
+    std::cout << "  recorder        диктофон (~/Pictures/825UI)"
+        << std::endl;
     std::cout << std::endl;
     std::cout << "Экран:" << std::endl;
     std::cout << "  lock        экран блокировки; пароль — системный,"
@@ -174,9 +191,10 @@ int main(int argc, char* argv[]) {
         else if (args[0] == "toggle_app") {
             if (argc <= 2) {
                 std::cout << "825ctl: укажи, что тоглать — панель"
-                    " (control_panel, app_launcher, settings, cat)"
-                    " или колесо устройств (wifi, bluetooth,"
-                    " output, input)" << std::endl;
+                    " (control_panel, app_launcher, settings, cat),"
+                    " приложение (clipboard, calculator, emoji,"
+                    " clock, camera, recorder) или колесо устройств"
+                    " (wifi, bluetooth, output, input)" << std::endl;
             }
             else if (args[1] == "control_panel") {
                 if (requireShell()) {
@@ -199,6 +217,42 @@ int main(int argc, char* argv[]) {
             else if (args[1] == "cat") {
                 if (requireShell()) {
                     std::string command = "qs -p ~/.825UI ipc call main toggleCat";
+                    int result = std::system(command.c_str());
+                }
+            }
+            else if (args[1] == "clipboard") {
+                if (requireShell()) {
+                    std::string command = "qs -p ~/.825UI ipc call main toggleClipboard";
+                    int result = std::system(command.c_str());
+                }
+            }
+            else if (args[1] == "calculator") {
+                if (requireShell()) {
+                    std::string command = "qs -p ~/.825UI ipc call main toggleCalculator";
+                    int result = std::system(command.c_str());
+                }
+            }
+            else if (args[1] == "emoji") {
+                if (requireShell()) {
+                    std::string command = "qs -p ~/.825UI ipc call main toggleEmoji";
+                    int result = std::system(command.c_str());
+                }
+            }
+            else if (args[1] == "clock") {
+                if (requireShell()) {
+                    std::string command = "qs -p ~/.825UI ipc call main toggleClock";
+                    int result = std::system(command.c_str());
+                }
+            }
+            else if (args[1] == "camera") {
+                if (requireShell()) {
+                    std::string command = "qs -p ~/.825UI ipc call main toggleCamera";
+                    int result = std::system(command.c_str());
+                }
+            }
+            else if (args[1] == "recorder") {
+                if (requireShell()) {
+                    std::string command = "qs -p ~/.825UI ipc call main toggleRecorder";
                     int result = std::system(command.c_str());
                 }
             }
@@ -229,8 +283,10 @@ int main(int argc, char* argv[]) {
             else {
                 std::cout << std::format(
                     "825ctl: \"{}\" не знаю; панели — control_panel,"
-                    " app_launcher, settings, cat; колёса — wifi,"
-                    " bluetooth, output, input\n",
+                    " app_launcher, settings, cat; приложения —"
+                    " clipboard, calculator, emoji, clock, camera,"
+                    " recorder; колёса — wifi, bluetooth, output,"
+                    " input\n",
                     args[1]) << std::endl;
             }
         }

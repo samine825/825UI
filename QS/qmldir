@@ -2,3 +2,4 @@ singleton Settings 1.0 Settings.qml
 singleton Notifications 1.0 Notifications.qml
 singleton InfexGeometry 1.0 Components/InfexGeometry.qml
 singleton Glyphs 1.0 Components/Glyphs.qml
+AlarmBanner 1.0 AlarmBanner.qml
