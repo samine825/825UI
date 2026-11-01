@@ -765,6 +765,7 @@ PanelWindow {
                                     SPanel {
                                         anchors.fill: parent
                                         cornerCut: playerTile.cornerCut
+                                        innerStroke: true
                                         strokeColor: Settings.c1
                                         fillColor: Settings.c2
 

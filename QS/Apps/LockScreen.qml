@@ -175,7 +175,7 @@ PanelWindow {
         id: blackBg
 
         anchors.fill: parent
-        color: "black"
+        color: Settings.c2
         opacity: 0
 
         Behavior on opacity {
@@ -237,6 +237,7 @@ PanelWindow {
             width: lockScreen.avatarSize
             height: lockScreen.avatarSize
             cornerCut: lockScreen.line * 2
+            innerStroke: true
             fillColor: Settings.c2
             shadow: "none"
 

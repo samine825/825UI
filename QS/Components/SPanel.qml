@@ -25,6 +25,9 @@ Item {
     property real cornerCut: Settings.line * 2
     property bool flatLeft: false
     property bool flatRight: false
+    // двойная обводка: вторая линия c1 в 2 линии внутрь от основной,
+    // между ними просвет в одну линию (контент/заливка)
+    property bool innerStroke: false
     property color fillColor: Settings.c2
     property color strokeColor: Settings.c1
     property color shadowColor: Settings.c2
@@ -154,6 +157,15 @@ Item {
             fillColor: "transparent"
             strokeColor: panel.strokeColor
             strokeWidth: Settings.line
+        }
+
+        // внутренняя обводка двойной рамки — тоже поверх контента
+        CutContour {
+            o: Settings.line * 2
+            fillColor: "transparent"
+            strokeColor: panel.innerStroke
+                ? panel.strokeColor : "transparent"
+            strokeWidth: panel.innerStroke ? Settings.line : 0
         }
     }
 }
