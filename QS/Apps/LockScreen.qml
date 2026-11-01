@@ -10,12 +10,15 @@ import ".."
 // уведомлений) — геометрия известна с старта, анимациям не с чем
 // гоняться. Пока не заблокировано: маска ввода пуста (клики проходят
 // насквозь), клавиатура не наша, всё прозрачно. По блокировке:
-// чёрный фон и контент проявляются, а форма пароля прилетает по дуге
-// прихода уведомления (OutCubic вниз + полуоборот OutSine) — только
-// не в угол, а в центр экрана. Форма закрыта, пока пароль пуст, и
-// раскрывается в стороны с каждым символом. Проверка пароля — PAM
-// (дефолтный конфиг login), ошибка PAM отпирает, чтобы не запереть
-// пользователя навсегда.
+// чёрный фон и контент проявляются, а форма пароля повторяет жизнь
+// уведомления, только доком не в угол, а в центр экрана: приезд
+// (OutCubic 600 + полуоборот OutSine), док (InOutCubic 1200 + догон
+// до полного оборота InOutBack), раскрытие — по символу OutBack 700.
+// Закрытая форма = startSize уведомления, контент растянут на весь
+// контейнер с зазором от кончиков выемок, без курсора. На время
+// PAM-проверки ввод замораживается и стирается только по результату.
+// Проверка пароля — PAM (дефолтный конфиг login), ошибка PAM
+// отпирает, чтобы не запереть пользователя навсегда.
 PanelWindow {
     id: lockScreen
 
@@ -41,6 +44,7 @@ PanelWindow {
     // === состояние ===
     property bool locked: false
     property bool checking: false
+    property bool responded: false
 
     // === раскладка центрального блока ===
     readonly property real line: Settings.line
@@ -58,10 +62,11 @@ PanelWindow {
     readonly property real blockTop: Math.round((height - blockH) / 2)
 
     // === форма пароля ===
-    // кончики выемок рамки infex: при ширине 2·tipX форма "закрыта"
+    // кончики выемок рамки infex (глубина от кромки на середине высоты)
     readonly property real tipX: 2 * InfexGeometry.notchFrac
         * (formH / 2 - line / 2)
-    readonly property real formClosedW: tipX * 2 + line * 3
+    // закрытая форма = startSize уведомления: квадрат formH × formH
+    readonly property real formClosedW: formH
     readonly property real formCharW: line * 4
     readonly property int formMaxLen: 32
     readonly property real formFinalY: blockTop + bigSize + gap1
@@ -84,9 +89,12 @@ PanelWindow {
             return
 
         exitAnim.stop()
+        dockYAnim.stop()
+        dockRotAnim.stop()
 
         locked = true
         checking = false
+        responded = false
         clockNow = new Date()
         passInput.text = ""
 
@@ -95,12 +103,12 @@ PanelWindow {
         content.opacity = 1
         form.opacity = 1
 
-        // форма прилетает как уведомление: из-за верхней кромки в центр
-        form.y = -(formFinalY + formH + line)
+        // форма прилетает как уведомление: из-за верхней кромки,
+        // потом доком к центру экрана
+        form.y = -formH
         form.rotation = 0
-        arriveAnim.from = form.y
-        arriveAnim.restart()
-        spinAnim.restart()
+        arriveYAnim.restart()
+        arriveRotAnim.restart()
 
         passInput.forceActiveFocus()
     }
@@ -109,12 +117,15 @@ PanelWindow {
         if (!locked)
             return
 
-        arriveAnim.stop()
-        spinAnim.stop()
+        arriveYAnim.stop()
+        arriveRotAnim.stop()
+        dockYAnim.stop()
+        dockRotAnim.stop()
 
         // ввод и клавиатура отпускаются сразу, картинка гаснет плавно
         locked = false
         checking = false
+        responded = false
         passInput.text = ""
         passInput.focus = false
 
@@ -140,9 +151,9 @@ PanelWindow {
                 console.error("825 lockscreen: не удалось запустить PAM")
                 unlock()
             }
-        } else if (pam.responseRequired) {
+        } else if (pam.responseRequired && !responded) {
+            responded = true
             pam.respond(passInput.text)
-            passInput.text = ""
         }
         // PAM ещё не спрашивает — текст остаётся, ответит onPamMessage
     }
@@ -250,12 +261,13 @@ PanelWindow {
     }
 
     // форма ввода пароля: фрейм инфекса — та же форма, что у
-    // уведомления; закрыта при пустом пароле, растёт с символами
+    // уведомления; при пустом пароле — её состояние до раскрытия
+    // (квадрат startSize), с символами раскрывается в стороны
     SFrame {
         id: form
 
         x: Math.round((lockScreen.width - width) / 2)
-        y: -(lockScreen.formH * 2)
+        y: -(lockScreen.formH)
         width: lockScreen.formClosedW
             + Math.min(passInput.text.length, lockScreen.formMaxLen)
                 * lockScreen.formCharW
@@ -264,17 +276,19 @@ PanelWindow {
         shadow: "both"
         opacity: 0
 
+        // раскрытие — как расширение уведомления (OutBack, 700)
         Behavior on width {
             NumberAnimation {
-                duration: Settings.animFast
-                easing.type: Easing.OutCubic
+                duration: 700
+                easing.type: Easing.OutBack
             }
         }
 
+        // проявление — как цветовое проявление уведомления (1500, InCubic)
         Behavior on opacity {
             NumberAnimation {
-                duration: Settings.animSlow
-                easing.type: Easing.InOutQuad
+                duration: 1500
+                easing.type: Easing.InCubic
             }
         }
 
@@ -282,15 +296,24 @@ PanelWindow {
             id: formShake
         }
 
+        // контент просто растягивается на весь контейнер; зазор от
+        // кончиков выемок, иначе точки на середине высоты срежет
+        // маской силуэта; без курсора-разделителя
         TextInput {
             id: passInput
 
-            anchors.centerIn: parent
+            anchors.fill: parent
+            leftPadding: lockScreen.tipX + Settings.line / 2
+            rightPadding: lockScreen.tipX + Settings.line / 2
+            verticalAlignment: TextInput.AlignVCenter
+            horizontalAlignment: TextInput.AlignLeft
+            readOnly: lockScreen.checking
             echoMode: TextInput.Password
             font.pixelSize: Settings.textLg
             color: Settings.c1
             selectionColor: Settings.c1
             selectedTextColor: Settings.c2
+            cursorVisible: false
             opacity: lockScreen.checking ? 0.45 : 1
 
             Behavior on opacity {
@@ -301,20 +324,30 @@ PanelWindow {
         }
     }
 
-    // приезд формы в центр: дуга прихода уведомления (OutCubic +
-    // полуоборот OutSine), только место назначения — центр экрана
+    // приезд: дуга прихода уведомления — OutCubic вниз до промежуточной
+    // точки + полуоборот OutSine (600 мс), затем док к центру экрана:
+    // InOutCubic 1200 мс и догон до полного оборота InOutBack
     PropertyAnimation {
-        id: arriveAnim
+        id: arriveYAnim
 
         target: form
         property: "y"
+        from: -(lockScreen.formH)
         duration: 600
         easing.type: Easing.OutCubic
-        to: lockScreen.formFinalY
+        to: lockScreen.formH * 2 + 20
+
+        onFinished: {
+            if (!lockScreen.locked)
+                return
+
+            dockYAnim.restart()
+            dockRotAnim.restart()
+        }
     }
 
     PropertyAnimation {
-        id: spinAnim
+        id: arriveRotAnim
 
         target: form
         property: "rotation"
@@ -324,15 +357,36 @@ PanelWindow {
         easing.type: Easing.OutSine
     }
 
-    // уход разблокированной формы вверх (как уход уведомления)
+    PropertyAnimation {
+        id: dockYAnim
+
+        target: form
+        property: "y"
+        duration: 1200
+        easing.type: Easing.InOutCubic
+        to: lockScreen.formFinalY
+    }
+
+    PropertyAnimation {
+        id: dockRotAnim
+
+        target: form
+        property: "rotation"
+        from: 180
+        to: 360
+        duration: 1200
+        easing.type: Easing.InOutBack
+    }
+
+    // уход разблокированной формы вверх, как уход уведомления
     PropertyAnimation {
         id: exitAnim
 
         target: form
         property: "y"
-        duration: 500
+        duration: 1000
         easing.type: Easing.InQuad
-        to: -(lockScreen.formH * 2)
+        to: -(lockScreen.formH)
 
         onFinished: {
             // сброс на следующий показ, экран к этому моменту прозрачен
@@ -376,16 +430,25 @@ PanelWindow {
     PamContext {
         id: pam
 
-        // PAM спрашивает пароль — отвечаем тем, что в поле
+        // первый промпт — ответ тем, что в поле; текст не стирается
+        // до завершения проверки. Повторные промпты (стек с ретраями
+        // после неверного пароля) сжигаются пустым ответом, чтобы
+        // один Enter не превратился в самоповтор
         onPamMessage: {
-            if (pam.responseRequired && passInput.text.length > 0) {
+            if (!pam.responseRequired)
+                return
+
+            if (!lockScreen.responded && passInput.text.length > 0) {
+                lockScreen.responded = true
                 pam.respond(passInput.text)
-                passInput.text = ""
+            } else if (lockScreen.responded) {
+                pam.respond("")
             }
         }
 
         onCompleted: (result) => {
             lockScreen.checking = false
+            lockScreen.responded = false
 
             if (result === PamResult.Success) {
                 lockScreen.unlock()
@@ -397,6 +460,7 @@ PanelWindow {
 
         onError: (error) => {
             lockScreen.checking = false
+            lockScreen.responded = false
             console.error("825 lockscreen: ошибка PAM:",
                 PamError.toString(error))
             // не запираем пользователя навсегда
