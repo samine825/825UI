@@ -15,12 +15,15 @@ import ".."
 // полуоборот OutSine, обводка видна сразу, тело проявляется 1500
 // InCubic; когда форма дошла до нижней точки Y по середине X —
 // начинается затемнение (чёрный фон и контент). Раскрытие — по
-// символу OutBack 700. Закрытая форма = startSize уведомления с той
+// фактической ширине текста (OutBack, animFast): точки всегда
+// помещаются в талию. Закрытая форма = startSize уведомления с той
 // же геометрией контура (кончики сходятся в центре), пароль по
-// центру, без курсора. На время PAM-проверки ввод замораживается и
-// стирается только по результату. Проверка пароля — PAM (дефолтный
-// конфиг login), ошибка PAM отпирает, чтобы не запереть пользователя
-// навсегда.
+// центру, курсор убит пустым delegate. Уход — реверс приезда: гаснет
+// затемнение, затем форма улетает вверх с обратным вращением
+// (InCubic 600 + OutSine 600). На время PAM-проверки ввод
+// замораживается и стирается только по результату. Проверка пароля —
+// PAM (дефолтный конфиг login), ошибка PAM отпирает, чтобы не
+// запереть пользователя навсегда.
 PanelWindow {
     id: lockScreen
 
@@ -68,8 +71,6 @@ PanelWindow {
     // уведомления 1:1 (см. NotificationPopup): кончики выемок на
     // height/2, при ширине height они сходятся в центре
     readonly property real formClosedW: formH
-    readonly property real formCharW: line * 4
-    readonly property int formMaxLen: 32
     readonly property real formFinalY: blockTop + bigSize + gap1
         + avatarSize + gap2 + nameH + gap3
 
@@ -89,7 +90,9 @@ PanelWindow {
         if (locked)
             return
 
-        exitAnim.stop()
+        exitDelay.stop()
+        exitYAnim.stop()
+        exitRotAnim.stop()
 
         locked = true
         checking = false
@@ -129,8 +132,10 @@ PanelWindow {
 
         blackBg.opacity = 0
         content.opacity = 0
-        exitAnim.from = form.y
-        exitAnim.restart()
+
+        // реверс приезда: сначала гаснет затемнение, затем форма
+        // улетает вверх с обратным вращением
+        exitDelay.restart()
     }
 
     function submit() {
@@ -268,9 +273,16 @@ PanelWindow {
 
         x: Math.round((lockScreen.width - width) / 2)
         y: -(lockScreen.formH)
-        width: lockScreen.formClosedW
-            + Math.min(passInput.text.length, lockScreen.formMaxLen)
-                * lockScreen.formCharW
+        // ширина по факту текста: точки всегда помещаются в талию
+        // (запас line с каждой стороны), потолок — край экрана
+        width: passInput.text.length === 0
+            ? lockScreen.formClosedW
+            : Math.max(
+                lockScreen.formClosedW,
+                Math.min(
+                    passInput.contentWidth + lockScreen.formH
+                        + lockScreen.line * 2,
+                    lockScreen.width - lockScreen.line * 8))
         height: lockScreen.formH
         opacity: 0
 
@@ -278,10 +290,10 @@ PanelWindow {
             0.5 * InfexGeometry.tipMult * lockScreen.line
         readonly property real padY: lockScreen.line / 2
 
-        // раскрытие — как расширение уведомления (OutBack, 700)
+        // раскрытие — как расширение уведомления (OutBack), но быстро
         Behavior on width {
             NumberAnimation {
-                duration: 700
+                duration: Settings.animFast
                 easing.type: Easing.OutBack
             }
         }
@@ -337,7 +349,9 @@ PanelWindow {
                 }
             }
 
-            // пароль по центру талии контура, без курсора
+            // пароль по центру талии контура; курсор убит пустым
+            // delegate — TextInput сам возвращает cursorVisible при
+            // фокусе, поэтому одного флага мало
             TextInput {
                 id: passInput
 
@@ -353,6 +367,8 @@ PanelWindow {
                 selectionColor: Settings.c1
                 selectedTextColor: Settings.c2
                 cursorVisible: false
+                cursorDelegate: Item {}
+                clip: true
                 opacity: lockScreen.checking ? 0.45 : 1
 
                 Behavior on opacity {
@@ -423,21 +439,43 @@ PanelWindow {
         easing.type: Easing.OutSine
     }
 
-    // уход разблокированной формы вверх, как уход уведомления
+    // уход — реверс приезда: затемнение уходит (animSlow), после чего
+    // форма улетает вверх — InCubic 600 + обратный полуоборот OutSine
+    Timer {
+        id: exitDelay
+
+        interval: Settings.animSlow
+
+        onTriggered: {
+            formBody.opacity = 0
+            exitYAnim.restart()
+            exitRotAnim.restart()
+        }
+    }
+
     PropertyAnimation {
-        id: exitAnim
+        id: exitYAnim
 
         target: form
         property: "y"
-        duration: 1000
-        easing.type: Easing.InQuad
+        duration: 600
+        easing.type: Easing.InCubic
         to: -(lockScreen.formH)
 
         onFinished: {
-            // сброс на следующий показ, экран к этому моменту прозрачен
+            // сброс на следующий показ, форма к этому моменту за экраном
             form.opacity = 0
-            formBody.opacity = 0
         }
+    }
+
+    PropertyAnimation {
+        id: exitRotAnim
+
+        target: form
+        property: "rotation"
+        duration: 600
+        easing.type: Easing.OutSine
+        to: 0
     }
 
     // неверный пароль: форма трясётся
