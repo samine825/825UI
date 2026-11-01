@@ -8,7 +8,7 @@ import "../"
 
 Item {
     id: r
-    
+
     // Полная динамическая ширина всей панели: строка элементов + скосы по краям
     width: statsRow.implicitWidth + root.point * 2
     height: Settings.barHeight
@@ -34,6 +34,12 @@ Item {
         property double previousIdle: 0
 
         readonly property real point: height * InfexGeometry.notchFrac
+
+        // горизонтальный отступ кромки заливки от оси перегородки:
+        // полторы линии по перпендикуляру диагонали — обводка (линия)
+        // плюс зазор-тень (линия), как у внутренней тени фрейма
+        readonly property real gapDx: 1.5 * Settings.line
+            * Math.sqrt(1 + Math.pow(2 * point / height, 2))
 
         // x на диагонали перегородки (dvx — её левый край в координатах
         // фрейма) на высоте y. Диагональ идёт от (dvx + point, line/2)
@@ -83,8 +89,8 @@ Item {
 
         // контур заливки секции ниже уровня level, обрезанный точно
         // по силуэту фрейма: верхняя кромка — уровень, бока —
-        // диагонали перегородок (null — грань силуэта), низ и края —
-        // по контуру HexContour; всё под обводками
+        // диагонали перегородок с отступом под тень (null — грань
+        // силуэта), низ и края — по контуру HexContour
         function sectionPath(leftDv, rightDv, level) {
             const H = statsFrame.height
             const mid = H / 2
@@ -92,10 +98,10 @@ Item {
             const b = H - t
             const f = function (v) { return v.toFixed(2) }
 
-            // уровень не выше верхней грани силуэта; при пустой
-            // заливке путь вырожденный
+            // уровень не выше верхней грани силуэта; выше внутренней
+            // грани нижней обводки заливки нет
             const lv = Math.max(level, t)
-            if (lv >= b)
+            if (lv >= H - Settings.line)
                 return "M 0,0"
 
             const xl = leftDv === null ? leftEdgeX(lv) : diagX(leftDv, lv)
@@ -135,9 +141,10 @@ Item {
 
         // границы фрейма = видимому внешнему краю обводки
         // (старая обводка выпирала на пол-линию — компенсируем ростом).
-        // Заливки секций — дети фрейма: лежат над фоном, под обводкой
-        // и внутренней тенью; маска не нужна — контуры сами обрезаны
-        // по силуэту
+        // Весь контент — дети фрейма: строка (текст c1 и перегородки)
+        // под заливками, над ними копии текста c2 в полосе заливки;
+        // обводка и внутренняя тень (z:1) поверх всего. Маска не нужна
+        // — контуры заливок обрезаны аналитически по силуэту
         SFrame {
             id: statsFrame
 
@@ -148,6 +155,116 @@ Item {
             shadowOverContent: true
             contentMasked: false
 
+            // === строка контента: адаптивные ячейки и перегородки ===
+            // базовый текст c1 — под заливками: там, где проходит
+            // заливка, его показывают инвертированные копии ниже
+            Row {
+                id: statsRow
+                anchors.centerIn: parent
+                spacing: 0
+
+                // --- [ЯЧЕЙКА 1: CPU] ---
+                Item {
+                    id: cpuCell
+
+                    width: cpuItem.implicitWidth + Settings.line * 6
+                    height: root.height
+
+                    SText {
+                        id: cpuItem
+
+                        anchors.centerIn: parent
+                        text: root.cpuText
+                        color: Settings.c1
+                        font.pixelSize: Settings.textSm
+                        font.bold: true
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+
+                // --- [ПЕРЕГОРОДКА 1] ---
+                Shape {
+                    id: div1
+
+                    width: root.point // Ширина равна шагу наклона, чтобы не было наложений
+                    height: root.height
+                    preferredRendererType: Shape.CurveRenderer
+
+                    SShapePath {
+                        joinStyle: ShapePath.MiterJoin
+                        capStyle: ShapePath.FlatCap
+                        strokeColor: Settings.c1
+                        strokeWidth: Settings.line
+                        fillColor: "transparent"
+
+                        startX: root.point
+                        startY: 0
+                        PathLine { x: 0; y: root.height / 2 }
+                        PathLine { x: root.point; y: root.height }
+                    }
+                }
+
+                // --- [ЯЧЕЙКА 2: TEMP] ---
+                Item {
+                    id: tempCell
+
+                    width: tempItem.implicitWidth + Settings.line * 6
+                    height: root.height
+
+                    SText {
+                        id: tempItem
+
+                        anchors.centerIn: parent
+                        text: root.tempText
+                        color: Settings.c1
+                        font.pixelSize: Settings.textSm
+                        font.bold: true
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+
+                // --- [ПЕРЕГОРОДКА 2] ---
+                Shape {
+                    id: div2
+
+                    width: root.point
+                    height: root.height
+                    preferredRendererType: Shape.CurveRenderer
+
+                    SShapePath {
+                        joinStyle: ShapePath.MiterJoin
+                        capStyle: ShapePath.FlatCap
+                        strokeColor: Settings.c1
+                        strokeWidth: Settings.line
+                        fillColor: "transparent"
+
+                        startX: root.point
+                        startY: 0
+                        PathLine { x: 0; y: root.height / 2 }
+                        PathLine { x: root.point; y: root.height }
+                    }
+                }
+
+                // --- [ЯЧЕЙКА 3: RAM] ---
+                Item {
+                    id: ramCell
+
+                    width: ramItem.implicitWidth + Settings.line * 6
+                    height: root.height
+
+                    SText {
+                        id: ramItem
+
+                        anchors.centerIn: parent
+                        text: root.ramText
+                        color: Settings.c1
+                        font.pixelSize: Settings.textSm
+                        font.bold: true
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+            }
+
             // === заливка CPU ===
             // id обязателен: биндинг PathSvg живёт внутри SShapePath —
             // чужого компонента, — через границу видны только id
@@ -156,9 +273,14 @@ Item {
 
                 anchors.fill: parent
 
-                // y верхней кромки заливки; анимируется между итерациями
+                // y верхней кромки заливки в координатах фрейма: ход от
+                // внутренней грани нижней обводки (0%) до внутренней
+                // грани верхней (100%) — видимое заполнение равно точной
+                // доле метрики от внутренней высоты; анимируется
                 property real level:
-                    parent.height * (1 - root.cpuFraction)
+                    parent.height - Settings.line
+                    - root.cpuFraction
+                        * (parent.height - 2 * Settings.line)
 
                 Behavior on level {
                     NumberAnimation {
@@ -178,18 +300,106 @@ Item {
 
                         PathSvg {
                             path: root.sectionPath(null,
-                                statsRow.x + div1.x + Settings.line / 2,
+                                statsRow.x + div1.x - root.gapDx,
                                 cpuFill.level)
                         }
                     }
                 }
+            }
 
-                // копия текста c2: видна только там, где под ней заливка
-                // (над фоном c2 и тенью c2 она сливается с фоном)
+            // === заливка TEMP ===
+            Item {
+                id: tempFill
+
+                anchors.fill: parent
+
+                property real level:
+                    parent.height - Settings.line
+                    - root.tempFraction
+                        * (parent.height - 2 * Settings.line)
+
+                Behavior on level {
+                    NumberAnimation {
+                        duration: Settings.animSlow
+                        easing.type: Easing.InOutQuad
+                    }
+                }
+
+                Shape {
+                    anchors.fill: parent
+                    preferredRendererType: Shape.CurveRenderer
+
+                    SShapePath {
+                        fillColor: Settings.c1
+                        strokeColor: "transparent"
+                        strokeWidth: 0
+
+                        PathSvg {
+                            path: root.sectionPath(
+                                statsRow.x + div1.x + root.gapDx,
+                                statsRow.x + div2.x - root.gapDx,
+                                tempFill.level)
+                        }
+                    }
+                }
+            }
+
+            // === заливка RAM ===
+            Item {
+                id: ramFill
+
+                anchors.fill: parent
+
+                property real level:
+                    parent.height - Settings.line
+                    - root.ramFraction
+                        * (parent.height - 2 * Settings.line)
+
+                Behavior on level {
+                    NumberAnimation {
+                        duration: Settings.animSlow
+                        easing.type: Easing.InOutQuad
+                    }
+                }
+
+                Shape {
+                    anchors.fill: parent
+                    preferredRendererType: Shape.CurveRenderer
+
+                    SShapePath {
+                        fillColor: Settings.c1
+                        strokeColor: "transparent"
+                        strokeWidth: 0
+
+                        PathSvg {
+                            path: root.sectionPath(
+                                statsRow.x + div2.x + root.gapDx,
+                                null,
+                                ramFill.level)
+                        }
+                    }
+                }
+            }
+
+            // === инвертированный контент (паттерн слайдеров панели
+            // управления): полоса-клип от уровня заливки до дна, внутри
+            // — полноразмерный слепок зоны с текстом c2. Виден только
+            // там, где под ним заливка; базовый текст c1 прикрыт ею
+
+            // --- [CPU] ---
+            Item {
+                id: cpuCopy
+
+                x: statsRow.x + cpuCell.x
+                y: cpuFill.level
+                width: cpuCell.width
+                height: statsFrame.height - cpuFill.level
+                clip: true
+
                 Item {
-                    x: statsRow.x + cpuCell.x + Settings.line / 2
-                    width: cpuCell.width
-                    height: parent.height
+                    width: parent.width
+                    height: statsFrame.height
+                    y: -cpuFill.level
 
                     SText {
                         anchors.centerIn: parent
@@ -202,44 +412,20 @@ Item {
                 }
             }
 
-            // === заливка TEMP ===
+            // --- [TEMP] ---
             Item {
-                id: tempFill
+                id: tempCopy
 
-                anchors.fill: parent
-
-                property real level:
-                    parent.height * (1 - root.tempFraction)
-
-                Behavior on level {
-                    NumberAnimation {
-                        duration: Settings.animSlow
-                        easing.type: Easing.InOutQuad
-                    }
-                }
-
-                Shape {
-                    anchors.fill: parent
-                    preferredRendererType: Shape.CurveRenderer
-
-                    SShapePath {
-                        fillColor: Settings.c1
-                        strokeColor: "transparent"
-                        strokeWidth: 0
-
-                        PathSvg {
-                            path: root.sectionPath(
-                                statsRow.x + div1.x + Settings.line / 2,
-                                statsRow.x + div2.x + Settings.line / 2,
-                                tempFill.level)
-                        }
-                    }
-                }
+                x: statsRow.x + tempCell.x
+                y: tempFill.level
+                width: tempCell.width
+                height: statsFrame.height - tempFill.level
+                clip: true
 
                 Item {
-                    x: statsRow.x + tempCell.x + Settings.line / 2
-                    width: tempCell.width
-                    height: parent.height
+                    width: parent.width
+                    height: statsFrame.height
+                    y: -tempFill.level
 
                     SText {
                         anchors.centerIn: parent
@@ -252,44 +438,20 @@ Item {
                 }
             }
 
-            // === заливка RAM ===
+            // --- [RAM] ---
             Item {
-                id: ramFill
+                id: ramCopy
 
-                anchors.fill: parent
-
-                property real level:
-                    parent.height * (1 - root.ramFraction)
-
-                Behavior on level {
-                    NumberAnimation {
-                        duration: Settings.animSlow
-                        easing.type: Easing.InOutQuad
-                    }
-                }
-
-                Shape {
-                    anchors.fill: parent
-                    preferredRendererType: Shape.CurveRenderer
-
-                    SShapePath {
-                        fillColor: Settings.c1
-                        strokeColor: "transparent"
-                        strokeWidth: 0
-
-                        PathSvg {
-                            path: root.sectionPath(
-                                statsRow.x + div2.x + Settings.line / 2,
-                                null,
-                                ramFill.level)
-                        }
-                    }
-                }
+                x: statsRow.x + ramCell.x
+                y: ramFill.level
+                width: ramCell.width
+                height: statsFrame.height - ramFill.level
+                clip: true
 
                 Item {
-                    x: statsRow.x + ramCell.x + Settings.line / 2
-                    width: ramCell.width
-                    height: parent.height
+                    width: parent.width
+                    height: statsFrame.height
+                    y: -ramFill.level
 
                     SText {
                         anchors.centerIn: parent
@@ -303,115 +465,7 @@ Item {
             }
         }
 
-        // 3. Строка контента: адаптивные ячейки и встроенные перегородки
-        Row {
-            id: statsRow
-            anchors.centerIn: parent
-            spacing: 0 
-
-            // --- [ЯЧЕЙКА 1: CPU] ---
-            Item {
-                id: cpuCell
-
-                width: cpuItem.implicitWidth + Settings.line * 6
-                height: root.height
-
-                SText {
-                    id: cpuItem
-
-                    anchors.centerIn: parent
-                    text: root.cpuText
-                    color: Settings.c1
-                    font.pixelSize: Settings.textSm
-                    font.bold: true
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
-
-            // --- [ПЕРЕГОРОДКА 1] ---
-            Shape {
-                id: div1
-
-                width: root.point // Ширина равна шагу наклона, чтобы не было наложений
-                height: root.height
-                preferredRendererType: Shape.CurveRenderer
-
-                SShapePath {
-                    joinStyle: ShapePath.MiterJoin
-                    capStyle: ShapePath.FlatCap
-                    strokeColor: Settings.c1
-                    strokeWidth: Settings.line
-                    fillColor: "transparent"
-
-                    startX: root.point
-                    startY: 0
-                    PathLine { x: 0; y: root.height / 2 }
-                    PathLine { x: root.point; y: root.height }
-                }
-            }
-
-            // --- [ЯЧЕЙКА 2: TEMP] ---
-            Item {
-                id: tempCell
-
-                width: tempItem.implicitWidth + Settings.line * 6
-                height: root.height
-
-                SText {
-                    id: tempItem
-
-                    anchors.centerIn: parent
-                    text: root.tempText
-                    color: Settings.c1
-                    font.pixelSize: Settings.textSm
-                    font.bold: true
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
-
-            // --- [ПЕРЕГОРОДКА 2] ---
-            Shape {
-                id: div2
-
-                width: root.point
-                height: root.height
-                preferredRendererType: Shape.CurveRenderer
-
-                SShapePath {
-                    joinStyle: ShapePath.MiterJoin
-                    capStyle: ShapePath.FlatCap
-                    strokeColor: Settings.c1
-                    strokeWidth: Settings.line
-                    fillColor: "transparent"
-
-                    startX: root.point
-                    startY: 0
-                    PathLine { x: 0; y: root.height / 2 }
-                    PathLine { x: root.point; y: root.height }
-                }
-            }
-
-            // --- [ЯЧЕЙКА 3: RAM] ---
-            Item {
-                id: ramCell
-
-                width: ramItem.implicitWidth + Settings.line * 6
-                height: root.height
-
-                SText {
-                    id: ramItem
-
-                    anchors.centerIn: parent
-                    text: root.ramText
-                    color: Settings.c1
-                    font.pixelSize: Settings.textSm
-                    font.bold: true
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
-        }
-
-        // 4. Логика сбора метрик (Bash скрипт)
+        // Логика сбора метрик (Bash скрипт)
         Process {
             id: statsProcess
             command: [
