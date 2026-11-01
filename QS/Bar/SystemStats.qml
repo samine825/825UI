@@ -182,26 +182,14 @@ Item {
                     }
                 }
 
-                // --- [ПЕРЕГОРОДКА 1] ---
-                Shape {
+                // --- [ПЕРЕГОРОДКА 1: разметка раскладки] ---
+                // сама перегородка рисуется над фреймом (div1Shape):
+                // её c1 проходит поверх внутренней тени основы
+                Item {
                     id: div1
 
                     width: root.point // Ширина равна шагу наклона, чтобы не было наложений
                     height: root.height
-                    preferredRendererType: Shape.CurveRenderer
-
-                    SShapePath {
-                        joinStyle: ShapePath.MiterJoin
-                        capStyle: ShapePath.FlatCap
-                        strokeColor: Settings.c1
-                        strokeWidth: Settings.line
-                        fillColor: "transparent"
-
-                        startX: root.point
-                        startY: 0
-                        PathLine { x: 0; y: root.height / 2 }
-                        PathLine { x: root.point; y: root.height }
-                    }
                 }
 
                 // --- [ЯЧЕЙКА 2: TEMP] ---
@@ -223,26 +211,12 @@ Item {
                     }
                 }
 
-                // --- [ПЕРЕГОРОДКА 2] ---
-                Shape {
+                // --- [ПЕРЕГОРОДКА 2: разметка раскладки] ---
+                Item {
                     id: div2
 
                     width: root.point
                     height: root.height
-                    preferredRendererType: Shape.CurveRenderer
-
-                    SShapePath {
-                        joinStyle: ShapePath.MiterJoin
-                        capStyle: ShapePath.FlatCap
-                        strokeColor: Settings.c1
-                        strokeWidth: Settings.line
-                        fillColor: "transparent"
-
-                        startX: root.point
-                        startY: 0
-                        PathLine { x: 0; y: root.height / 2 }
-                        PathLine { x: root.point; y: root.height }
-                    }
                 }
 
                 // --- [ЯЧЕЙКА 3: RAM] ---
@@ -462,6 +436,57 @@ Item {
                         verticalAlignment: Text.AlignVCenter
                     }
                 }
+            }
+        }
+
+        // перегородки c1 — НАД фреймом: их обводка рендерится поверх
+        // внутренней тени основы (c2) и не режется ею у краёв; зазоры-
+        // тени вокруг перегородок (отступ заливок) остаются под ней.
+        // Позиции берутся из раскладки строки; координаты корня —
+        // строка живёт во фрейме, тот сдвинут на пол-линии
+        Shape {
+            id: div1Shape
+
+            x: statsRow.x + div1.x - Settings.line / 2
+            y: statsRow.y - Settings.line / 2
+            width: root.point
+            height: root.height
+            preferredRendererType: Shape.CurveRenderer
+
+            SShapePath {
+                joinStyle: ShapePath.MiterJoin
+                capStyle: ShapePath.FlatCap
+                strokeColor: Settings.c1
+                strokeWidth: Settings.line
+                fillColor: "transparent"
+
+                startX: root.point
+                startY: 0
+                PathLine { x: 0; y: root.height / 2 }
+                PathLine { x: root.point; y: root.height }
+            }
+        }
+
+        Shape {
+            id: div2Shape
+
+            x: statsRow.x + div2.x - Settings.line / 2
+            y: statsRow.y - Settings.line / 2
+            width: root.point
+            height: root.height
+            preferredRendererType: Shape.CurveRenderer
+
+            SShapePath {
+                joinStyle: ShapePath.MiterJoin
+                capStyle: ShapePath.FlatCap
+                strokeColor: Settings.c1
+                strokeWidth: Settings.line
+                fillColor: "transparent"
+
+                startX: root.point
+                startY: 0
+                PathLine { x: 0; y: root.height / 2 }
+                PathLine { x: root.point; y: root.height }
             }
         }
 
