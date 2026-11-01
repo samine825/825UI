@@ -747,11 +747,17 @@ PanelWindow {
                                     readonly property real cornerCut: Settings.line * 2
                                     
                                     // опрос позиции трека
-                                        Timer {
-                                            id: seekHoldReset
-                                            interval: 500
-                                            onTriggered: captionStrip.seekHold = -1
+                                    Timer {
+                                        interval: 500
+                                        repeat: true
+                                        running: playerTile.player !== null
+                                            && playerTile.player.positionSupported
+                                        onTriggered: {
+                                            if (playerTile.player)
+                                                playerTile.polledPos =
+                                                    playerTile.player.position
                                         }
+                                    }
                                     
                                     // фон и рамка карточки; обложка и полоса — контент
                                     // панели: режутся по силуэту и остаются под обводкой
