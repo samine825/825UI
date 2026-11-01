@@ -37,8 +37,7 @@ Item {
 
         // x на диагонали перегородки (dvx — её левый край в координатах
         // фрейма) на высоте y. Диагональ идёт от (dvx + point, line/2)
-        // через вершину (dvx, H/2) к (dvx + point, H − line/2); за
-        // пределами рисуемой линии — линейное продолжение под обводки
+        // через вершину (dvx, H/2) к (dvx + point, H − line/2)
         function diagX(dvx, y) {
             const H = statsFrame.height
             const mid = H / 2
@@ -51,39 +50,83 @@ Item {
             return dvx + root.point * (y - mid) / (bot - mid)
         }
 
-        // контур заливки секции ниже уровня level: верхняя кромка —
-        // горизонталь уровня, боковые — диагонали перегородок (null —
-        // край фрейма, его точно дорежет маска силуэта)
-        function sectionPath(leftDv, rightDv, level) {
+        // x левой грани силуэта на высоте y: выемка контура — вершина
+        // на mid, сдвинутая внутрь на point. Формулы те же, что у
+        // HexContour силуэта (inset = line/2, shift = 0), поэтому
+        // кромка заливки прячется точно под обводку — маска не нужна
+        // (Shape внутри layer у части драйверов не рендерится)
+        function leftEdgeX(y) {
+            const H = statsFrame.height
+            const t = Settings.line / 2
+            const b = H - t
+            const mid = H / 2
+
+            if (y <= mid)
+                return t + root.point * (y - t) / (mid - t)
+
+            return t + root.point * (b - y) / (b - mid)
+        }
+
+        // x правой грани силуэта — зеркально
+        function rightEdgeX(y) {
             const H = statsFrame.height
             const W = statsFrame.width
+            const t = Settings.line / 2
+            const b = H - t
             const mid = H / 2
+
+            if (y <= mid)
+                return W - t - root.point * (y - t) / (mid - t)
+
+            return W - t - root.point * (b - y) / (b - mid)
+        }
+
+        // контур заливки секции ниже уровня level, обрезанный точно
+        // по силуэту фрейма: верхняя кромка — уровень, бока —
+        // диагонали перегородок (null — грань силуэта), низ и края —
+        // по контуру HexContour; всё под обводками
+        function sectionPath(leftDv, rightDv, level) {
+            const H = statsFrame.height
+            const mid = H / 2
+            const t = Settings.line / 2
+            const b = H - t
             const f = function (v) { return v.toFixed(2) }
 
-            const xl = leftDv === null ? 0 : diagX(leftDv, level)
-            const xr = rightDv === null ? W : diagX(rightDv, level)
+            // уровень не выше верхней грани силуэта; при пустой
+            // заливке путь вырожденный
+            const lv = Math.max(level, t)
+            if (lv >= b)
+                return "M 0,0"
 
-            let s = "M " + f(xl) + "," + f(level)
-                + " L " + f(xr) + "," + f(level)
+            const xl = leftDv === null ? leftEdgeX(lv) : diagX(leftDv, lv)
+            const xr = rightDv === null ? rightEdgeX(lv) : diagX(rightDv, lv)
 
-            // правая кромка вниз до дна
+            let s = "M " + f(xl) + "," + f(lv)
+                + " L " + f(xr) + "," + f(lv)
+
+            // правая кромка вниз до дна силуэта
             if (rightDv === null) {
-                s += " L " + f(W) + "," + f(level)
-                    + " L " + f(W) + "," + f(H)
+                if (lv < mid)
+                    s += " L " + f(rightEdgeX(mid)) + "," + f(mid)
+
+                s += " L " + f(rightEdgeX(b)) + "," + f(b)
             } else {
-                if (level < mid)
+                if (lv < mid)
                     s += " L " + f(diagX(rightDv, mid)) + "," + f(mid)
 
-                s += " L " + f(diagX(rightDv, H)) + "," + f(H)
+                s += " L " + f(diagX(rightDv, b)) + "," + f(b)
             }
 
             // низ и левая кромка вверх до уровня
             if (leftDv === null) {
-                s += " L " + f(0) + "," + f(H)
-            } else {
-                s += " L " + f(diagX(leftDv, H)) + "," + f(H)
+                s += " L " + f(leftEdgeX(b)) + "," + f(b)
 
-                if (level < mid)
+                if (lv < mid)
+                    s += " L " + f(leftEdgeX(mid)) + "," + f(mid)
+            } else {
+                s += " L " + f(diagX(leftDv, b)) + "," + f(b)
+
+                if (lv < mid)
                     s += " L " + f(diagX(leftDv, mid)) + "," + f(mid)
             }
 
@@ -91,10 +134,10 @@ Item {
         }
 
         // границы фрейма = видимому внешнему краю обводки
-        // (старая обводка выпирала на пол-линии — компенсируем ростом).
-        // Заливки секций — дети фрейма: маска силуэта режет их по
-        // контуру бара, внутренняя тень и обводка лежат поверх (как
-        // обложка в плеере)
+        // (старая обводка выпирала на пол-линию — компенсируем ростом).
+        // Заливки секций — дети фрейма: лежат над фоном, под обводкой
+        // и внутренней тенью; маска не нужна — контуры сами обрезаны
+        // по силуэту
         SFrame {
             id: statsFrame
 
@@ -103,9 +146,14 @@ Item {
             width: parent.width + Settings.line
             height: parent.height + Settings.line
             shadowOverContent: true
+            contentMasked: false
 
             // === заливка CPU ===
+            // id обязателен: биндинг PathSvg живёт внутри SShapePath —
+            // чужого компонента, — через границу видны только id
             Item {
+                id: cpuFill
+
                 anchors.fill: parent
 
                 // y верхней кромки заливки; анимируется между итерациями
@@ -131,7 +179,7 @@ Item {
                         PathSvg {
                             path: root.sectionPath(null,
                                 statsRow.x + div1.x + Settings.line / 2,
-                                level)
+                                cpuFill.level)
                         }
                     }
                 }
@@ -156,6 +204,8 @@ Item {
 
             // === заливка TEMP ===
             Item {
+                id: tempFill
+
                 anchors.fill: parent
 
                 property real level:
@@ -181,7 +231,7 @@ Item {
                             path: root.sectionPath(
                                 statsRow.x + div1.x + Settings.line / 2,
                                 statsRow.x + div2.x + Settings.line / 2,
-                                level)
+                                tempFill.level)
                         }
                     }
                 }
@@ -204,6 +254,8 @@ Item {
 
             // === заливка RAM ===
             Item {
+                id: ramFill
+
                 anchors.fill: parent
 
                 property real level:
@@ -229,7 +281,7 @@ Item {
                             path: root.sectionPath(
                                 statsRow.x + div2.x + Settings.line / 2,
                                 null,
-                                level)
+                                ramFill.level)
                         }
                     }
                 }

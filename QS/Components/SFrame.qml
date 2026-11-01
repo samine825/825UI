@@ -31,6 +31,11 @@ Item {
     // них, а не прятаться под ними
     property bool shadowOverContent: false
 
+    // маскировать ли контент по силуэту. Выключается, когда контент
+    // сам вырезан точно по контуру: Shape внутри layer у части
+    // драйверов не рендерится вовсе
+    property bool contentMasked: true
+
     // сдвиг заливки относительно базового контура: отрицательный
     // заполняет до границ (слой заливки слайдера)
     property real fillInset: 0
@@ -126,7 +131,8 @@ Item {
         id: contentHolder
 
         anchors.fill: parent
-        layer.enabled: contentHolder.children.length > 0
+        layer.enabled: contentMasked
+            && contentHolder.children.length > 0
         layer.effect: OpacityMask {
             maskSource: silhouetteSource
         }
