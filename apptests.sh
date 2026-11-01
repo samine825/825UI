@@ -286,4 +286,104 @@ if echo "$out2" | grep -qa "TEST2_FAIL" || echo "$out2" | grep -qaE "ERROR|FATAL
     exit 1
 fi
 
+
+# === фаза 3: логика буфера (дедуп, лимит, пины, очистка) ===
+mkdir -p /tmp/825testhome/.825UI/state/clipboard
+rm -f /tmp/825testhome/.825UI/state/clipboard.json
+
+cat > "$probe" <<'EOF'
+import QtQuick
+import Quickshell
+import "QS/Apps"
+
+ShellRoot {
+    ClipboardContent {
+        id: app
+        stateFile: "/tmp/825testhome/.825UI/state/clipboard.json"
+        imagesDir: "/tmp/825testhome/.825UI/state/clipboard"
+    }
+
+    PanelWindow {
+        visible: true
+        color: "transparent"
+        exclusiveZone: -1
+        anchors { top: true; left: true }
+        implicitWidth: 10; implicitHeight: 10
+
+        Timer {
+            interval: 500; running: true
+            onTriggered: {
+                var fails = 0
+
+                function ok(name, cond) {
+                    if (!cond) {
+                        fails++
+                        console.warn("TEST3_FAIL " + name)
+                    } else {
+                        console.warn("TEST3_OK " + name)
+                    }
+                }
+
+                app.addText("hello")
+                app.addText("world")
+                ok("two entries", app.entries.length === 2)
+
+                app.addText("hello")
+                ok("dedup no dup", app.entries.length === 2)
+                ok("dedup moved top",
+                    app.entries[0].text === "hello")
+
+                for (var i = 0; i < 110; i++)
+                    app.addText("msg " + i)
+
+                ok("cap 100", app.entries.length === 100)
+
+                var pinnedId = app.entries[0].id
+                app.togglePin(pinnedId)
+                for (var j = 200; j < 260; j++) {
+                    app.addText("more " + j)
+
+                }
+
+                ok("pinned survived", app.entries.some(
+                    function (e) {
+                        return e.id === pinnedId && e.pinned
+                    }))
+                ok("cap after pin", app.entries.length === 101)
+
+                app.clearUnpinned()
+                ok("clear keeps pinned",
+                    app.entries.length === 1
+                    && app.entries[0].id === pinnedId)
+
+                app.addText("needle in stack")
+                app.query = "needle"
+                ok("search filters",
+                    app.visibleEntries.length === 1)
+                app.query = ""
+
+                app.removeEntry(pinnedId)
+                ok("remove entry", app.entries.length === 1)
+
+                console.warn("TEST3_TOTAL fails " + fails)
+                Qt.quit()
+            }
+        }
+    }
+}
+EOF
+
+out3=$(env -i HOME=/tmp/825testhome PATH=/usr/bin:/bin \
+    QT_QPA_PLATFORM=xcb QT_QUICK_BACKEND=software \
+    LIBGL_ALWAYS_SOFTWARE=1 \
+    xvfb-run -a -s "-screen 0 800x600x24" \
+    timeout 120 /usr/bin/qs -p "$(pwd)" 2>&1)
+
+echo "$out3" | grep -aE "TEST3_OK|TEST3_FAIL|TEST3_TOTAL" | head -15
+
+if echo "$out3" | grep -qa "TEST3_FAIL" || ! echo "$out3" | grep -qa "TEST3_TOTAL"; then
+    echo "=== TESTS FAIL (phase 3) ==="
+    exit 1
+fi
+
 echo "=== TESTS PASS ==="
