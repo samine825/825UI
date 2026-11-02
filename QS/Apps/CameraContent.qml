@@ -77,12 +77,15 @@ Item {
         recorder: MediaRecorder {
             id: rec
 
-            // H264/MP4: libvpx у FFmpeg-бэкенда Qt не открывается
-            // («Couldn't open video encoder libvpx: Invalid argument»),
-            // libx264 с системным ffmpeg работает
+            // MPEG4 Part 2: у FFmpeg-бэкенда Qt не открываются ни
+            // libvpx («Couldn't open video encoder libvpx: Invalid
+            // argument»), ни H264 — Qt выбирает h264_nvenc, а он на
+            // этой машине «Function not implemented», отката на
+            // программный libx264 нет. У mpeg4 аппаратных клонов
+            // нет — открывается всегда (проверено пробником).
             mediaFormat {
                 fileFormat: MediaFormat.FileFormat.MPEG4
-                videoCodec: MediaFormat.VideoCodec.H264
+                videoCodec: MediaFormat.VideoCodec.MPEG4
                 audioCodec: MediaFormat.AudioCodec.AAC
             }
 
