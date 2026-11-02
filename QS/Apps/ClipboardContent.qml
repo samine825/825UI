@@ -6,13 +6,19 @@ import "../Components"
 import "../Fonts"
 import "../"
 
-// Буфер обмена без окна. Мониторинг: раз в полторы секунды
+// Буфер обмена без окна. Мониторинг: раз в секунду
 // `wl-paste --list-types` (паттерн SystemStats: Process+Timer);
 // новый контент — текст до 100КБ или картинка (блоб в imagesDir).
+// Менеджерская семантика: захватив контент, сразу возвращаем его в
+// буфер от своего имени (wl-copy живёт ребёнком шелла) — вставка
+// работает и после закрытия приложения-источника. Богатые тексты
+// (text/html) не перезахватываем, чтобы не обесценивать формат.
+// Хвостовые \n\r обрезаются: они попадают в выборку из терминалов
+// и редакторов, а вставляться должен текст без пустой строки.
 // Дедуп: повторное копирование поднимает запись наверх. Лимит —
 // 100 незакреплённых (вытеснение снизу, блобы удаляются),
 // закреплённые не вытесняются. Персист: FileView по stateFile.
-// Клик по карточке — вернуть в буфер (wl-copy).
+// Клик по карточке — вернуть в буфер (wl-copy), карточка инвертируется.
 Item {
     id: root
 
@@ -34,6 +40,7 @@ Item {
 
     // последняя сигнатура буфера: типы + размер, против повторов
     property string lastSignature: ""
+    property string lastTypes: ""
     property bool loaded: false
 
     readonly property int maxUnpinned: 100
@@ -68,7 +75,7 @@ Item {
 
     // === мониторинг буфера ===
     Timer {
-        interval: 1500
+        interval: 1000
         running: true
         repeat: true
         triggeredOnStart: true
@@ -94,6 +101,7 @@ Item {
             return
 
         lastSignature = types
+        lastTypes = types
 
         if (types.indexOf("image/png") !== -1) {
             imageProc.command = ["sh", "-c",
@@ -130,13 +138,15 @@ Item {
         if (!text || text.length === 0)
             return
 
-        const truncated = text.length > maxTextLen
-            ? text.slice(0, maxTextLen) + " …" : text
+        // хвостовые переводы строк — мусор из терминалов/редакторов
+        const clean = text.replace(/[\r\n]+$/, "")
+        const truncated = clean.length > maxTextLen
+            ? clean.slice(0, maxTextLen) + " …" : clean
 
         addEntry({
             type: "text",
             text: truncated,
-            hash: "t:" + text.length + ":" + truncated.slice(0, 256)
+            hash: "t:" + clean.length + ":" + truncated.slice(0, 256)
         })
     }
 
@@ -182,10 +192,15 @@ Item {
     }
 
     function addEntry(entry) {
-        // дедуп: такой уже есть — наверх (закреплённый — на месте)
+        // дедуп: такой уже есть — поднять наверх (закреплённый —
+        // на месте); если он и так первый, ничего не делаем, чтобы
+        // не пересобирать список на каждом опросе
         const dupe = entries.find(e => e.hash === entry.hash)
 
         if (dupe) {
+            if (entries[0] && entries[0].id === dupe.id)
+                return
+
             if (!dupe.pinned)
                 entries = [dupe].concat(
                     entries.filter(e => e.id !== dupe.id))
@@ -205,6 +220,24 @@ Item {
         entries = [item].concat(entries)
         trimExcess()
         save()
+
+        // менеджерская семантика: держим буфер от своего имени
+        reassert(item)
+    }
+
+    function reassert(entry) {
+        if (entry.type === "text") {
+            // богатый текст не перезабираем: потеряется формат
+            if (lastTypes.indexOf("text/html") !== -1)
+                return
+
+            copyProc.command = ["wl-copy", entry.text]
+        } else {
+            copyProc.command = ["sh", "-c",
+                "wl-copy -t image/png < '" + entry.file + "'"]
+        }
+
+        copyProc.running = true
     }
 
     function trimExcess() {
@@ -370,129 +403,74 @@ Item {
         anchors.fill: parent
         spacing: Settings.line * 2
 
-        // --- хедер-бар с Clear all ---
-        Item {
-            id: headerBar
-
+        // --- поиск + очистка ---
+        Row {
             width: parent.width
-                - InfexGeometry.tipMult * Settings.line / 2
-            height: Settings.barHeight
-            anchors.horizontalCenter: parent.horizontalCenter
-
-            SFrame {
-                anchors.fill: parent
-            }
-
-            SText {
-                anchors.centerIn: parent
-                text: "Clipboard"
-                color: Settings.c1
-                font.pixelSize: Settings.textSm
-                font.bold: true
-            }
+            spacing: Settings.line * 2
 
             SPanel {
-                id: clearAllBtn
+                id: searchPanel
 
-                anchors.right: parent.right
-                anchors.rightMargin: Settings.line * 5
-                anchors.verticalCenter: parent.verticalCenter
-                width: clearRow.implicitWidth + Settings.line * 4
-                height: Settings.line * 6
+                width: parent.width - clearBtn.width - parent.spacing
+                height: Settings.line * 7
                 cornerCut: Settings.line * 2
                 strokeColor: Settings.c1
-                fillColor: clearMouse.pressed
-                    ? Settings.c1 : "transparent"
+                fillColor: Settings.c2
 
-                Row {
-                    id: clearRow
+                TextInput {
+                    id: searchInput
 
-                    anchors.centerIn: parent
-                    spacing: Settings.line
+                    anchors.fill: parent
+                    anchors.leftMargin: Settings.line * 3
+                    anchors.rightMargin: Settings.line * 3
+                    verticalAlignment: TextInput.AlignVCenter
+                    text: root.query
+                    onTextChanged: root.query = text
+                    color: Settings.c1
+                    font.pixelSize: Settings.textSm
+                    cursorVisible: false
+                    cursorDelegate: Item {}
+                    selectionColor: Settings.c1
+                    selectedTextColor: Settings.c2
+                    clip: true
 
-                    VIcon {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: Settings.textXs
-                        height: width
-                        strokePath: Glyphs.iconTrash
-                        lineColor: clearMouse.pressed
-                            ? Settings.c2 : Settings.c1
+                    Keys.onEscapePressed: (event) => {
+                        if (text !== "")
+                            text = ""
+                        else
+                            root.closeRequested()
+
+                        event.accepted = true
                     }
 
                     SText {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "Clear all"
-                        color: clearMouse.pressed
-                            ? Settings.c2 : Settings.c1
-                        font.pixelSize: Settings.textXs
-                        font.bold: true
+                        anchors.fill: parent
+                        verticalAlignment: Text.AlignVCenter
+                        visible: searchInput.text === ""
+                        text: "Search"
+                        color: Settings.c1
+                        font.pixelSize: Settings.textSm
                     }
                 }
-
-                MouseArea {
-                    id: clearMouse
-
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-
-                    onClicked: root.clearUnpinned()
-                }
             }
-        }
 
-        // --- строка поиска ---
-        SPanel {
-            id: searchPanel
+            STile {
+                id: clearBtn
 
-            width: parent.width
-            height: Settings.line * 7
-            cornerCut: Settings.line * 2
-            strokeColor: Settings.c1
-            fillColor: Settings.c2
+                anchors.verticalCenter: parent.verticalCenter
+                width: Settings.line * 7
+                height: width
+                iconStroke: Glyphs.iconTrash
 
-            TextInput {
-                id: searchInput
-
-                anchors.fill: parent
-                anchors.leftMargin: Settings.line * 3
-                anchors.rightMargin: Settings.line * 3
-                verticalAlignment: TextInput.AlignVCenter
-                text: root.query
-                onTextChanged: root.query = text
-                color: Settings.c1
-                font.pixelSize: Settings.textSm
-                cursorVisible: false
-                cursorDelegate: Item {}
-                selectionColor: Settings.c1
-                selectedTextColor: Settings.c2
-                clip: true
-
-                Keys.onEscapePressed: (event) => {
-                    if (text !== "")
-                        text = ""
-                    else
-                        root.closeRequested()
-
-                    event.accepted = true
-                }
-
-                SText {
-                    anchors.fill: parent
-                    verticalAlignment: Text.AlignVCenter
-                    visible: searchInput.text === ""
-                    text: "Search"
-                    color: Settings.c1
-                    opacity: 0.45
-                    font.pixelSize: Settings.textSm
-                }
+                onActivated: root.clearUnpinned()
             }
         }
 
         // --- список карточек ---
         Item {
             width: parent.width
-            height: parent.height - headerBar.height
-                - searchPanel.height - Settings.line * 2 * 2
+            height: parent.height - searchPanel.height
+                - Settings.line * 2
 
             Flickable {
                 id: listFlick
@@ -523,15 +501,20 @@ Item {
 
                             required property var modelData
 
+                            // выбранная (только что возвращённая в
+                            // буфер) карточка — каноническая инверсия
+                            readonly property bool sel:
+                                root.currentId === card.modelData.id
+
                             width: listCol.width
                             height: modelData.type === "image"
                                 ? Settings.line * 16
                                 : Settings.line * 14
                             cornerCut: Settings.line * 2
                             strokeColor: Settings.c1
-                            fillColor: Settings.c2
-                            opacity: root.currentId
-                                === modelData.id ? 1 : 0.92
+                            fillColor: sel ? Settings.c1 : Settings.c2
+                            shadow: sel ? "inside" : "none"
+                            shadowColor: Settings.c2
 
                             Row {
                                 anchors.fill: parent
@@ -575,7 +558,9 @@ Item {
                                         SText {
                                             width: parent.width
                                             text: card.modelData.text
-                                            color: Settings.c1
+                                            color: card.sel
+                                                ? Settings.c2
+                                                : Settings.c1
                                             elide:
                                                 Text.ElideRight
                                             maximumLineCount: 2
@@ -589,8 +574,9 @@ Item {
                                             width: parent.width
                                             text: root.timeLabel(
                                                 card.modelData.time)
-                                            color: Settings.c1
-                                            opacity: 0.4
+                                            color: card.sel
+                                                ? Settings.c2
+                                                : Settings.c1
                                             font.pixelSize:
                                                 Settings.textXs
                                         }
@@ -605,8 +591,8 @@ Item {
                                         text: (card.modelData.bytes
                                                / 1024).toFixed(0)
                                               + " KB"
-                                        color: Settings.c1
-                                        opacity: 0.4
+                                        color: card.sel
+                                            ? Settings.c2 : Settings.c1
                                         font.pixelSize:
                                             Settings.textXs
                                     }
@@ -644,16 +630,12 @@ Item {
                                         strokePath: "M 7,7 L 17,17"
                                             + " M 17,7 L 7,17"
                                         lineColor: Settings.c1
-                                        opacity: closeMouse
-                                            .containsMouse
-                                            ? 1 : 0.55
                                     }
 
                                     MouseArea {
-                                        id: closeMouse
-
-                                        anchors.fill: parent
-                                        hoverEnabled: true
+                                        anchors.centerIn: parent
+                                        width: parent.height
+                                        height: parent.height
                                         cursorShape:
                                             Qt.PointingHandCursor
 
@@ -677,13 +659,13 @@ Item {
                     }
 
                     SText {
-                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.horizontalCenter:
+                            parent.horizontalCenter
                         visible: root.visibleEntries.length === 0
                         text: root.query.trim() === ""
                             ? "Clipboard is empty"
                             : "Nothing found"
                         color: Settings.c1
-                        opacity: 0.45
                         font.pixelSize: Settings.textSm
                     }
                 }
