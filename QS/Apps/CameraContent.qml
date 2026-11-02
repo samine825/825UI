@@ -77,10 +77,13 @@ Item {
         recorder: MediaRecorder {
             id: rec
 
+            // H264/MP4: libvpx у FFmpeg-бэкенда Qt не открывается
+            // («Couldn't open video encoder libvpx: Invalid argument»),
+            // libx264 с системным ffmpeg работает
             mediaFormat {
-                fileFormat: MediaFormat.FileFormat.WebM
-                videoCodec: MediaFormat.VideoCodec.VP8
-                audioCodec: MediaFormat.AudioCodec.Opus
+                fileFormat: MediaFormat.FileFormat.MPEG4
+                videoCodec: MediaFormat.VideoCodec.H264
+                audioCodec: MediaFormat.AudioCodec.AAC
             }
 
             onRecorderStateChanged: (state) =>
@@ -136,7 +139,7 @@ Item {
 
         if (!recording) {
             rec.outputLocation = "file://" + picturesDir
-                + "/Video_" + stamp() + ".webm"
+                + "/Video_" + stamp() + ".mp4"
             rec.record()
         } else {
             rec.stop()
