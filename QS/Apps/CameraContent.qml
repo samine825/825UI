@@ -96,10 +96,6 @@ Item {
         videoOutput: viewfinder
     }
 
-    VideoOutput {
-        id: viewfinder
-    }
-
     function fileNameBase(path) {
         const s = path ? path.toString() : ""
 
@@ -187,7 +183,12 @@ Item {
                 anchors.margins: Settings.line
                 clip: true
 
+                // единственный VideoOutput, подключённый к сессии:
+                // без явного размера VideoOutput авторазмеривается
+                // под нативное разрешение камеры и вылезает за всё
                 VideoOutput {
+                    id: viewfinder
+
                     anchors.fill: parent
                     fillMode: VideoOutput.PreserveAspectFit
                     visible: root.hasCam
@@ -227,16 +228,19 @@ Item {
             }
         }
 
-        // --- выбор устройства ---
+        // --- выбор устройства: видно всегда, стрелки — когда
+        // камер несколько (MediaDevices сам ловит hotplug) ---
         Row {
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: Settings.line * 2
-            visible: root.cams.length > 1
+            visible: root.hasCam
 
             SButton {
                 width: Settings.line * 8
                 height: Settings.line * 7
                 icon: Glyphs.iconPrev
+                visible: root.cams.length > 1
+                enabled: !root.recording
 
                 onActivated: root.camIndex =
                     (root.camIndex + root.cams.length - 1)
@@ -251,7 +255,12 @@ Item {
                     anchors.centerIn: parent
                     width: parent.width
                     text: root.currentCam
-                        ? root.currentCam.description : ""
+                        ? root.currentCam.description
+                          + (root.cams.length > 1
+                              ? "  ·  " + (root.camIndex + 1) + "/"
+                                + root.cams.length
+                              : "")
+                        : ""
                     color: Settings.c1
                     elide: Text.ElideMiddle
                     font.pixelSize: Settings.textXs
@@ -264,6 +273,8 @@ Item {
                 width: Settings.line * 8
                 height: Settings.line * 7
                 icon: Glyphs.iconNext
+                visible: root.cams.length > 1
+                enabled: !root.recording
 
                 onActivated: root.camIndex =
                     (root.camIndex + 1) % root.cams.length
