@@ -29,6 +29,11 @@ Singleton {
         persistenceSupported: true
         
         onNotification: (notification) => {
+            // диагностика: кто шлёт уведомления (видно в логах qs)
+            console.warn("825 notification from '"
+                + notification.appName + "': "
+                + notification.summary + " — " + notification.body)
+
             var entry = {
                 notificationId: notification.id,
                 summary: notification.summary,

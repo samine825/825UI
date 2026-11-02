@@ -3,21 +3,25 @@ import QtQuick.Controls
 import QtQuick.Shapes
 import QtMultimedia
 import Quickshell
+import Quickshell.Io
 import "../Components"
 import "../Fonts"
 import "../"
 
 // Камера без окна: превью с вебкамеры (QtMultimedia CaptureSession),
 // снимки и видео через ImageCapture / MediaRecorder (WebM+VP8+Opus —
-// кодеки из gstreamer-plugins-good). Файлы — в picturesDir. Камера
-// активна, только пока панель открыта (property active). Без камеры
-// или при ошибке — честное empty-state. Если устройств несколько —
-// переключение кнопкой.
+// кодеки из gstreamer-plugins-good). Файлы — в picturesDir, каталог
+// создаётся mkdir-ом до первого снимка: без него QImageWriter
+// отвечает «Cannot open device for writing». Превью живёт в clip-
+// контейнере без маски панели: видеоноды не рендерятся в слой
+// OpacityMask и вылезают за силуэт. Выбор устройства — стрелками,
+// с именем камеры. Камера активна, только пока панель открыта
+// (property active). Без камеры или при ошибке — честное empty-state.
 Item {
     id: root
 
     implicitWidth: 640
-    implicitHeight: 580
+    implicitHeight: 512
 
     signal closeRequested()
 
@@ -113,16 +117,26 @@ Item {
             + d.getSeconds()
     }
 
+    function ensureDir() {
+        if (picturesDir !== "")
+            mkdirProc.running = true
+    }
+
+    Component.onCompleted: ensureDir()
+
     function takePhoto() {
         if (!hasCam || recording)
             return
 
+        ensureDir()
         stills.captureToFile(picturesDir + "/Photo_" + stamp() + ".jpg")
     }
 
     function toggleVideo() {
         if (!hasCam)
             return
+
+        ensureDir()
 
         if (!recording) {
             rec.outputLocation = "file://" + picturesDir
@@ -142,44 +156,15 @@ Item {
         onTriggered: root.recMs = rec.duration
     }
 
+    Process {
+        id: mkdirProc
+
+        command: ["mkdir", "-p", picturesDir]
+    }
+
     Column {
         anchors.fill: parent
         spacing: Settings.line * 2
-
-        // --- хедер-бар ---
-        Item {
-            id: headerBar
-
-            width: parent.width
-                - InfexGeometry.tipMult * Settings.line / 2
-            height: Settings.barHeight
-            anchors.horizontalCenter: parent.horizontalCenter
-
-            SFrame {
-                anchors.fill: parent
-            }
-
-            SText {
-                anchors.centerIn: parent
-                text: "Camera"
-                color: Settings.c1
-                font.pixelSize: Settings.textSm
-                font.bold: true
-            }
-
-            // счётчик устройств / переключение
-            SText {
-                anchors.right: parent.right
-                anchors.rightMargin: Settings.line * 5
-                anchors.verticalCenter: parent.verticalCenter
-                visible: root.cams.length > 1
-                text: (root.camIndex + 1) + "/" + root.cams.length
-                color: Settings.c1
-                opacity: 0.6
-                font.pixelSize: Settings.textXs
-                font.bold: true
-            }
-        }
 
         // --- превью ---
         SPanel {
@@ -193,10 +178,20 @@ Item {
             shadow: "outside"
             shadowColor: Settings.c2
 
-            VideoOutput {
+            // видеоноды не участвуют в слое-маске: маску выключаем,
+            // от переполнения спасает clip-контейнер
+            contentMasked: false
+
+            Item {
                 anchors.fill: parent
                 anchors.margins: Settings.line
-                visible: root.hasCam
+                clip: true
+
+                VideoOutput {
+                    anchors.fill: parent
+                    fillMode: VideoOutput.PreserveAspectFit
+                    visible: root.hasCam
+                }
             }
 
             // пустое состояние поверх превью
@@ -205,7 +200,6 @@ Item {
                 visible: !root.hasCam
                 text: "No camera found"
                 color: Settings.c1
-                opacity: 0.45
                 font.pixelSize: Settings.textSm
             }
 
@@ -233,141 +227,75 @@ Item {
             }
         }
 
+        // --- выбор устройства ---
+        Row {
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: Settings.line * 2
+            visible: root.cams.length > 1
+
+            SButton {
+                width: Settings.line * 8
+                height: Settings.line * 7
+                icon: Glyphs.iconPrev
+
+                onActivated: root.camIndex =
+                    (root.camIndex + root.cams.length - 1)
+                        % root.cams.length
+            }
+
+            Item {
+                width: Settings.line * 60
+                height: Settings.line * 7
+
+                SText {
+                    anchors.centerIn: parent
+                    width: parent.width
+                    text: root.currentCam
+                        ? root.currentCam.description : ""
+                    color: Settings.c1
+                    elide: Text.ElideMiddle
+                    font.pixelSize: Settings.textXs
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                }
+            }
+
+            SButton {
+                width: Settings.line * 8
+                height: Settings.line * 7
+                icon: Glyphs.iconNext
+
+                onActivated: root.camIndex =
+                    (root.camIndex + 1) % root.cams.length
+            }
+        }
+
         // --- кнопки ---
         Row {
             anchors.horizontalCenter: parent.horizontalCenter
-            spacing: Settings.line * 4
+            spacing: Settings.line * 3
 
-            SPanel {
-                width: Settings.line * 20
+            SButton {
+                width: Settings.line * 26
                 height: Settings.line * 9
-                cornerCut: Settings.line * 2
-                strokeColor: Settings.c1
-                fillColor: photoMouse.pressed ? Settings.c1
-                    : "transparent"
-                opacity: root.hasCam && !root.recording ? 1 : 0.4
+                icon: Glyphs.iconCamera
+                label: "Photo"
+                enabled: root.hasCam && !root.recording
 
-                Row {
-                    anchors.centerIn: parent
-                    spacing: Settings.line * 2
-
-                    VIcon {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: Settings.textSm
-                        height: width
-                        strokePath: Glyphs.iconCamera
-                        lineColor: photoMouse.pressed
-                            ? Settings.c2 : Settings.c1
-                    }
-
-                    SText {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "Photo"
-                        color: photoMouse.pressed
-                            ? Settings.c2 : Settings.c1
-                        font.pixelSize: Settings.textSm
-                        font.bold: true
-                    }
-                }
-
-                MouseArea {
-                    id: photoMouse
-
-                    anchors.fill: parent
-                    enabled: root.hasCam && !root.recording
-                    cursorShape: Qt.PointingHandCursor
-
-                    onClicked: root.takePhoto()
-                }
+                onActivated: root.takePhoto()
             }
 
-            SPanel {
-                width: Settings.line * 20
+            SButton {
+                width: Settings.line * 26
                 height: Settings.line * 9
-                cornerCut: Settings.line * 2
-                strokeColor: Settings.c1
-                fillColor: root.recording || videoMouse.pressed
-                    ? Settings.c1 : "transparent"
-                opacity: root.hasCam ? 1 : 0.4
+                icon: root.recording
+                    ? Glyphs.iconStop : Glyphs.iconRecord
+                label: root.recording
+                    ? padStopSec(root.recMs) + " — Stop" : "Record"
+                active: root.recording
+                enabled: root.hasCam
 
-                Row {
-                    anchors.centerIn: parent
-                    spacing: Settings.line * 2
-
-                    VIcon {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: Settings.textSm
-                        height: width
-                        strokePath: root.recording
-                            ? Glyphs.iconStop : Glyphs.iconRecord
-                        lineColor: root.recording || videoMouse.pressed
-                            ? Settings.c2 : Settings.c1
-                    }
-
-                    SText {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: root.recording
-                            ? padStopSec(root.recMs) + "  Stop"
-                            : "Record"
-                        color: root.recording || videoMouse.pressed
-                            ? Settings.c2 : Settings.c1
-                        font.pixelSize: Settings.textSm
-                        font.bold: true
-                    }
-                }
-
-                MouseArea {
-                    id: videoMouse
-
-                    anchors.fill: parent
-                    enabled: root.hasCam
-                    cursorShape: Qt.PointingHandCursor
-
-                    onClicked: root.toggleVideo()
-                }
-            }
-
-            SPanel {
-                visible: root.cams.length > 1
-                width: Settings.line * 14
-                height: Settings.line * 9
-                cornerCut: Settings.line * 2
-                strokeColor: Settings.c1
-                fillColor: switchMouse.pressed
-                    ? Settings.c1 : "transparent"
-
-                Row {
-                    anchors.centerIn: parent
-                    spacing: Settings.line * 2
-
-                    VIcon {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: Settings.textSm
-                        height: width
-                        strokePath: Glyphs.iconNext
-                        lineColor: switchMouse.pressed
-                            ? Settings.c2 : Settings.c1
-                    }
-
-                    SText {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "Switch"
-                        color: switchMouse.pressed
-                            ? Settings.c2 : Settings.c1
-                        font.pixelSize: Settings.textSm
-                        font.bold: true
-                    }
-                }
-
-                MouseArea {
-                    id: switchMouse
-
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-
-                    onClicked: root.camIndex =
-                        (root.camIndex + 1) % root.cams.length
-                }
+                onActivated: root.toggleVideo()
             }
         }
 
@@ -378,7 +306,6 @@ Item {
             height: Settings.line * 4
             text: root.status
             color: Settings.c1
-            opacity: 0.6
             elide: Text.ElideMiddle
             font.pixelSize: Settings.textXs
             horizontalAlignment: Text.AlignHCenter

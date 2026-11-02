@@ -24,6 +24,7 @@ PanelWindow {
 
     function show() {
         root.visible = true
+        content.ensureDir()
         content.active = true
         content.forceActiveFocus()
     }

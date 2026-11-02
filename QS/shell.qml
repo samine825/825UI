@@ -838,6 +838,18 @@ ShellRoot {
     // === приложения ===
     AlarmBanner { id: alarmBanner }
 
+    // каталоги состояния приложений: FileView каталоги сам не создаёт,
+    // без них каждая запись падает с ошибкой записи
+    Process {
+        id: bootstrapDirs
+
+        command: ["sh", "-c",
+            "mkdir -p \"$HOME/.825UI/state/clipboard\""
+            + " \"$HOME/Pictures/825UI\""]
+    }
+
+    Component.onCompleted: bootstrapDirs.running = true
+
     Clipboard { id: clipboardPanel }
     Calculator { id: calculatorPanel }
     EmojiPicker { id: emojiPickerPanel }

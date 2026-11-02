@@ -8,11 +8,12 @@ import "../Fonts"
 import "../"
 
 // Диктофон без окна. Запись микрофона (QtMultimedia CaptureSession,
-// Ogg/Opus — кодеки из gst-plugins-base/good) в recordingsDir, пульс
-// вокруг кнопки записи, длительность на инфекс-цифрах. Список
-// записей — скан каталога (find -printf, паттерн SettingsMenu),
-// воспроизведение одним MediaPlayer, позиция — инверсией в строке.
-// Удаление — файл и запись.
+// Ogg/Opus — кодеки из gst-plugins-base/good) в recordingsDir —
+// каталог создаётся mkdir-ом до первой записи, без него pipewire
+// отвечает ENOENT. Пульс вокруг кнопки записи, длительность на
+// инфекс-цифрах. Список записей — скан каталога (find -printf,
+// паттерн SettingsMenu), воспроизведение одним MediaPlayer, позиция
+// — заливкой без подложки. Удаление — файл и запись.
 Item {
     id: root
 
@@ -79,9 +80,18 @@ Item {
             + (d.getSeconds() < 10 ? "0" : "") + d.getSeconds()
     }
 
+    function ensureDir() {
+        if (recordingsDir !== "")
+            mkdirProc.running = true
+    }
+
+    Component.onCompleted: ensureDir()
+
     function toggleRecord() {
         if (!hasMic)
             return
+
+        ensureDir()
 
         if (!recording) {
             rec.outputLocation = "file://" + recordingsDir
@@ -91,6 +101,12 @@ Item {
             rec.stop()
             rescanSoon.restart()
         }
+    }
+
+    Process {
+        id: mkdirProc
+
+        command: ["mkdir", "-p", recordingsDir]
     }
 
     // скан каталога записей
@@ -182,39 +198,15 @@ Item {
         id: rmProc
     }
 
-    Component.onCompleted: rescan()
-
-    // === интерфейс ===
     Column {
         anchors.fill: parent
         spacing: Settings.line * 2
 
-        // --- хедер-бар ---
-        Item {
-            id: headerBar
-
-            width: parent.width
-                - InfexGeometry.tipMult * Settings.line / 2
-            height: Settings.barHeight
-            anchors.horizontalCenter: parent.horizontalCenter
-
-            SFrame {
-                anchors.fill: parent
-            }
-
-            SText {
-                anchors.centerIn: parent
-                text: "Recorder"
-                color: Settings.c1
-                font.pixelSize: Settings.textSm
-                font.bold: true
-            }
-        }
-
         // --- блок записи ---
         Item {
             width: parent.width
-            height: Settings.line * 20
+            height: Settings.line * 18
+            visible: root.hasMic
 
             // пульс вокруг кнопки
             SRectangle {
@@ -239,37 +231,18 @@ Item {
                 }
             }
 
-            SPanel {
+            SButton {
                 id: recBtn
 
                 anchors.centerIn: parent
                 width: Settings.line * 12
                 height: width
-                cornerCut: Settings.line * 3
-                strokeColor: Settings.c1
-                fillColor: root.recording || recMouse.pressed
-                    ? Settings.c1 : "transparent"
-                opacity: root.hasMic ? 1 : 0.4
+                icon: root.recording
+                    ? Glyphs.iconStop : Glyphs.iconRecord
+                iconSize: Settings.textMd
+                active: root.recording
 
-                VIcon {
-                    anchors.centerIn: parent
-                    width: parent.width * 0.4
-                    height: width
-                    strokePath: root.recording
-                        ? Glyphs.iconStop : Glyphs.iconRecord
-                    lineColor: root.recording || recMouse.pressed
-                        ? Settings.c2 : Settings.c1
-                }
-
-                MouseArea {
-                    id: recMouse
-
-                    anchors.fill: parent
-                    enabled: root.hasMic
-                    cursorShape: Qt.PointingHandCursor
-
-                    onClicked: root.toggleRecord()
-                }
+                onActivated: root.toggleRecord()
             }
 
             // таймер записи на инфексе
@@ -291,22 +264,22 @@ Item {
                         referencePixelSize: Settings.line * 8
                         line: Settings.line
                         color: Settings.c1
-                        opacity: root.recording ? 1 : 0.4
                         mirrorX: true
                     }
                 }
             }
+        }
 
-            SText {
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.right: parent.right
-                anchors.rightMargin: Settings.line * 4
-                visible: !root.hasMic
-                text: "No microphone"
-                color: Settings.c1
-                opacity: 0.45
-                font.pixelSize: Settings.textXs
-            }
+        // --- нет микрофона ---
+        SText {
+            width: parent.width
+            height: root.hasMic ? 0 : Settings.line * 18
+            verticalAlignment: Text.AlignVCenter
+            horizontalAlignment: Text.AlignHCenter
+            visible: !root.hasMic
+            text: "No microphone"
+            color: Settings.c1
+            font.pixelSize: Settings.textSm
         }
 
         // --- статус ---
@@ -317,7 +290,6 @@ Item {
             visible: text !== ""
             text: root.status
             color: Settings.c1
-            opacity: 0.6
             elide: Text.ElideMiddle
             font.pixelSize: Settings.textXs
             horizontalAlignment: Text.AlignHCenter
@@ -326,8 +298,8 @@ Item {
         // --- список записей ---
         Flickable {
             width: parent.width
-            height: parent.height - headerBar.height
-                - Settings.line * 20 - Settings.line * 2 * 2
+            height: parent.height - Settings.line * 18
+                - Settings.line * 2 * 2
             clip: true
             contentWidth: width
             contentHeight: recCol.height
@@ -387,7 +359,7 @@ Item {
                                 anchors.verticalCenter:
                                     parent.verticalCenter
                                 width: parent.width
-                                    - Settings.line * 34
+                                    - Settings.line * 30
                                 spacing: Settings.line
 
                                 SText {
@@ -400,16 +372,10 @@ Item {
                                     font.bold: true
                                 }
 
-                                // позиция воспроизведения — инверсия
+                                // позиция воспроизведения — заливка
                                 Item {
                                     width: parent.width
-                                    height: Settings.line * 2
-
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        color: Settings.c1
-                                        opacity: 0.15
-                                    }
+                                    height: Settings.line
 
                                     Rectangle {
                                         width: parent.width
@@ -431,7 +397,6 @@ Item {
                                 text: root.timeLabel(
                                     recCard.modelData.mtime)
                                 color: Settings.c1
-                                opacity: 0.5
                                 font.pixelSize: Settings.textXs
                                 horizontalAlignment: Text.AlignRight
                             }
@@ -448,15 +413,12 @@ Item {
                                     strokePath: "M 7,7 L 17,17"
                                         + " M 17,7 L 7,17"
                                     lineColor: Settings.c1
-                                    opacity: recCloseMouse
-                                        .containsMouse ? 1 : 0.55
                                 }
 
                                 MouseArea {
-                                    id: recCloseMouse
-
-                                    anchors.fill: parent
-                                    hoverEnabled: true
+                                    anchors.centerIn: parent
+                                    width: Settings.line * 6
+                                    height: Settings.line * 6
                                     cursorShape:
                                         Qt.PointingHandCursor
 
@@ -473,7 +435,6 @@ Item {
                     visible: root.recordings.length === 0
                     text: "No recordings yet"
                     color: Settings.c1
-                    opacity: 0.45
                     font.pixelSize: Settings.textSm
                 }
             }
