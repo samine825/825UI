@@ -11,11 +11,13 @@ import "EmojiData.js" as EmojiData
 // + сетка с ховером. Клик — выбор: копирование в буфер делает
 // обёртка или потребитель сигналом emojiPicked. Недавние — до 24
 // символов; персист по stateFile (пусто — без сохранения, тесты).
+// Ячейка слушает HoverHandler/TapHandler, а не MouseArea: пассивные
+// хэндлеры не перехватывают ховер у MouseFollow — 3D-тилт живёт.
 Item {
     id: root
 
     implicitWidth: 800
-    implicitHeight: 640
+    implicitHeight: 600
 
     signal closeRequested()
     signal emojiPicked(string ch)
@@ -99,28 +101,6 @@ Item {
         anchors.fill: parent
         spacing: Settings.line * 2
 
-        // --- хедер-бар ---
-        Item {
-            id: headerBar
-
-            width: parent.width
-                - InfexGeometry.tipMult * Settings.line / 2
-            height: Settings.barHeight
-            anchors.horizontalCenter: parent.horizontalCenter
-
-            SFrame {
-                anchors.fill: parent
-            }
-
-            SText {
-                anchors.centerIn: parent
-                text: "Emoji"
-                color: Settings.c1
-                font.pixelSize: Settings.textSm
-                font.bold: true
-            }
-        }
-
         // --- строка поиска ---
         SPanel {
             id: searchPanel
@@ -163,7 +143,6 @@ Item {
                     visible: searchInput.text === ""
                     text: "Search"
                     color: Settings.c1
-                    opacity: 0.45
                     font.pixelSize: Settings.textSm
                 }
             }
@@ -182,9 +161,9 @@ Item {
         // --- зона сетки эмодзи ---
         Item {
             width: parent.width
-            height: parent.height - headerBar.height
+            height: parent.height
                 - searchPanel.height - tabBar.height - nameLabel.height
-                - Settings.line * 2 * 4
+                - Settings.line * 2 * 3
 
             Flickable {
                 id: gridFlick
@@ -226,13 +205,8 @@ Item {
 
                             SRectangle {
                                 anchors.fill: parent
-                                color: Settings.c1
-                                opacity: mouse.containsMouse ? 0.15 : 0
-                                Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: Settings.animInstant
-                                    }
-                                }
+                                color: hover.hovered
+                                    ? Settings.c1 : "transparent"
                             }
 
                             SText {
@@ -242,18 +216,20 @@ Item {
                                 font.pixelSize: Settings.textLg
                             }
 
-                            MouseArea {
-                                id: mouse
+                            // пассивные хэндлеры: тилт контейнера
+                            // продолжает следить за мышью
+                            HoverHandler {
+                                id: hover
 
-                                anchors.fill: parent
-                                hoverEnabled: true
+                                onHoveredChanged:
+                                    root.hoveredName = hovered
+                                        ? cell.ename : ""
+                            }
+
+                            TapHandler {
                                 cursorShape: Qt.PointingHandCursor
 
-                                onContainsMouseChanged:
-                                    root.hoveredName = containsMouse
-                                        ? cell.ename : ""
-
-                                onClicked: root.pick(cell.ch)
+                                onTapped: root.pick(cell.ch)
                             }
                         }
                     }
@@ -268,7 +244,6 @@ Item {
                     ? "Nothing here yet"
                     : "Nothing found"
                 color: Settings.c1
-                opacity: 0.45
                 font.pixelSize: Settings.textSm
             }
         }
@@ -281,12 +256,8 @@ Item {
             height: Settings.line * 4
             text: root.hoveredName
             color: Settings.c1
-            opacity: root.hoveredName === "" ? 0.35 : 1
             font.pixelSize: Settings.textXs
             verticalAlignment: Text.AlignVCenter
-            Behavior on opacity {
-                NumberAnimation { duration: Settings.animFast }
-            }
         }
     }
 }

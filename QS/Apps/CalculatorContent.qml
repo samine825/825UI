@@ -8,11 +8,12 @@ import "Calc.js" as Calc
 // Содержимое калькулятора без окна: логика + визуал в одном Item
 // фиксированного размера. Обёртка-PanelWindow — Calculator.qml; в
 // тестах содержимое инстанцируется прямо в видимом окне стенда.
+// Кнопки — канонический SButton: нажатая — заливка c1 с тенью c2.
 Item {
     id: root
 
-    implicitWidth: 440
-    implicitHeight: 708
+    implicitWidth: 400
+    implicitHeight: 553
 
     signal closeRequested()
 
@@ -184,218 +185,182 @@ Item {
 
             anchors.fill: parent
 
-            Column {
+            SPanel {
+                id: contentArea
+
                 anchors.fill: parent
-                spacing: Settings.line * 4
+                cornerCut: Settings.line * 2
+                strokeColor: Settings.c1
+                fillColor: Settings.c2
+                shadow: "outside"
+                shadowColor: Settings.c2
 
-                // --- хедер-бар ---
-                Item {
-                    id: headerBar
+                // поля и зазор сетки
+                property real pad: Settings.line * 2
+                property real gridGap: Settings.line
 
-                    width: parent.width
-                        - InfexGeometry.tipMult * Settings.line / 2
-                    height: Settings.barHeight
-                    anchors.horizontalCenter: parent.horizontalCenter
+                readonly property real btnSize:
+                    (width - pad * 2 - gridGap * 3) / 4
 
-                    SFrame {
-                        anchors.fill: parent
-                    }
+                Column {
+                    id: contentCol
 
-                    SText {
-                        anchors.centerIn: parent
-                        text: "Calculator"
-                        color: Settings.c1
-                        font.pixelSize: Settings.textSm
-                        font.bold: true
-                    }
-                }
+                    x: contentArea.pad
+                    y: contentArea.pad
+                    width: contentArea.width - contentArea.pad * 2
+                    spacing: Settings.line * 2
 
-                // --- контентная область ---
-                SPanel {
-                    id: contentArea
+                    // === дисплей ===
+                    Item {
+                        width: parent.width
+                        height: Settings.line * 12
 
-                    width: parent.width
-                    height: parent.height - headerBar.height
-                        - Settings.line * 4
-                    cornerCut: Settings.line * 2
-                    strokeColor: Settings.c1
-                    fillColor: Settings.c2
-                    shadow: "outside"
-                    shadowColor: Settings.c2
-
-                    // поля и зазор сетки
-                    property real pad: Settings.line * 3
-                    property real gridGap: Settings.line * 2
-
-                    readonly property real btnSize:
-                        (width - pad * 2 - gridGap * 3) / 4
-
-                    Column {
-                        id: contentCol
-
-                        x: contentArea.pad
-                        y: contentArea.pad
-                        width: contentArea.width - contentArea.pad * 2
-                        spacing: Settings.line * 3
-
-                        // === дисплей ===
-                        Item {
-                            width: parent.width
-                            height: Settings.line * 11
-
-                            // выражение; выравнивание вправо, длинный
-                            // ввод прокручивается к хвосту
-                            TextInput {
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.top: parent.top
-                                anchors.topMargin: Settings.line
-                                height: Settings.textLg * 1.4
-                                readOnly: true
-                                text: root.expression
-                                color: Settings.c1
-                                font.pixelSize: Settings.textLg
-                                font.bold: true
-                                horizontalAlignment: TextInput.AlignRight
-                                verticalAlignment: TextInput.AlignVCenter
-                                cursorVisible: false
-                                cursorDelegate: Item {}
-                                selectionColor: Settings.c1
-                                selectedTextColor: Settings.c2
-                                clip: true
-                            }
-
-                            SText {
-                                anchors.right: parent.right
-                                anchors.bottom: parent.bottom
-                                anchors.rightMargin: Settings.line
-                                anchors.bottomMargin: Settings.line
-                                text: root.previewText
-                                color: Settings.c1
-                                opacity: root.previewText === "" ? 0 : 0.55
-                                font.pixelSize: Settings.textSm
-                                Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: Settings.animFast
-                                    }
-                                }
-                            }
+                        // выражение; выравнивание вправо, длинный
+                        // ввод прокручивается к хвосту
+                        TextInput {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.topMargin: Settings.line
+                            height: Settings.textLg * 1.4
+                            readOnly: true
+                            text: root.expression
+                            color: Settings.c1
+                            font.pixelSize: Settings.textLg
+                            font.bold: true
+                            horizontalAlignment: TextInput.AlignRight
+                            verticalAlignment: TextInput.AlignVCenter
+                            cursorVisible: false
+                            cursorDelegate: Item {}
+                            selectionColor: Settings.c1
+                            selectedTextColor: Settings.c2
+                            clip: true
                         }
 
-                        // === кнопки 4x5 ===
-                        Grid {
-                            columns: 4
-                            spacing: contentArea.gridGap
+                        SText {
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            anchors.rightMargin: Settings.line
+                            anchors.bottomMargin: Settings.line
+                            text: root.previewText
+                            color: Settings.c1
+                            font.pixelSize: Settings.textXs
+                        }
+                    }
 
-                            CalcButton {
-                                width: contentArea.btnSize
-                                height: contentArea.btnSize
-                                label: "C"
-                                role: "clear"
-                            }
-                            CalcButton {
-                                width: contentArea.btnSize
-                                height: contentArea.btnSize
-                                icon: Glyphs.iconBackspace
-                                role: "backspace"
-                            }
-                            CalcButton {
-                                width: contentArea.btnSize
-                                height: contentArea.btnSize
-                                label: "%"
-                            }
-                            CalcButton {
-                                width: contentArea.btnSize
-                                height: contentArea.btnSize
-                                label: "÷"
-                            }
+                    // === кнопки 4x5 ===
+                    Grid {
+                        columns: 4
+                        spacing: contentArea.gridGap
 
-                            CalcButton {
-                                width: contentArea.btnSize
-                                height: contentArea.btnSize
-                                label: "7"
-                            }
-                            CalcButton {
-                                width: contentArea.btnSize
-                                height: contentArea.btnSize
-                                label: "8"
-                            }
-                            CalcButton {
-                                width: contentArea.btnSize
-                                height: contentArea.btnSize
-                                label: "9"
-                            }
-                            CalcButton {
-                                width: contentArea.btnSize
-                                height: contentArea.btnSize
-                                label: "×"
-                            }
+                        CalcButton {
+                            width: contentArea.btnSize
+                            height: contentArea.btnSize
+                            label: "C"
+                            role: "clear"
+                        }
+                        CalcButton {
+                            width: contentArea.btnSize
+                            height: contentArea.btnSize
+                            icon: Glyphs.iconBackspace
+                            role: "backspace"
+                        }
+                        CalcButton {
+                            width: contentArea.btnSize
+                            height: contentArea.btnSize
+                            label: "%"
+                        }
+                        CalcButton {
+                            width: contentArea.btnSize
+                            height: contentArea.btnSize
+                            label: "÷"
+                        }
 
-                            CalcButton {
-                                width: contentArea.btnSize
-                                height: contentArea.btnSize
-                                label: "4"
-                            }
-                            CalcButton {
-                                width: contentArea.btnSize
-                                height: contentArea.btnSize
-                                label: "5"
-                            }
-                            CalcButton {
-                                width: contentArea.btnSize
-                                height: contentArea.btnSize
-                                label: "6"
-                            }
-                            CalcButton {
-                                width: contentArea.btnSize
-                                height: contentArea.btnSize
-                                label: "−"
-                            }
+                        CalcButton {
+                            width: contentArea.btnSize
+                            height: contentArea.btnSize
+                            label: "7"
+                        }
+                        CalcButton {
+                            width: contentArea.btnSize
+                            height: contentArea.btnSize
+                            label: "8"
+                        }
+                        CalcButton {
+                            width: contentArea.btnSize
+                            height: contentArea.btnSize
+                            label: "9"
+                        }
+                        CalcButton {
+                            width: contentArea.btnSize
+                            height: contentArea.btnSize
+                            label: "×"
+                        }
 
-                            CalcButton {
-                                width: contentArea.btnSize
-                                height: contentArea.btnSize
-                                label: "1"
-                            }
-                            CalcButton {
-                                width: contentArea.btnSize
-                                height: contentArea.btnSize
-                                label: "2"
-                            }
-                            CalcButton {
-                                width: contentArea.btnSize
-                                height: contentArea.btnSize
-                                label: "3"
-                            }
-                            CalcButton {
-                                width: contentArea.btnSize
-                                height: contentArea.btnSize
-                                label: "+"
-                            }
+                        CalcButton {
+                            width: contentArea.btnSize
+                            height: contentArea.btnSize
+                            label: "4"
+                        }
+                        CalcButton {
+                            width: contentArea.btnSize
+                            height: contentArea.btnSize
+                            label: "5"
+                        }
+                        CalcButton {
+                            width: contentArea.btnSize
+                            height: contentArea.btnSize
+                            label: "6"
+                        }
+                        CalcButton {
+                            width: contentArea.btnSize
+                            height: contentArea.btnSize
+                            label: "−"
+                        }
 
-                            CalcButton {
-                                width: contentArea.btnSize
-                                height: contentArea.btnSize
-                                label: "±"
-                                role: "negate"
-                            }
-                            CalcButton {
-                                width: contentArea.btnSize
-                                height: contentArea.btnSize
-                                label: "0"
-                            }
-                            CalcButton {
-                                width: contentArea.btnSize
-                                height: contentArea.btnSize
-                                label: "."
-                            }
-                            CalcButton {
-                                width: contentArea.btnSize
-                                height: contentArea.btnSize
-                                label: "="
-                                role: "equals"
-                                accent: true
-                            }
+                        CalcButton {
+                            width: contentArea.btnSize
+                            height: contentArea.btnSize
+                            label: "1"
+                        }
+                        CalcButton {
+                            width: contentArea.btnSize
+                            height: contentArea.btnSize
+                            label: "2"
+                        }
+                        CalcButton {
+                            width: contentArea.btnSize
+                            height: contentArea.btnSize
+                            label: "3"
+                        }
+                        CalcButton {
+                            width: contentArea.btnSize
+                            height: contentArea.btnSize
+                            label: "+"
+                        }
+
+                        CalcButton {
+                            width: contentArea.btnSize
+                            height: contentArea.btnSize
+                            label: "±"
+                            role: "negate"
+                        }
+                        CalcButton {
+                            width: contentArea.btnSize
+                            height: contentArea.btnSize
+                            label: "0"
+                        }
+                        CalcButton {
+                            width: contentArea.btnSize
+                            height: contentArea.btnSize
+                            label: "."
+                        }
+                        CalcButton {
+                            width: contentArea.btnSize
+                            height: contentArea.btnSize
+                            label: "="
+                            role: "equals"
+                            active: true
                         }
                     }
                 }
@@ -403,52 +368,14 @@ Item {
         }
     }
 
-    // === кнопка: SPanel со вспышкой заливки при нажатии ===
-    component CalcButton: SPanel {
+    // === кнопка: канонический SButton с диспетчем роли ===
+    component CalcButton: SButton {
         id: btn
 
-        property string label: ""
-        property string icon: ""
         // clear / backspace / negate / equals — иначе просто вставка
         property string role: "insert"
-        property bool accent: false
-        property bool flash: false
 
-        signal activated()
-
-        cornerCut: Settings.line * 2
-        strokeColor: Settings.c1
-        fillColor: flash || accent ? Settings.c1 : "transparent"
-
-        VIcon {
-            anchors.centerIn: parent
-            visible: btn.icon !== ""
-            width: parent.width * 0.5
-            height: width
-            strokePath: btn.icon
-            lineColor: btn.flash || btn.accent
-                ? Settings.c2 : Settings.c1
-        }
-
-        SText {
-            anchors.centerIn: parent
-            visible: btn.icon === ""
-            text: btn.label
-            color: btn.flash || btn.accent
-                ? Settings.c2 : Settings.c1
-            font.pixelSize: Settings.textMd
-            font.bold: true
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-
-            onPressed: btn.flash = true
-            onReleased: btn.flash = false
-            onCanceled: btn.flash = false
-            onClicked: btn.activated()
-        }
+        textSize: Settings.textMd
 
         onActivated: {
             if (role === "clear")

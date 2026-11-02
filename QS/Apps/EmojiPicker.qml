@@ -59,6 +59,9 @@ PanelWindow {
             onEmojiPicked: (ch) => {
                 copyProc.command = ["wl-copy", ch]
                 copyProc.running = true
+
+                // эмодзи скопирован — панель больше не нужна
+                root.hide()
             }
         }
     }
