@@ -8,15 +8,16 @@ import "../"
 import "EmojiData.js" as EmojiData
 
 // Пикер эмодзи без окна. Каркас — как в настройках: таб-бар
-// категорий + контентная панель. Внутри — заголовочная строка
-// (поиск + имя под курсором, как шапка уведомлений в панели
-// управления) и грид эмодзи по образцу сетки обоев в настройках:
-// явные координаты, отсечение невидимого, один общий индикатор
-// ховера (заливка c1 переезжает между ячейками). Ячейки слушают
-// пассивные HoverHandler/TapHandler — 3D-тилт не глохнет.
-// Данные — локальный EmojiData.js, один раз спарсенный из
-// unicode.org скриптом Tools/emoji_parse.py. Недавние — до 24
-// символов, персист по stateFile (пусто — без сохранения, тесты).
+// категорий + контентная панель. Все эмодзи лежат одним списком
+// (как сетка обоев: явные координаты, отсечение невидимого),
+// секции разделены заголовками групп; табы не фильтруют, а
+// прокручивают список к своей секции, и наоборот — прокручивание
+// двигает активный таб. Поиск оставляет совпадения всех групп
+// (с их заголовками). Общий индикатор ховера — заливка c1,
+// переезжает между ячейками. Ячейки слушают пассивные
+// HoverHandler/TapHandler. Данные — локальный EmojiData.js,
+// один раз спарсенный из unicode.org скриптом Tools/emoji_parse.py.
+// Недавние — первой секцией, до 24 символов, персист по stateFile.
 Item {
     id: root
 
@@ -34,22 +35,119 @@ Item {
     property int currentTab: 0
     property string hoveredName: ""
 
-    // === категории и фильтрация ===
-    readonly property var cats: EmojiData.categories
+    // === построение единого списка ===
+    // элементы: { header: true, name, x, y, tabIndex }
+    //           { header: false, entry, x, y }
+    // tops — y-якоря секций по индексу таба
+    readonly property var layout: buildLayout()
 
-    readonly property var shown: {
-        const cat = cats[currentTab]
+    function labelOf(group) {
+        const cat = cats.find(c => c.id === group)
 
-        if (query.trim() !== "")
-            return EmojiData.search(query,
-                cat && cat.id === "frequent" ? "" : cat.id)
+        return cat ? cat.label : group
+    }
 
-        if (cat && cat.id === "frequent")
-            return recentList
-                .map(ch => EmojiData.infoOf(ch))
-                .filter(e => e !== undefined)
+    function buildLayout() {
+        const q = query.trim().toLowerCase()
+        const all = EmojiData.entries
 
-        return cat ? EmojiData.search("", cat.id) : []
+        const filtered = q === "" ? all : all.filter(e =>
+            e.name.toLowerCase().indexOf(q) !== -1
+            || e.kw.toLowerCase().indexOf(q) !== -1)
+
+        const items = []
+        const tops = []
+        const margin = grid.margin
+        const cellStep = grid.cell + grid.gap
+        const headerStep = grid.headerH + grid.gap
+        const recent = recentList
+            .map(ch => EmojiData.infoOf(ch))
+            .filter(e => e !== undefined)
+
+        let y = margin
+        let col = 0
+
+        function placeHeader(name, tabIndex) {
+            if (col !== 0) {
+                col = 0
+                y += cellStep
+            }
+
+            items.push({ header: true, name: name,
+                x: margin, y: y, tabIndex: tabIndex })
+            tops.push({ tabIndex: tabIndex, y: y })
+            y += headerStep
+        }
+
+        function placeEntry(e) {
+            items.push({ header: false, entry: e,
+                x: margin + col * cellStep, y: y })
+
+            col++
+
+            if (col === grid.columns) {
+                col = 0
+                y += cellStep
+            }
+        }
+
+        if (filtered !== all) {
+            // поиск: совпадения всех групп, с их заголовками
+            let lastGroup = ""
+
+            for (let i = 0; i < filtered.length; i++) {
+                const e = filtered[i]
+
+                if (e.group !== lastGroup) {
+                    lastGroup = e.group
+                    placeHeader(labelOf(e.group),
+                        catIndex(e.group))
+                }
+
+                placeEntry(e)
+            }
+        } else {
+            // полный список: недавние первой секцией
+            if (recent.length > 0) {
+                placeHeader(labelOf("frequent"), 0)
+
+                for (let r = 0; r < recent.length; r++)
+                    placeEntry(recent[r])
+            }
+
+            let lastGroup = ""
+
+            for (let i = 0; i < all.length; i++) {
+                const e = all[i]
+
+                if (e.group !== lastGroup) {
+                    lastGroup = e.group
+                    placeHeader(labelOf(e.group),
+                        catIndex(e.group))
+                }
+
+                placeEntry(e)
+            }
+        }
+
+        return {
+            items: items,
+            tops: tops,
+            // нижнее поле + незавершённый ряд
+            height: y + (col !== 0 ? cellStep : 0) + margin
+        }
+    }
+
+    function catIndex(group) {
+        if (group === "frequent")
+            return 0
+
+        for (let i = 1; i < cats.length; i++) {
+            if (cats[i].id === group)
+                return i
+        }
+
+        return 0
     }
 
     function pick(ch) {
@@ -83,6 +181,8 @@ Item {
         store.setText(JSON.stringify({ recent: recentList }))
     }
 
+    readonly property var cats: EmojiData.categories
+
     FileView {
         id: store
 
@@ -111,7 +211,7 @@ Item {
 
             onActivated: (index) => {
                 root.currentTab = index
-                root.query = ""
+                root.scrollToSection(index)
             }
         }
 
@@ -172,7 +272,7 @@ Item {
                         anchors.fill: parent
                         verticalAlignment: Text.AlignVCenter
                         visible: searchInput.text === ""
-                        text: "Search " + root.cats[root.currentTab].label
+                        text: "Search"
                         color: Settings.c1
                         font.pixelSize: Settings.textSm
                         font.bold: true
@@ -195,7 +295,7 @@ Item {
                 }
             }
 
-            // --- грид эмодзи (паттерн сетки обоев) ---
+            // --- единый список эмодзи (паттерн сетки обоев) ---
             Flickable {
                 id: grid
 
@@ -219,20 +319,108 @@ Item {
                 property real margin: Settings.line * 1.5
                 property real gap: Settings.line * 1.5
                 property int columns: 10
+                property real headerH: Settings.textLg
 
                 property real cell:
                     (width - margin * 2 - gap * (columns - 1))
                         / columns
 
-                property real rows:
-                    Math.ceil(root.shown.length / columns)
-
                 contentWidth: width
                 contentHeight: Math.max(height,
-                    rows * (cell + gap) + margin * 2)
+                    root.layout.height)
+
+                // прокрутка синхронизирует активный таб: секция под
+                // верхней кромкой становится активной
+                onContentYChanged: root.syncTab()
+
+                // плавный доскролл при клике по табу
+                NumberAnimation {
+                    id: scrollAnim
+
+                    target: grid
+                    property: "contentY"
+                    duration: Settings.animSlow
+                    easing.type: Easing.OutCubic
+                }
+
+                Repeater {
+                    model: root.layout.items
+
+                    delegate: Item {
+                        id: cell
+
+                        required property var modelData
+                        required property int index
+
+                        // скрытые ячейки не рендерятся
+                        readonly property bool inViewport: {
+                            const top = y - grid.contentY
+
+                            return top < grid.height + 200
+                                && top + height > -200
+                        }
+
+                        x: modelData.x
+                        y: modelData.y
+                        width: grid.cell
+                        height: modelData.header
+                            ? grid.headerH : grid.cell
+                        // над общим индикатором ховера
+                        z: modelData.header ? 3 : 2
+
+                        // заголовок секции
+                        SText {
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: cell.modelData.header
+                            text: cell.modelData.header
+                                ? cell.modelData.name : ""
+                            color: Settings.c1
+                            font.pixelSize: Settings.textSm
+                            font.bold: true
+                        }
+
+                        // эмодзи
+                        SText {
+                            anchors.centerIn: parent
+                            visible: !cell.modelData.header
+                                && cell.inViewport
+                            text: cell.modelData.header
+                                ? "" : cell.modelData.entry.ch
+                            color: Settings.c1
+                            font.pixelSize: grid.cell * 0.5
+                        }
+
+                        // пассивные хэндлеры: тилт контейнера
+                        // продолжает следить за мышью
+                        HoverHandler {
+                            id: hover
+
+                            enabled: !cell.modelData.header
+
+                            onHoveredChanged: {
+                                hoverInd.target = hovered ? cell : null
+
+                                if (hovered)
+                                    root.hoveredName =
+                                        cell.modelData.entry.name
+                                else if (hoverInd.target === null)
+                                    root.hoveredName = ""
+                            }
+                        }
+
+                        TapHandler {
+                            enabled: !cell.modelData.header
+                            cursorShape: Qt.PointingHandCursor
+
+                            onTapped: root.pick(
+                                cell.modelData.entry.ch)
+                        }
+                    }
+                }
 
                 // общий индикатор ховера: заливка c1 переезжает
-                // между ячейками, как активный таб
+                // между ячейками
                 SPanel {
                     id: hoverInd
 
@@ -260,79 +448,59 @@ Item {
                     }
                 }
 
-                Repeater {
-                    model: root.shown
-
-                    delegate: Item {
-                        id: cell
-
-                        required property var modelData
-                        required property int index
-
-                        // пикер скрытой ячейки экономит рендер
-                        readonly property bool inViewport: {
-                            const top = y - grid.contentY
-
-                            return top < grid.height + 200
-                                && top + height > -200
-                        }
-
-                        x: grid.margin
-                            + (index % grid.columns)
-                            * (grid.cell + grid.gap)
-                        y: grid.margin
-                            + Math.floor(index / grid.columns)
-                            * (grid.cell + grid.gap)
-                        width: grid.cell
-                        height: grid.cell
-                        // над общим индикатором ховера: эмодзи
-                        // видны на его заливке
-                        z: 2
-
-                        SText {
-                            anchors.centerIn: parent
-                            visible: cell.inViewport
-                            text: cell.modelData.ch
-                            color: Settings.c1
-                            font.pixelSize: grid.cell * 0.5
-                        }
-
-                        // пассивные хэндлеры: тилт контейнера
-                        // продолжает следить за мышью
-                        HoverHandler {
-                            id: hover
-
-                            onHoveredChanged: {
-                                hoverInd.target = hovered ? cell : null
-
-                                if (hovered)
-                                    root.hoveredName =
-                                        cell.modelData.name
-                                else if (hoverInd.target === null)
-                                    root.hoveredName = ""
-                            }
-                        }
-
-                        TapHandler {
-                            cursorShape: Qt.PointingHandCursor
-
-                            onTapped: root.pick(cell.modelData.ch)
-                        }
-                    }
-                }
-
-                // пустая категория или пустой поиск
+                // пустой поиск
                 SText {
                     anchors.centerIn: parent
-                    visible: root.shown.length === 0
-                    text: root.query.trim() === ""
-                        ? "Nothing here yet"
-                        : "Nothing found"
+                    visible: root.layout.items.length === 0
+                    text: "Nothing found"
                     color: Settings.c1
                     font.pixelSize: Settings.textSm
                     font.bold: true
                 }
             }
         }
+    }
+
+    // таб → прокрутка к секции
+    function scrollToSection(tabIndex) {
+        const tops = layout.tops
+        let target = null
+
+        for (let i = 0; i < tops.length; i++) {
+            if (tops[i].tabIndex === tabIndex) {
+                target = tops[i]
+                break
+            }
+        }
+
+        // секции нет (пустые недавние, пустая группа) — к ближайшей
+        if (!target)
+            target = tops.length > 0 ? tops[0] : null
+
+        if (!target)
+            return
+
+        scrollAnim.to = Math.min(target.y - grid.margin,
+            Math.max(0, grid.contentHeight - grid.height))
+        scrollAnim.restart()
+    }
+
+    // прокрутка → таб (секция под верхней кромкой)
+    function syncTab() {
+        if (scrollAnim.running || layout.tops.length === 0)
+            return
+
+        const edge = grid.contentY + grid.margin + 1
+        let active = layout.tops[0].tabIndex
+
+        for (let i = 0; i < layout.tops.length; i++) {
+            if (layout.tops[i].y <= edge)
+                active = layout.tops[i].tabIndex
+            else
+                break
+        }
+
+        if (currentTab !== active)
+            currentTab = active
     }
 }

@@ -3,13 +3,13 @@ import ".."
 Item {
     id: tiltContainer
 
-    readonly property real mouseXFactor: mouseTracker.containsMouse
-        ? -(mouseTracker.mouseX - (tiltContainer.width / 2))
+    readonly property real mouseXFactor: tracker.hovered
+        ? -(tracker.point.position.x - (tiltContainer.width / 2))
             / (tiltContainer.width + Screen.width / 2)
         : 0
 
-    readonly property real mouseYFactor: mouseTracker.containsMouse
-        ? -(mouseTracker.mouseY - (tiltContainer.height / 2))
+    readonly property real mouseYFactor: tracker.hovered
+        ? -(tracker.point.position.y - (tiltContainer.height / 2))
             / (tiltContainer.height + Screen.height / 2 )
         : 0
 
@@ -47,13 +47,11 @@ Item {
         }
     ]
 
-    MouseArea {
-        id: mouseTracker
-
-        anchors.fill: parent
-
-        hoverEnabled: true
-        propagateComposedEvents: true
-        acceptedButtons: Qt.NoButton
+    // слежение за мышью — пассивный HoverHandler: он сосуществует
+    // с любыми хэндлерами и MouseArea внутри контейнера и никогда
+    // не перехватывает ховер на себя, поэтому 3D-тилт не сбрасывается,
+    // когда курсор проходит над интерактивными детьми
+    HoverHandler {
+        id: tracker
     }
 }
