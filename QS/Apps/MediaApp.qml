@@ -5,8 +5,10 @@ import "../Components"
 import "../"
 import "."
 
-// Диктофон: тонкая обведка-PanelWindow над RecorderContent. Каркас —
-// как в ControlPanel.
+// Медиа (камера + диктофон): тонкая обведка-PanelWindow над
+// MediaContent. Каркас — как в ControlPanel. openTab — какой таб
+// открыть при следующем показе (камера или аудио; -1 — не менять).
+// Камера активна, только пока панель открыта.
 PanelWindow {
     id: root
 
@@ -22,13 +24,22 @@ PanelWindow {
     }
     color: "transparent"
 
+    property int openTab: -1
+
     function show() {
+        if (openTab >= 0) {
+            content.currentTab = openTab
+            openTab = -1
+        }
+
         root.visible = true
+        content.active = true
         content.forceActiveFocus()
     }
 
     function hide() {
         root.visible = false
+        content.active = false
     }
 
     // клик мимо панели — закрыть
@@ -45,11 +56,11 @@ PanelWindow {
         x: (Screen.width - width) / 2
         y: Settings.barGap * 2 + Settings.barHeight
 
-        RecorderContent {
+        MediaContent {
             id: content
 
             anchors.fill: parent
-            recordingsDir: Quickshell.env("HOME")
+            picturesDir: Quickshell.env("HOME")
                 + "/Pictures/825UI"
 
             onCloseRequested: root.hide()

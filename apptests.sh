@@ -97,16 +97,16 @@ ShellRoot {
 
             // === EmojiData: поиск ===
             ok("search dog", EmojiData.search("dog", "").length > 0)
-            ok("search cat", EmojiData.search("cat", "animals")
+            ok("search cat", EmojiData.search("cat", "Animals & Nature")
                 .some(e => e.ch === "🐱"))
             eq("search empty", EmojiData.search("zzzznope", "").length, 0)
             ok("search by kw", EmojiData.search("thumbs up", "")
                 .some(e => e.ch === "👍"))
-            eq("byCategory smileys", EmojiData.byCategory("smileys")
-                .every(e => e.cat === "smileys") ? 1 : 0, 1)
+            eq("group smileys", EmojiData.search("", "Smileys & Emotion")
+                .every(e => e.group === "Smileys & Emotion") ? 1 : 0, 1)
             eq("nameOf", EmojiData.nameOf("😀"), "grinning face")
             eq("nameOf unknown", EmojiData.nameOf("🜛"), "")
-            ok("categories 9", EmojiData.categories.length === 9)
+            ok("categories 10", EmojiData.categories.length === 10)
 
             // === TimeMath: следующее срабатывание ===
             // среда 2026-03-04 10:00:00 UTC-локаль — берём
@@ -364,6 +364,23 @@ ShellRoot {
 
                 app.removeEntry(pinnedId)
                 ok("remove entry", app.entries.length === 1)
+
+                // хвостовые переводы строк срезаются: вставляться
+                // должен текст без пустой строки
+                app.addText("abc\n")
+                ok("newline stripped",
+                    app.entries[0].text === "abc")
+
+                app.addText("keep\n\n")
+                ok("newlines stripped",
+                    app.entries[0].text === "keep")
+
+                // уже первый дедуп — список не пересобирается
+                var sameId = app.entries[0].id
+                app.addText("keep")
+                ok("dupe first noop",
+                    app.entries[0].id === sameId
+                    && app.entries.length === 3)
 
                 console.warn("TEST3_TOTAL fails " + fails)
                 Qt.quit()

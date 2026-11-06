@@ -6,24 +6,28 @@ import "../Components"
 import "../Fonts"
 import "../"
 
-// Буфер обмена без окна. Мониторинг: раз в секунду
-// `wl-paste --list-types` (паттерн SystemStats: Process+Timer);
-// новый контент — текст до 100КБ или картинка (блоб в imagesDir).
-// Менеджерская семантика: захватив контент, сразу возвращаем его в
-// буфер от своего имени (wl-copy живёт ребёнком шелла) — вставка
-// работает и после закрытия приложения-источника. Богатые тексты
-// (text/html) не перезахватываем, чтобы не обесценивать формат.
-// Хвостовые \n\r обрезаются: они попадают в выборку из терминалов
-// и редакторов, а вставляться должен текст без пустой строки.
-// Дедуп: повторное копирование поднимает запись наверх. Лимит —
-// 100 незакреплённых (вытеснение снизу, блобы удаляются),
-// закреплённые не вытесняются. Персист: FileView по stateFile.
-// Клик по карточке — вернуть в буфер (wl-copy), карточка инвертируется.
+// Буфер обмена без окна. Каркас — как в панели управления: шапка-
+// бар с поиском (TextInput в SFrame, как дата) + контентная панель
+// со строкой «N entries» и Clear all, список карточек в стиле
+// истории уведомлений (карточка на две строки, время, пин и крестик
+// тайлами, выбранная инвертируется).
+//
+// Мониторинг: раз в секунду `wl-paste --list-types`; текст читается
+// ВСЕГДА, когда типы текстовые — дедуп по содержимому. Сигнатура
+// типов используется только для картинок: блобы тяжёлые, а тексты
+// подряд из одного приложения дают одинаковый список типов, и
+// фильтр по сигнатуре терял каждую вторую копию. Захваченный
+// контент сразу перезабирается от своего имени (wl-copy живёт
+// ребёнком шелла) — вставка работает после закрытия источника;
+// богатые тексты (text/html) не перезабираются. Хвостовые \n\r
+// срезаются: из терминалов и редакторов приходит лишняя пустая
+// строка. Лимит — 100 незакреплённых (вытеснение снизу), пины
+// не вытесняются. Персист: FileView по stateFile.
 Item {
     id: root
 
-    implicitWidth: 720
-    implicitHeight: 640
+    implicitWidth: 760
+    implicitHeight: 620
 
     signal closeRequested()
     signal copied(string id)
@@ -38,10 +42,11 @@ Item {
     property string query: ""
     property string currentId: ""
 
-    // последняя сигнатура буфера: типы + размер, против повторов
-    property string lastSignature: ""
+    // сигнатура типов картинок: блобы читаем только при её смене
+    property string lastImageSig: ""
+
+    // последний набор типов: богатый текст не перезабираем
     property string lastTypes: ""
-    property bool loaded: false
 
     readonly property int maxUnpinned: 100
     readonly property int maxTextLen: 100000
@@ -97,20 +102,24 @@ Item {
     }
 
     function onTypes(types) {
-        if (types === lastSignature || types === "")
+        if (types === "")
             return
 
-        lastSignature = types
         lastTypes = types
 
-        if (types.indexOf("image/png") !== -1) {
-            imageProc.command = ["sh", "-c",
-                "wl-paste -t image/png 2>/dev/null"]
-            imageProc.running = true
-        } else if (types.indexOf("text/plain") !== -1
-                   || types.indexOf("text/utf8") !== -1
-                   || types.indexOf("UTF8_STRING") !== -1) {
+        const hasText = types.indexOf("text/plain") !== -1
+            || types.indexOf("text/utf8") !== -1
+            || types.indexOf("UTF8_STRING") !== -1
+
+        // текст читаем всегда: дедуп по содержимому ниже
+        if (hasText && !textProc.running)
             textProc.running = true
+
+        // картинки — только при смене набора типов
+        if (types.indexOf("image/png") !== -1
+                && types !== lastImageSig && !imageProc.running) {
+            lastImageSig = types
+            imageProc.running = true
         }
     }
 
@@ -126,8 +135,6 @@ Item {
 
     Process {
         id: imageProc
-
-        property int blobBytes: 0
 
         stdout: StdioCollector {
             onStreamFinished: root.addImage(this.data)
@@ -193,8 +200,7 @@ Item {
 
     function addEntry(entry) {
         // дедуп: такой уже есть — поднять наверх (закреплённый —
-        // на месте); если он и так первый, ничего не делаем, чтобы
-        // не пересобирать список на каждом опросе
+        // на месте); если он и так первый, ничего не делаем
         const dupe = entries.find(e => e.hash === entry.hash)
 
         if (dupe) {
@@ -335,8 +341,6 @@ Item {
     }
 
     function loadFrom(text) {
-        loaded = true
-
         if (text === "")
             return
 
@@ -349,7 +353,7 @@ Item {
                 // блобы могли исчезнуть — выкидываем мёртвые ссылки
                 entries = entries.filter(e => e.type !== "image"
                     || !e.file || imgExists(e.file))
-                lastSignature = ""
+                lastImageSig = ""
             }
         } catch (e) {
             // битый файл — начинаем с пустого списка
@@ -401,89 +405,128 @@ Item {
 
     Column {
         anchors.fill: parent
-        spacing: Settings.line * 2
+        spacing: Settings.line * 4
 
-        // --- поиск + очистка ---
-        Row {
+        // --- шапка-бар с поиском (как бар с датой) ---
+        Item {
+            id: headerBar
+
             width: parent.width
-            spacing: Settings.line * 2
+                - InfexGeometry.tipMult * Settings.line / 2
+            height: Settings.barHeight
+            anchors.horizontalCenter: parent.horizontalCenter
 
-            SPanel {
-                id: searchPanel
-
-                width: parent.width - clearBtn.width - parent.spacing
-                height: Settings.line * 7
-                cornerCut: Settings.line * 2
-                strokeColor: Settings.c1
-                fillColor: Settings.c2
-
-                TextInput {
-                    id: searchInput
-
-                    anchors.fill: parent
-                    anchors.leftMargin: Settings.line * 3
-                    anchors.rightMargin: Settings.line * 3
-                    verticalAlignment: TextInput.AlignVCenter
-                    text: root.query
-                    onTextChanged: root.query = text
-                    color: Settings.c1
-                    font.pixelSize: Settings.textSm
-                    cursorVisible: false
-                    cursorDelegate: Item {}
-                    selectionColor: Settings.c1
-                    selectedTextColor: Settings.c2
-                    clip: true
-
-                    Keys.onEscapePressed: (event) => {
-                        if (text !== "")
-                            text = ""
-                        else
-                            root.closeRequested()
-
-                        event.accepted = true
-                    }
-
-                    SText {
-                        anchors.fill: parent
-                        verticalAlignment: Text.AlignVCenter
-                        visible: searchInput.text === ""
-                        text: "Search"
-                        color: Settings.c1
-                        font.pixelSize: Settings.textSm
-                    }
-                }
+            SFrame {
+                anchors.fill: parent
             }
 
-            STile {
-                id: clearBtn
+            TextInput {
+                id: searchInput
 
-                anchors.verticalCenter: parent.verticalCenter
-                width: Settings.line * 7
-                height: width
-                iconStroke: Glyphs.iconTrash
+                anchors.fill: parent
+                anchors.leftMargin: Settings.line * 6
+                anchors.rightMargin: Settings.line * 6
+                verticalAlignment: TextInput.AlignVCenter
+                horizontalAlignment: TextInput.AlignHCenter
+                text: root.query
+                onTextChanged: root.query = text
+                color: Settings.c1
+                font.pixelSize: Settings.textSm
+                font.bold: true
+                cursorVisible: false
+                cursorDelegate: Item {}
+                selectionColor: Settings.c1
+                selectedTextColor: Settings.c2
+                clip: true
 
-                onActivated: root.clearUnpinned()
+                Keys.onEscapePressed: (event) => {
+                    if (text !== "")
+                        text = ""
+                    else
+                        root.closeRequested()
+
+                    event.accepted = true
+                }
+
+                SText {
+                    anchors.fill: parent
+                    verticalAlignment: Text.AlignVCenter
+                    visible: searchInput.text === ""
+                    text: "Search"
+                    color: Settings.c1
+                    font.pixelSize: Settings.textSm
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                }
             }
         }
 
-        // --- список карточек ---
-        Item {
-            width: parent.width
-            height: parent.height - searchPanel.height
-                - Settings.line * 2
+        // --- контентная панель ---
+        SPanel {
+            id: contentArea
 
+            width: parent.width
+            height: parent.height - headerBar.height
+                - Settings.line * 4
+            cornerCut: Settings.line * 2
+            strokeColor: Settings.c1
+            fillColor: Settings.c2
+            shadow: "outside"
+            shadowColor: Settings.c2
+
+            // --- строка заголовка: счётчик и очистка ---
+            Item {
+                id: header
+
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.margins: Settings.line * 2
+                height: Settings.textLg
+
+                SText {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.entries.length
+                        + (root.entries.length === 1
+                            ? " entry" : " entries")
+                    color: Settings.c1
+                    font.pixelSize: Settings.textMd
+                    font.bold: true
+                }
+
+                STile {
+                    id: clearBtn
+
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Settings.textLg
+                    height: width
+                    iconStroke: Glyphs.iconTrash
+
+                    onActivated: root.clearUnpinned()
+                }
+            }
+
+            // --- список карточек (паттерн истории уведомлений) ---
             Flickable {
                 id: listFlick
 
-                anchors.fill: parent
+                anchors.top: header.bottom
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.topMargin: Settings.line
+                anchors.bottomMargin: Settings.line * 2
+                anchors.leftMargin: Settings.line * 2
+                anchors.rightMargin: Settings.line * 2
                 clip: true
                 contentWidth: width
                 contentHeight: listCol.height
                 boundsBehavior: Flickable.StopAtBounds
 
                 ScrollBar.vertical: ScrollBar {
-                    policy: listFlick.contentHeight
-                        > listFlick.height
+                    policy: listFlick.contentHeight > listFlick.height
                         ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
                 }
 
@@ -491,7 +534,7 @@ Item {
                     id: listCol
 
                     width: listFlick.width
-                    spacing: Settings.line * 2
+                    spacing: Settings.line
 
                     Repeater {
                         model: root.visibleEntries
@@ -506,143 +549,126 @@ Item {
                             readonly property bool sel:
                                 root.currentId === card.modelData.id
 
+                            readonly property bool isImage:
+                                card.modelData.type === "image"
+
                             width: listCol.width
-                            height: modelData.type === "image"
-                                ? Settings.line * 16
-                                : Settings.line * 14
+                            height: Settings.barHeight + Settings.line * 2
                             cornerCut: Settings.line * 2
                             strokeColor: Settings.c1
                             fillColor: sel ? Settings.c1 : Settings.c2
                             shadow: sel ? "inside" : "none"
                             shadowColor: Settings.c2
 
-                            Row {
+                            Item {
                                 anchors.fill: parent
-                                anchors.leftMargin: Settings.line * 3
-                                anchors.rightMargin: Settings.line * 3
-                                spacing: Settings.line * 3
+                                anchors.margins: Settings.line * 2
 
-                                // превью
-                                Item {
-                                    width: parent.width
-                                        - Settings.line * 14
+                                // булавка
+                                STile {
+                                    id: pinTile
+
+                                    anchors.left: parent.left
+                                    anchors.verticalCenter:
+                                        parent.verticalCenter
+                                    width: Settings.line * 5.5
+                                    height: width
+                                    iconStroke: Glyphs.iconPin
+                                    active: card.modelData.pinned
+
+                                    onActivated: root.togglePin(
+                                        card.modelData.id)
+                                }
+
+                                // миниатюра картинки
+                                Image {
+                                    id: thumb
+
+                                    anchors.left: pinTile.right
+                                    anchors.leftMargin:
+                                        Settings.line * 2
+                                    anchors.verticalCenter:
+                                        parent.verticalCenter
+                                    width: height
                                     height: parent.height
+                                    fillMode: Image.PreserveAspectCrop
+                                    asynchronous: true
+                                    visible: card.isImage
+                                    source: card.isImage
+                                        ? "file://"
+                                          + card.modelData.file : ""
+                                }
 
-                                    Image {
-                                        visible:
-                                            card.modelData.type
-                                            === "image"
-                                        source:
-                                            card.modelData.type
-                                            === "image"
-                                                ? "file://"
-                                                  + card.modelData.file
-                                                : ""
-                                        anchors.verticalCenter:
-                                            parent.verticalCenter
-                                        height: parent.height
-                                            - Settings.line * 3
-                                        fillMode: Image
-                                            .PreserveAspectFit
-                                    }
+                                Column {
+                                    anchors.left: card.isImage
+                                        ? thumb.right : pinTile.right
+                                    anchors.leftMargin:
+                                        Settings.line * 2
+                                    anchors.right: timeLabel.left
+                                    anchors.rightMargin:
+                                        Settings.line * 2
+                                    anchors.verticalCenter:
+                                        parent.verticalCenter
+                                    spacing: Settings.line / 2
 
-                                    Column {
-                                        visible:
-                                            card.modelData.type
-                                            === "text"
-                                        anchors.verticalCenter:
-                                            parent.verticalCenter
+                                    SText {
                                         width: parent.width
-                                        spacing: Settings.line
-
-                                        SText {
-                                            width: parent.width
-                                            text: card.modelData.text
-                                            color: card.sel
-                                                ? Settings.c2
-                                                : Settings.c1
-                                            elide:
-                                                Text.ElideRight
-                                            maximumLineCount: 2
-                                            wrapMode:
-                                                Text.WrapAnywhere
-                                            font.pixelSize:
-                                                Settings.textSm
-                                        }
-
-                                        SText {
-                                            width: parent.width
-                                            text: root.timeLabel(
-                                                card.modelData.time)
-                                            color: card.sel
-                                                ? Settings.c2
-                                                : Settings.c1
-                                            font.pixelSize:
-                                                Settings.textXs
-                                        }
+                                        text: card.isImage
+                                            ? (card.modelData.bytes
+                                               / 1024).toFixed(0)
+                                              + " KB image"
+                                            : card.modelData.text
+                                        color: card.sel
+                                            ? Settings.c2 : Settings.c1
+                                        elide: Text.ElideRight
+                                        font.pixelSize:
+                                            Settings.textSm
+                                        font.bold: true
                                     }
 
                                     SText {
-                                        visible:
-                                            card.modelData.type
-                                            === "image"
-                                        anchors.bottom: parent.bottom
-                                        anchors.right: parent.right
-                                        text: (card.modelData.bytes
-                                               / 1024).toFixed(0)
-                                              + " KB"
+                                        width: parent.width
+                                        visible: !card.isImage
+                                        text: root.timeLabel(
+                                            card.modelData.time)
                                         color: card.sel
                                             ? Settings.c2 : Settings.c1
+                                        elide: Text.ElideRight
                                         font.pixelSize:
                                             Settings.textXs
                                     }
                                 }
 
-                                // булавка
-                                Item {
-                                    width: Settings.line * 6
-                                    anchors.top: parent.top
-                                    anchors.bottom: parent.bottom
+                                SText {
+                                    id: timeLabel
 
-                                    STile {
-                                        anchors.centerIn: parent
-                                        width: Settings.line * 5.5
-                                        height: width
-                                        iconStroke: Glyphs.iconPin
-                                        active: card.modelData.pinned
-
-                                        onActivated:
-                                            root.togglePin(
-                                                card.modelData.id)
-                                    }
+                                    anchors.right: delTile.left
+                                    anchors.rightMargin:
+                                        Settings.line * 2
+                                    anchors.verticalCenter:
+                                        parent.verticalCenter
+                                    visible: card.isImage
+                                    text: root.timeLabel(
+                                        card.modelData.time)
+                                    color: card.sel
+                                        ? Settings.c2 : Settings.c1
+                                    font.pixelSize: Settings.textXs
                                 }
 
                                 // ✕
-                                Item {
-                                    width: Settings.line * 5
-                                    anchors.top: parent.top
-                                    anchors.bottom: parent.bottom
+                                STile {
+                                    id: delTile
 
-                                    VIcon {
-                                        anchors.centerIn: parent
-                                        width: Settings.textSm
-                                        height: width
-                                        strokePath: "M 7,7 L 17,17"
-                                            + " M 17,7 L 7,17"
-                                        lineColor: Settings.c1
-                                    }
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter:
+                                        parent.verticalCenter
+                                    width: Settings.line * 5.5
+                                    height: width
+                                    iconStroke: "M 7,7 L 17,17"
+                                        + " M 17,7 L 7,17"
 
-                                    MouseArea {
-                                        anchors.centerIn: parent
-                                        width: parent.height
-                                        height: parent.height
-                                        cursorShape:
-                                            Qt.PointingHandCursor
-
-                                        onClicked:
-                                            root.removeEntry(
-                                                card.modelData.id)
-                                    }
+                                    onActivated: root.removeEntry(
+                                        card.modelData.id)
                                 }
                             }
 
@@ -667,6 +693,7 @@ Item {
                             : "Nothing found"
                         color: Settings.c1
                         font.pixelSize: Settings.textSm
+                        font.bold: true
                     }
                 }
             }

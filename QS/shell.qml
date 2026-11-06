@@ -22,6 +22,13 @@ ShellRoot {
         // на чистом экране
         controlPanel.hideWheels()
 
+        // камера и диктофон — одна панель с табами: recorder
+        // открывает её на табе аудио
+        if (panel === "camera" || panel === "recorder") {
+            mediaPanel.openTab = panel === "recorder" ? 1 : 0
+            panel = "camera"
+        }
+
         const panels = {
             "launcher": appLauncher,
             "control": controlPanel,
@@ -30,8 +37,7 @@ ShellRoot {
             "calculator": calculatorPanel,
             "emoji": emojiPickerPanel,
             "clock": clockApp,
-            "camera": cameraPanel,
-            "recorder": recorderPanel
+            "camera": mediaPanel
         }
 
         for (const key in panels) {
@@ -544,14 +550,14 @@ ShellRoot {
             }
 
             function toggleCamera(): void {
-                cameraPanel.visible
-                    ? cameraPanel.hide()
+                mediaPanel.visible
+                    ? mediaPanel.hide()
                     : showOnly("camera")
             }
 
             function toggleRecorder(): void {
-                recorderPanel.visible
-                    ? recorderPanel.hide()
+                mediaPanel.visible
+                    ? mediaPanel.hide()
                     : showOnly("recorder")
             }
 
@@ -849,8 +855,7 @@ ShellRoot {
 
         banner: alarmBanner
     }
-    Camera { id: cameraPanel }
-    Recorder { id: recorderPanel }
+    MediaApp { id: mediaPanel }
     Cat {
         id: cat
 
