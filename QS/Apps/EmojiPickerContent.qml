@@ -392,20 +392,21 @@ Item {
                         }
 
                         // пассивные хэндлеры: тилт контейнера
-                        // продолжает следить за мышью
+                        // продолжает следить за мышью. Цель индикатора
+                        // не сбрасывается на выходе: при переходе между
+                        // ячейками подложка едет от старой позиции,
+                        // а не из угла; покидание грида ловит его
+                        // собственный хэндлер ниже
                         HoverHandler {
-                            id: hover
-
                             enabled: !cell.modelData.header
 
                             onHoveredChanged: {
-                                hoverInd.target = hovered ? cell : null
+                                if (!hovered)
+                                    return
 
-                                if (hovered)
-                                    root.hoveredName =
-                                        cell.modelData.entry.name
-                                else if (hoverInd.target === null)
-                                    root.hoveredName = ""
+                                hoverInd.target = cell
+                                root.hoveredName =
+                                    cell.modelData.entry.name
                             }
                         }
 
@@ -420,31 +421,58 @@ Item {
                 }
 
                 // общий индикатор ховера: заливка c1 переезжает
-                // между ячейками
+                // между ячейками от старой позиции к новой; позиция
+                // присваивается по смене цели — без цели подложка
+                // остаётся на последнем месте (и прячется)
                 SPanel {
                     id: hoverInd
 
                     property Item target: null
+                    property bool placed: false
+
+                    onTargetChanged: {
+                        if (!target)
+                            return
+
+                        // первый показ — мгновенно в ячейку, дальше —
+                        // переезды от старой позиции
+                        x = target.x
+                        y = target.y
+                        placed = true
+                    }
 
                     visible: target !== null
                     width: grid.cell
                     height: grid.cell
-                    x: target ? target.x : 0
-                    y: target ? target.y : 0
                     cornerCut: Settings.line
                     fillColor: Settings.c1
                     z: 1
 
                     Behavior on x {
+                        enabled: hoverInd.placed
+
                         NumberAnimation {
                             duration: Settings.animInstant
                         }
                     }
 
                     Behavior on y {
+                        enabled: hoverInd.placed
+
                         NumberAnimation {
                             duration: Settings.animInstant
                         }
+                    }
+                }
+
+                // уход мыши с грида целиком — спрятать подложку
+                HoverHandler {
+                    onHoveredChanged: {
+                        if (hovered)
+                            return
+
+                        hoverInd.target = null
+                        root.hoveredName = ""
                     }
                 }
 

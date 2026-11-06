@@ -1164,8 +1164,7 @@ PanelWindow {
                                             { col: 3, row: 3, app: "calculator", icon: Glyphs.iconCalculator },
                                             { col: 4, row: 3, app: "emoji",      icon: Glyphs.iconEmoji },
                                             { col: 5, row: 3, app: "clock",      icon: Glyphs.iconClock },
-                                            { col: 0, row: 4, app: "camera",     icon: Glyphs.iconCamera },
-                                            { col: 1, row: 4, app: "recorder",   icon: Glyphs.iconMic }
+                                            { col: 0, row: 4, app: "camera",     icon: Glyphs.iconCamera }
                                         ]
 
                                         delegate: STile {
@@ -1183,6 +1182,25 @@ PanelWindow {
                                                     modelData.app)
                                             }
                                         }
+                                    }
+
+                                    // режим без уведомлений — виджет
+                                    // грида: залитый колокольчик с
+                                    // перечёркиванием = попапы скрыты
+                                    STile {
+                                        x: leftPart.cellX(1)
+                                            - Settings.line / 2
+                                        y: leftPart.cellY(4)
+                                            - Settings.line / 2
+                                        width: leftPart.cell + Settings.line
+                                        height: leftPart.cell + Settings.line
+                                        iconStroke: Settings.dnd
+                                            ? Glyphs.iconBellOff
+                                            : Glyphs.iconBell
+                                        active: Settings.dnd
+
+                                        onActivated:
+                                            Settings.dnd = !Settings.dnd
                                     }
 
                                     // Нижняя панель питания: скосы, разбита
@@ -1321,26 +1339,6 @@ PanelWindow {
                                         color: Settings.c1
                                         font.pixelSize: Settings.textMd
                                         font.bold: true
-                                    }
-
-                                    // режим без уведомлений: попапы
-                                    // не показываются, всё уходит в
-                                    // архив; состояние в settings.json
-                                    STile {
-                                        id: dndTile
-
-                                        anchors.right: clearAllBtn.left
-                                        anchors.rightMargin: Settings.line * 2
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        width: Settings.textLg
-                                        height: Settings.textLg
-                                        iconStroke: Settings.dnd
-                                            ? Glyphs.iconBellOff
-                                            : Glyphs.iconBell
-                                        active: Settings.dnd
-
-                                        onActivated:
-                                            Settings.dnd = !Settings.dnd
                                     }
 
                                     // кнопка в стиле плиток: скосы,
