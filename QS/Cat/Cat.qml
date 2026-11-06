@@ -47,12 +47,13 @@ PanelWindow {
         + inputGap * Math.min(1, inputPanel.height / 30)
     readonly property real catOffsetY: winH - catHeight - inputLift
 
-    // векторная иконка в поле 24x24, масштабируется под размер
+    // векторная иконка в поле 24x24, масштабируется под размер;
+    // толщина линии каноничная — Settings.line, как у VIcon
     component CatIcon: Shape {
         id: cIcon
 
         property color lineColor: Settings.c1
-        property real strokeWidth: Settings.line / 2
+        property real strokeWidth: Settings.line
         property string fillPath: ""
         property string strokePath: ""
 
@@ -156,7 +157,6 @@ PanelWindow {
                     width: 20
                     height: 20
                     lineColor: Settings.c1
-                    strokeWidth: Settings.line / 2
                     strokePath: chip.iconPath
                 }
             }
@@ -2732,7 +2732,6 @@ PanelWindow {
                         CatIcon {
                             anchors.fill: parent
                             lineColor: Settings.c1
-                            strokeWidth: Settings.line / 2
                             strokePath: cat.iconAttach
                         }
 
@@ -2853,7 +2852,6 @@ PanelWindow {
                             lineColor: Settings.c1
                             fillPath: sendBtn.idle ? "" : cat.iconStop
                             strokePath: sendBtn.idle ? cat.iconSend : ""
-                            strokeWidth: 2
                         }
 
                         MouseArea {
@@ -3057,7 +3055,6 @@ PanelWindow {
                 width: 20
                 height: 20
                 lineColor: cat.menuOpen ? Settings.c2 : Settings.c1
-                strokeWidth: Settings.line / 2
                 strokePath: cat.iconMenu
             }
 

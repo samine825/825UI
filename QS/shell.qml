@@ -138,43 +138,12 @@ ShellRoot {
                 width: 28
                 height: 28
 
-                readonly property bool hovered: newChatHover.containsMouse
-
-                Shape {
-                    x: 4
-                    y: 4
+                // каноничная иконка: VIcon с полной толщиной линии
+                VIcon {
+                    anchors.centerIn: parent
                     width: 20
                     height: 20
-                    preferredRendererType: Shape.CurveRenderer
-                    opacity: newChatBtn.hovered ? 1 : 0.75
-
-                    SShapePath {
-                        joinStyle: ShapePath.MiterJoin
-                        capStyle: ShapePath.RoundCap
-                        fillColor: "transparent"
-                        strokeColor: Settings.c1
-                        strokeWidth: Settings.line / 2
-                        startX: 10
-                        startY: 1
-                        PathLine {
-                            x: 10
-                            y: 19
-                        }
-                    }
-
-                    SShapePath {
-                        joinStyle: ShapePath.MiterJoin
-                        capStyle: ShapePath.RoundCap
-                        fillColor: "transparent"
-                        strokeColor: Settings.c1
-                        strokeWidth: Settings.line / 2
-                        startX: 1
-                        startY: 10
-                        PathLine {
-                            x: 19
-                            y: 10
-                        }
-                    }
+                    strokePath: Glyphs.iconPlus
                 }
 
                 MouseArea {
@@ -710,6 +679,12 @@ ShellRoot {
 //watch -n 1 "ls -l /proc/$(pidof qs)/fd | wc -l"
 //
         function onNotificationAdded(notification) {
+            // режим без уведомлений: попап не создаётся, уведомление
+            // проходит конвейер сервера (таймаут-закрытие) и попадает
+            // в архив панели управления
+            if (Settings.dnd)
+                return
+
             var component = Qt.createComponent("NotificationPopup.qml")
 
             if (component.status !== Component.Ready) {
@@ -822,6 +797,22 @@ ShellRoot {
         function onAllCleared() {
             notificationScreen.activeStack = []
             notificationScreen.notificationRegions = []
+        }
+    }
+
+    // включение режима без уведомлений мягко закрывает уже висящие
+    // попапы — штатным closeClicked с анимацией ухода
+    Connections {
+        target: Settings
+
+        function onDndChanged() {
+            if (!Settings.dnd)
+                return
+
+            const stack = notificationScreen.activeStack
+
+            for (let i = 0; i < stack.length; i++)
+                stack[i].closeClicked = true
         }
     }
 

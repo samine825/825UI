@@ -1322,6 +1322,26 @@ PanelWindow {
                                         font.bold: true
                                     }
 
+                                    // режим без уведомлений: попапы
+                                    // не показываются, всё уходит в
+                                    // архив; состояние в settings.json
+                                    STile {
+                                        id: dndTile
+
+                                        anchors.right: clearAllBtn.left
+                                        anchors.rightMargin: Settings.line * 2
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: Settings.textLg
+                                        height: Settings.textLg
+                                        iconStroke: Settings.dnd
+                                            ? Glyphs.iconBellOff
+                                            : Glyphs.iconBell
+                                        active: Settings.dnd
+
+                                        onActivated:
+                                            Settings.dnd = !Settings.dnd
+                                    }
+
                                     // кнопка в стиле плиток: скосы,
                                     // спокойная заливка, подсветка по ховеру
                                     SPanel {

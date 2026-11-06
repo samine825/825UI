@@ -3,10 +3,11 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Services.Notifications
+import Quickshell.Bluetooth
 
 Singleton {
     id: root
-    
+
     property list<var> notifications: []
     property int unread: 0
 
@@ -18,7 +19,7 @@ Singleton {
     signal notificationAdded(notification: var)
     signal notificationRemoved(notificationId: int)
     signal allCleared
-    
+
     NotificationServer {
         id: notifServer
         actionsSupported: true
@@ -109,5 +110,94 @@ Singleton {
             return
 
         root.history = []
+    }
+
+    // === внутренние уведомления (bluetooth и т.п.) ===
+    // иконки нет, текст приходит целиком от вызывающего; попап
+    // показывается только вне режима без уведомлений, архив
+    // пополняется всегда. id отрицательные — не пересекаются
+    // с uint-идентификаторами DBus-сервера
+    property int localId: -1
+
+    function notify(appName, summary, body) {
+        const entry = {
+            notificationId: root.localId--,
+            summary: summary,
+            body: body,
+            appName: appName,
+            appIcon: "",
+            image: "",
+            urgency: NotificationUrgency.Normal,
+            expireTimeout: 5000,
+            time: Date.now(),
+            popup: !Settings.dnd
+        }
+
+        root.unread++
+        root.pushHistory(entry)
+
+        if (Settings.dnd)
+            return
+
+        root.notifications = [...root.notifications, entry]
+        root.notificationAdded(entry)
+
+        let timer = Qt.createQmlObject('import QtQuick 2.0; Timer {}',
+            root, "localNotifTimer_" + entry.notificationId)
+        timer.interval = 5000
+        timer.triggered.connect(() => {
+            root.dismissNotification(entry.notificationId)
+            timer.destroy()
+        })
+        timer.start()
+    }
+
+    // === bluetooth: уведомления о подключении/отключении ===
+    // устройства опрашиваются раз в полторы секунды; состояния
+    // запоминаются, чтобы не шуметь при старте и не повторяться
+    property var btStates: ({})
+
+    Timer {
+        interval: 1500
+        running: true
+        repeat: true
+        triggeredOnStart: true
+
+        onTriggered: root.syncBt()
+    }
+
+    function syncBt() {
+        const adapter = Bluetooth.defaultAdapter
+
+        if (!adapter || !adapter.devices) {
+            if (Object.keys(root.btStates).length > 0)
+                root.btStates = {}
+            return
+        }
+
+        const devs = adapter.devices.values || []
+        const cur = {}
+
+        for (let i = 0; i < devs.length; i++) {
+            const d = devs[i]
+
+            if (!d)
+                continue
+
+            const connected = d.connected
+                || d.state === BluetoothDeviceState.Connected
+            cur[d.address] = connected
+
+            // впервые видим — без уведомления (шум при старте)
+            if (root.btStates[d.address] === undefined)
+                continue
+
+            if (connected !== root.btStates[d.address])
+                root.notify("Bluetooth",
+                    d.name !== "" ? d.name : d.address,
+                    connected ? "Connected" : "Disconnected")
+        }
+
+        root.btStates = cur
     }
 }

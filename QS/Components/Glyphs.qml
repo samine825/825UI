@@ -106,6 +106,10 @@ Singleton {
     readonly property string iconBell:
         "M 12,3 A 6,6 0 0,1 18,9 L 18,14 L 20,16.5 L 4,16.5 L 6,14 L 6,9"
         + " A 6,6 0 0,1 12,3 Z M 10,19.5 A 2,2 0 0,0 14,19.5"
+    readonly property string iconBellOff:
+        "M 9.5,4.2 A 6,6 0 0,1 18,9 L 18,14 L 20,16.5 L 4,16.5 L 6,14"
+        + " L 6,9 A 6,6 0 0,1 8.2,4.9 M 10,19.5 A 2,2 0 0,0 14,19.5"
+        + " M 4,4 L 20,20"
     readonly property string iconChevronUp: "M 6,14.5 L 12,9 L 18,14.5"
     readonly property string iconChevronDown: "M 6,9.5 L 12,15 L 18,9.5"
 }

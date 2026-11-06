@@ -17,6 +17,10 @@ Singleton {
     property alias secondsMode: settings.secondsMode
     property alias infex: settings.infex
 
+    // режим без уведомлений: попапы не показываются, всё падает
+    // только в архив панели управления
+    property alias dnd: settings.dnd
+
     // === ТОКЕНЫ АНИМАЦИЙ ===
     // instant — слежение за курсором в слайдерах, fast — мелкие
     // реакции, base — стандартная длительность цветов и геометрии,
@@ -60,6 +64,7 @@ Singleton {
             property int barType: 0
             property int secondsMode: 0
             property bool infex: true
+            property bool dnd: false
         }
 
         onAdapterUpdated: writeAdapter()
