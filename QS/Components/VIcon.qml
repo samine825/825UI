@@ -3,11 +3,14 @@ import QtQuick.Shapes
 import ".."
 
 // Векторная иконка: PathSvg в поле 24x24, масштабируется в размер.
+// Толщина штриха задана В ЕДИНИЦАХ ГЛИФА (2/24) и масштабируется
+// вместе с иконкой — как у иконочного шрифта: глиф выглядит
+// одинаково в любом месте и любом размере, вес не скачет.
 Shape {
     id: vIcon
 
     property color lineColor: Settings.c1
-    property real strokeWidth: Settings.line
+    property real strokeWidth: 2
     property string fillPath: ""
     property string strokePath: ""
 
@@ -28,7 +31,7 @@ Shape {
     SShapePath {
         fillColor: "transparent"
         strokeColor: vIcon.lineColor
-        strokeWidth: vIcon.strokeWidth * 24 / Math.max(1, vIcon.width)
+        strokeWidth: vIcon.strokeWidth
         capStyle: ShapePath.RoundCap
         joinStyle: ShapePath.RoundJoin
 

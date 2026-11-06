@@ -48,12 +48,13 @@ PanelWindow {
     readonly property real catOffsetY: winH - catHeight - inputLift
 
     // векторная иконка в поле 24x24, масштабируется под размер;
-    // толщина линии каноничная — Settings.line, как у VIcon
+    // толщина в единицах глифа — как у VIcon, вес не зависит
+    // от размера иконки
     component CatIcon: Shape {
         id: cIcon
 
         property color lineColor: Settings.c1
-        property real strokeWidth: Settings.line
+        property real strokeWidth: 2
         property string fillPath: ""
         property string strokePath: ""
 
@@ -74,8 +75,7 @@ PanelWindow {
         SShapePath {
             fillColor: "transparent"
             strokeColor: cIcon.lineColor
-            strokeWidth: cIcon.strokeWidth * 24
-                / Math.max(1, cIcon.width)
+            strokeWidth: cIcon.strokeWidth
             capStyle: ShapePath.RoundCap
             joinStyle: ShapePath.RoundJoin
 

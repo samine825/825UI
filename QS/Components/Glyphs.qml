@@ -4,14 +4,17 @@ import QtQuick
 import Quickshell
 
 // Каталог глифов иконок: координатное поле 24x24, рисуются VIcon.
-// fillPath — заливка, strokePath — штрих (обводка линии).
+// Все глифы — штриховые, рассчитаны на толщину 2 единицы глифа
+// (VIcon по умолчанию): вес иконки одинаков в любом месте и любом
+// размере. Никаких заливных глифов — они выпадали из линейной
+// системы и выглядели иначе, чем штриховые.
 Singleton {
     id: glyphs
 
     readonly property string iconVolumeBody:
-        "M 3,9 L 7,9 L 12,4.5 L 12,19.5 L 7,15 L 3,15 Z"
+        "M 4.5,9.5 L 8.5,9.5 L 13.5,5 L 13.5,19 L 8.5,14.5 L 4.5,14.5 Z"
     readonly property string iconVolumeWaves:
-        "M 15,9.5 C 16.5,10.8 16.5,13.2 15,14.5 M 17.6,7 C 20.3,9.6 20.3,14.4 17.6,17"
+        "M 15.5,9.5 C 17,10.8 17,13.2 15.5,14.5 M 18.1,7 C 20.8,9.6 20.8,14.4 18.1,17"
     readonly property string iconVolumeMuted:
         "M 15.5,9.5 L 20.5,14.5 M 20.5,9.5 L 15.5,14.5"
     readonly property string iconBrightness:
@@ -21,25 +24,25 @@ Singleton {
     readonly property string iconNote:
         "M 6,18.6 A 2.6,2.6 0 1,0 11.2,18.6 A 2.6,2.6 0 1,0 6,18.6 Z"
         + " M 11.2,18.6 L 11.2,5.2 L 19.5,3.5 L 19.5,7.6 L 11.2,9.3 Z"
-    readonly property string iconPlay: "M 7.5,4.5 L 19.5,12 L 7.5,19.5 Z"
+    readonly property string iconPlay: "M 8.5,5.5 L 18,12 L 8.5,18.5 Z"
     readonly property string iconPause:
-        "M 6.5,5 L 10,5 L 10,19 L 6.5,19 Z M 14,5 L 17.5,5 L 17.5,19 L 14,19 Z"
+        "M 7.5,5.5 L 10.5,5.5 L 10.5,18.5 L 7.5,18.5 Z"
+        + " M 13.5,5.5 L 16.5,5.5 L 16.5,18.5 L 13.5,18.5 Z"
     readonly property string iconPrev:
-        "M 18.5,5 L 18.5,19 L 7.5,12 Z M 5,5 L 7.6,5 L 7.6,19 L 5,19 Z"
+        "M 18.5,5.5 L 18.5,18.5 L 8.5,12 Z M 6,5.5 L 6,18.5"
     readonly property string iconNext:
-        "M 5.5,5 L 5.5,19 L 16.5,12 Z M 16.4,5 L 19,5 L 19,19 L 16.4,19 Z"
+        "M 5.5,5.5 L 5.5,18.5 L 15.5,12 Z M 18,5.5 L 18,18.5"
     readonly property string iconPowerStroke:
         "M 18.36,6.64 A 9,9 0 1,1 5.64,6.64 M 12,2 L 12,10"
     readonly property string iconRebootStroke:
         "M 22.4,4.6 L 22.4,10 L 17,10 M 20.1,14.6 A 8.4,8.4 0 1,1 18.1,6.1 L 22.4,10"
-    readonly property string iconMoonFill:
-        "M 21,12.79 A 9,9 0 1,1 11.21,3 A 7,7 0 0,0 21,12.79 Z"
+    readonly property string iconMoon:
+        "M 20.5,13 A 9,9 0 1,1 11,3.5 A 7.2,7.2 0 0,0 20.5,13 Z"
     readonly property string iconHibernateStroke:
         "M 4,5 L 11.5,5 L 4,13 L 11.5,13 M 14,12 L 19.5,12 L 14,18.5 L 19.5,18.5"
-    readonly property string iconLockFill:
+    readonly property string iconLock:
         "M 5.5,10.5 L 18.5,10.5 L 18.5,20.5 L 5.5,20.5 Z"
-    readonly property string iconLockStroke:
-        "M 8.5,10.5 L 8.5,7.5 A 3.5,3.5 0 0,1 15.5,7.5 L 15.5,10.5"
+        + " M 8.5,10.5 L 8.5,7.5 A 3.5,3.5 0 0,1 15.5,7.5 L 15.5,10.5"
     readonly property string iconMic:
         "M 12,2 A 3,3 0 0,1 15,5 L 15,11 A 3,3 0 0,1 12,14 A 3,3 0 0,1 9,11 L 9,5 A 3,3 0 0,1 12,2 Z"
         + " M 5,11 A 7,7 0 0,0 19,11 M 12,18 L 12,21.5"
@@ -56,11 +59,9 @@ Singleton {
     // === приложения ===
 
     readonly property string iconClipboard:
-        "M 8.5,4 L 6,4 A 1.5,1.5 0 0,0 4.5,5.5 L 4.5,19.5 A 1.5,1.5 0 0,0 6,21"
-        + " L 18,21 A 1.5,1.5 0 0,0 19.5,19.5 L 19.5,5.5 A 1.5,1.5 0 0,0 18,4 L 15.5,4"
-        + " M 8.5,2.5 L 15.5,2.5 A 1,1 0 0,1 16.5,3.5 L 16.5,5 A 1,1 0 0,1 15.5,6"
-        + " L 8.5,6 A 1,1 0 0,1 7.5,5 L 7.5,3.5 A 1,1 0 0,1 8.5,2.5 Z"
-        + " M 8,10.5 L 16,10.5 M 8,14 L 16,14 M 8,17.5 L 13,17.5"
+        "M 9,4 L 5.5,4 L 5.5,21 L 18.5,21 L 18.5,4 L 15,4"
+        + " M 9,2.5 L 15,2.5 L 15,6 L 9,6 Z"
+        + " M 8.5,10.5 L 15.5,10.5 M 8.5,14 L 15.5,14 M 8.5,17.5 L 12.5,17.5"
     readonly property string iconCalculator:
         "M 6.5,2.5 L 17.5,2.5 A 1.5,1.5 0 0,1 19,4 L 19,20 A 1.5,1.5 0 0,1 17.5,21.5"
         + " L 6.5,21.5 A 1.5,1.5 0 0,1 5,20 L 5,4 A 1.5,1.5 0 0,1 6.5,2.5 Z"
@@ -75,10 +76,8 @@ Singleton {
         "M 12,3 A 9,9 0 1,0 12,21 A 9,9 0 1,0 12,3 Z"
         + " M 12,7 L 12,12 L 15.5,14"
     readonly property string iconCamera:
-        "M 4,7.5 L 8,7.5 L 10,5 L 14,5 L 16,7.5 L 20,7.5"
-        + " A 1.5,1.5 0 0,1 21.5,9 L 21.5,18 A 1.5,1.5 0 0,1 20,19.5"
-        + " L 4,19.5 A 1.5,1.5 0 0,1 2.5,18 L 2.5,9 A 1.5,1.5 0 0,1 4,7.5 Z"
-        + " M 12,9.5 A 3.75,3.75 0 1,0 12,17 A 3.75,3.75 0 1,0 12,9.5 Z"
+        "M 3.5,7.5 L 8,7.5 L 10,5 L 14,5 L 16,7.5 L 20.5,7.5 L 20.5,19.5 L 3.5,19.5 Z"
+        + " M 12,9.5 A 3.5,3.5 0 1,0 12,16.5 A 3.5,3.5 0 1,0 12,9.5 Z"
     readonly property string iconPin:
         "M 9.5,3 L 14.5,3 L 14.5,10 L 16.5,12.5 L 7.5,12.5 L 9.5,10 Z"
         + " M 12,12.5 L 12,21"

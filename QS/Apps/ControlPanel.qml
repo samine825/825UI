@@ -674,10 +674,11 @@ PanelWindow {
 
                                     value: root.volumeMuted
                                         ? 0 : root.volumeLevel
-                                    iconFill: Glyphs.iconVolumeBody
-                                    iconStroke: root.volumeMuted
-                                        ? Glyphs.iconVolumeMuted
-                                        : Glyphs.iconVolumeWaves
+                                    iconFill: ""
+                                    iconStroke: Glyphs.iconVolumeBody
+                                        + (root.volumeMuted
+                                            ? Glyphs.iconVolumeMuted
+                                            : Glyphs.iconVolumeWaves)
 
                                     onValueRequested: (v) => root.setVolume(v)
                                     onIconActivated: root.toggleMute()
@@ -977,7 +978,7 @@ PanelWindow {
                                             || playerTile.player.trackArtUrl === ""
                                         width: playerTile.width * 0.26
                                         height: width
-                                        fillPath: Glyphs.iconNote
+                                        strokePath: Glyphs.iconNote
                                         lineColor: Settings.c1
                                     }
                                     
@@ -1006,7 +1007,7 @@ PanelWindow {
                                         component PlayerButton: Item {
                                             id: playerButton
 
-                                            property string iconFill: ""
+                                            property string iconStroke: ""
                                             property bool btnEnabled: true
 
                                             signal activated()
@@ -1025,7 +1026,7 @@ PanelWindow {
                                                 anchors.centerIn: parent
                                                 width: parent.width
                                                 height: parent.height
-                                                fillPath: playerButton.iconFill
+                                                strokePath: playerButton.iconStroke
                                             }
 
                                             MouseArea {
@@ -1049,7 +1050,7 @@ PanelWindow {
                                                 parent.verticalCenter
                                             width: playerTile.width * 0.13
                                             height: playerTile.width * 0.13
-                                            iconFill: Glyphs.iconPrev
+                                            iconStroke: Glyphs.iconPrev
                                             btnEnabled: playerTile.hasTrack
                                                 && playerTile.player.canGoPrevious
 
@@ -1067,7 +1068,7 @@ PanelWindow {
                                                 parent.verticalCenter
                                             width: playerTile.width * 0.16
                                             height: playerTile.width * 0.16
-                                            iconFill: playerTile.hasTrack
+                                            iconStroke: playerTile.hasTrack
                                                 && playerTile.player.isPlaying
                                                 ? Glyphs.iconPause : Glyphs.iconPlay
                                             btnEnabled: playerTile.hasTrack
@@ -1087,7 +1088,7 @@ PanelWindow {
                                                 parent.verticalCenter
                                             width: playerTile.width * 0.13
                                             height: playerTile.width * 0.13
-                                            iconFill: Glyphs.iconNext
+                                            iconStroke: Glyphs.iconNext
                                             btnEnabled: playerTile.hasTrack
                                                 && playerTile.player.canGoNext
 
@@ -1106,8 +1107,8 @@ PanelWindow {
                                         y: leftPart.cellY(3) - Settings.line / 2
                                         width: leftPart.cell + Settings.line
                                         height: leftPart.cell + Settings.line
-                                        iconFill: Glyphs.iconWifiDot
                                         iconStroke: Glyphs.iconWifi
+                                            + Glyphs.iconWifiDot
 
                                         active: Networking.wifiEnabled
 
@@ -1240,9 +1241,9 @@ PanelWindow {
                                             model: [
                                                 { fill: "", stroke: Glyphs.iconPowerStroke, cmd: "poweroff" },
                                                 { fill: "", stroke: Glyphs.iconRebootStroke, cmd: "reboot" },
-                                                { fill: Glyphs.iconMoonFill, stroke: "", cmd: "suspend" },
+                                                { fill: "", stroke: Glyphs.iconMoon, cmd: "suspend" },
                                                 { fill: "", stroke: Glyphs.iconHibernateStroke, cmd: "hibernate" },
-                                                { fill: Glyphs.iconLockFill, stroke: Glyphs.iconLockStroke, cmd: "" }
+                                                { fill: "", stroke: Glyphs.iconLock, cmd: "" }
                                             ]
 
                                             delegate: Item {
