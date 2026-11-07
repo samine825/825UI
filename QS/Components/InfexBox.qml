@@ -52,6 +52,14 @@ Item {
     property color fillColor: Settings.c1
     property color strokeColor: Settings.c1
 
+    // внешняя тень (нарост) на боковых рёбрах: у одиночного бокса
+    // пояс идёт по всему контуру; у вагонов паровозика стыковые
+    // стороны выключаются — пояс силуэтного торца заканчивается в
+    // углу стыка, пояса соседей стыкуются там встык, как у цельного
+    // SFrame-фрейма (у него стыки внутренние и нароста на них нет)
+    property bool shadowOuterLeft: true
+    property bool shadowOuterRight: true
+
     function notchFor(inset) {
         return (height - 2 * inset) * InfexGeometry.notchFrac
     }
@@ -179,6 +187,56 @@ Item {
     function offsetContour(shift, edgeL, edgeR) {
         const pts = offsetPoints(shift, edgeL, edgeR)
         return pts.concat([pts[0]])
+    }
+
+    // маршруты пояса внешней тени: шапка и дно — всегда, боковые
+    // рёбра по флагам (включённое ребро сцепляет верх и низ в один
+    // открытый маршрут через торец; оба выключены — два отдельных
+    // маршрута с плоскими торцами в углах стыков)
+    readonly property var outerShadowRuns: {
+        const pts = offsetPoints(0, edgeLeft, edgeRight)
+        if (shadowOuterLeft && shadowOuterRight)
+            return [pts.concat([pts[0]]), []]
+        if (shadowOuterLeft)
+            return [[pts[4], pts[5], pts[6], pts[7],
+                pts[0], pts[1], pts[2]], []]
+        if (shadowOuterRight)
+            return [[pts[0], pts[1], pts[2], pts[3],
+                pts[4], pts[5], pts[6]], []]
+        return [[pts[0], pts[1], pts[2]], [pts[4], pts[5], pts[6]]]
+    }
+
+    // внешняя тень: нарост 3 линии по силуэтным рёбрам (как
+    // shadow: "both" у SFrame) — внешние полторы линии остаются
+    // видны (линия вылезает за границы бокса), внутренняя половина
+    // маскируется фоном ниже. Открытые маршруты с FlatCap: на
+    // стыках пояс заканчивается ровно в углу контура, пояс соседа
+    // начинается там же — лента без зазора и без наезда на c1
+    // (перекрытия в углу накрывает собственная обводка вагона,
+    // последний слой)
+    Shape {
+        anchors.fill: parent
+        preferredRendererType: Shape.CurveRenderer
+
+        SShapePath {
+            joinStyle: ShapePath.MiterJoin
+            capStyle: ShapePath.FlatCap
+            fillColor: "transparent"
+            strokeColor: Settings.c2
+            strokeWidth: Settings.line * 3
+
+            PathPolyline { path: box.outerShadowRuns[0] }
+        }
+
+        SShapePath {
+            joinStyle: ShapePath.MiterJoin
+            capStyle: ShapePath.FlatCap
+            fillColor: "transparent"
+            strokeColor: Settings.c2
+            strokeWidth: Settings.line * 3
+
+            PathPolyline { path: box.outerShadowRuns[1] }
+        }
     }
 
     // фон: заливка c2 по контуру (край под обводкой)
