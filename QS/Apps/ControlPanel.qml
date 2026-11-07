@@ -1430,7 +1430,11 @@ PanelWindow {
                                                 property bool appeared: false
 
                                                 // старые карточки (уже
-                                                // показывались) встают сразу
+                                                // показывались) восстанавливаются
+                                                // сразу, без анимаций; после
+                                                // восстановления Behavior'ы
+                                                // высоты возвращаются — раскрытие
+                                                // и схлопывание всегда плавные
                                                 property bool animated: true
 
                                                 Component.onCompleted: {
@@ -1440,7 +1444,11 @@ PanelWindow {
                                                     root.seenIds[
                                                         card.modelData
                                                         .notificationId] = true
+                                                    expanded = root.expandedIds[
+                                                        card.modelData
+                                                        .notificationId] === true
                                                     appeared = true
+                                                    animated = true
                                                 }
 
                                                 width: notifColumn.width
@@ -1457,9 +1465,16 @@ PanelWindow {
 
                                                 property bool expanded: false
 
+                                                onExpandedChanged:
+                                                    root.expandedIds[
+                                                        card.modelData
+                                                        .notificationId] = expanded
+
                                                 morph: expanded ? 1 : 0
 
                                                 Behavior on morph {
+                                                    enabled: card.animated
+
                                                     NumberAnimation {
                                                         duration: Settings.animBase
                                                         easing.type: Easing.OutCubic
@@ -1497,6 +1512,9 @@ PanelWindow {
                                                         root.unmarkRemoving(
                                                             card.modelData.notificationId)
                                                         delete root.seenIds[
+                                                            card.modelData
+                                                            .notificationId]
+                                                        delete root.expandedIds[
                                                             card.modelData
                                                             .notificationId]
                                                     }
@@ -1786,6 +1804,10 @@ PanelWindow {
     // Repeater пересоздаёт все карточки, и без этого реестра старые
     // переигрывали анимацию появления при каждом новом уведомлении
     property var seenIds: ({})
+
+    // какие карточки раскрыты: состояние переживает пересоздание
+    // делегатов
+    property var expandedIds: ({})
 
     function markRemoving(id) {
         const copy = Object.assign({}, removingIds)
