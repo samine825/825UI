@@ -1429,8 +1429,19 @@ PanelWindow {
                                                         === true : false
                                                 property bool appeared: false
 
-                                                Component.onCompleted:
+                                                // старые карточки (уже
+                                                // показывались) встают сразу
+                                                property bool animated: true
+
+                                                Component.onCompleted: {
+                                                    animated = !root.seenIds[
+                                                        card.modelData
+                                                        .notificationId]
+                                                    root.seenIds[
+                                                        card.modelData
+                                                        .notificationId] = true
                                                     appeared = true
+                                                }
 
                                                 width: notifColumn.width
                                                 // свёрнутая — строка бара,
@@ -1456,6 +1467,9 @@ PanelWindow {
                                                 }
 
                                                 Behavior on height {
+                                                    enabled: card.animated
+                                                        || card.removing
+
                                                     NumberAnimation {
                                                         duration: Settings.animBase
                                                         easing.type: Easing.OutCubic
@@ -1463,6 +1477,9 @@ PanelWindow {
                                                 }
 
                                                 Behavior on opacity {
+                                                    enabled: card.animated
+                                                        || card.removing
+
                                                     NumberAnimation {
                                                         duration: Settings.animBase
                                                     }
@@ -1479,6 +1496,9 @@ PanelWindow {
                                                             card.modelData.notificationId)
                                                         root.unmarkRemoving(
                                                             card.modelData.notificationId)
+                                                        delete root.seenIds[
+                                                            card.modelData
+                                                            .notificationId]
                                                     }
                                                 }
 
@@ -1761,6 +1781,11 @@ PanelWindow {
     // помечается и схлопывается анимацией, и только потом уходит из
     // истории; появление делает сам делегат (рост из нуля)
     property var removingIds: ({})
+
+    // id, которые уже показывались в истории: при обновлении списка
+    // Repeater пересоздаёт все карточки, и без этого реестра старые
+    // переигрывали анимацию появления при каждом новом уведомлении
+    property var seenIds: ({})
 
     function markRemoving(id) {
         const copy = Object.assign({}, removingIds)

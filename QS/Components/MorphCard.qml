@@ -21,41 +21,46 @@ Item {
     property real cornerCut: Settings.line * 2
 
     // глубина талии — как у шапки и слайдеров (SFrame)
-    readonly property real notch: height * InfexGeometry.notchFrac
+    readonly property real notch:
+        (height - Settings.line) * InfexGeometry.notchFrac
 
     // точка контура i: интерполяция шестигранник → восьмиугольник.
-    // Шестигранник — контур по границам элемента: острые углы и
-    // малые выемки-талии на боках (слоты 4 и 8). Восьмиугольник —
-    // квадрат со срезами. Вырожденные слоты 2 и 6 лежат на
-    // верхней/нижней рёбрах шестигранника и становятся углами
-    // восьмиугольника — тогда каждая точка скользит монотонно вдоль
-    // своего конечного ребра, и граница не волнуется при морфе
+    // Обе формы считаются во внутреннем прямоугольнике, инсечённом
+    // на пол-линии (как baseInset у SPanel): обводка шириной line
+    // ровно заполняет бокс элемента и никуда не вылезает.
+    // Шестигранник — острые углы и малые выемки-талии на боках
+    // (слоты 4 и 8); восьмиугольник — квадрат со срезами.
+    // Вырожденные слоты 2 и 6 лежат на верхнем/нижнем рёбрах
+    // шестигранника и становятся углами восьмиугольника — каждая
+    // точка скользит монотонно вдоль своего конечного ребра, и
+    // граница не волнуется при морфе
     function point(i) {
-        const w = width
-        const h = height
+        const o = Settings.line / 2
+        const w = width - 2 * o
+        const h = height - 2 * o
         const t = morph
         const c = cornerCut
         const n = notch
 
         const hex = [
-            Qt.point(0, 0),
-            Qt.point(w / 2, 0),
-            Qt.point(w, 0),
-            Qt.point(w - n, h / 2),
-            Qt.point(w, h),
-            Qt.point(w / 2, h),
-            Qt.point(0, h),
-            Qt.point(n, h / 2)
+            Qt.point(o, o),
+            Qt.point(o + w / 2, o),
+            Qt.point(o + w, o),
+            Qt.point(o + w - n, o + h / 2),
+            Qt.point(o + w, o + h),
+            Qt.point(o + w / 2, o + h),
+            Qt.point(o, o + h),
+            Qt.point(o + n, o + h / 2)
         ]
         const oct = [
-            Qt.point(c, 0),
-            Qt.point(w - c, 0),
-            Qt.point(w, c),
-            Qt.point(w, h - c),
-            Qt.point(w - c, h),
-            Qt.point(c, h),
-            Qt.point(0, h - c),
-            Qt.point(0, c)
+            Qt.point(o + c, o),
+            Qt.point(o + w - c, o),
+            Qt.point(o + w, o + c),
+            Qt.point(o + w, o + h - c),
+            Qt.point(o + w - c, o + h),
+            Qt.point(o + c, o + h),
+            Qt.point(o, o + h - c),
+            Qt.point(o, o + c)
         ]
 
         const a = hex[i]
@@ -96,9 +101,9 @@ Item {
         id: contentHolder
 
         anchors.fill: parent
-        anchors.leftMargin: morphCard.notch
+        anchors.leftMargin: Settings.line / 2 + morphCard.notch
             * (1 - morphCard.morph)
-        anchors.rightMargin: morphCard.notch
+        anchors.rightMargin: Settings.line / 2 + morphCard.notch
             * (1 - morphCard.morph)
     }
 
