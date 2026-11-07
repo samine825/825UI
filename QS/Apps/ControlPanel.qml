@@ -1414,7 +1414,7 @@ PanelWindow {
                                         Repeater {
                                             model: Notifications.history
 
-                                            delegate: SPanel {
+                                            delegate: MorphCard {
                                                 id: card
 
                                                 required property var modelData
@@ -1446,6 +1446,15 @@ PanelWindow {
 
                                                 property bool expanded: false
 
+                                                morph: expanded ? 1 : 0
+
+                                                Behavior on morph {
+                                                    NumberAnimation {
+                                                        duration: Settings.animBase
+                                                        easing.type: Easing.OutQuad
+                                                    }
+                                                }
+
                                                 Behavior on height {
                                                     NumberAnimation {
                                                         duration: Settings.animBase
@@ -1473,8 +1482,8 @@ PanelWindow {
                                                     }
                                                 }
 
-                                                // контент: под обводкой,
-                                                // режется по силуэту панели
+                                                // контент: обычные поля,
+                                                // талию добавляет contentHolder
                                                 Item {
                                                     anchors.fill: parent
                                                     anchors.margins: Settings.line * 2
