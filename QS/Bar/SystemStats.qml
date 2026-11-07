@@ -6,11 +6,25 @@ import "../Fonts"
 import "../Components"
 import "../"
 
+// Статистика бара — паровозик из трёх InfexBox: CPU, TEMP, RAM.
+// Каждый вагон — самостоятельный элемент со своей заливкой снизу
+// и инверсией контента; стыки — пары рёбер Tab/Notch, совпадающие
+// поточечно, потому что глубина выемки — чистая функция высоты.
+// Разделители и аналитика силуэта всего блока больше не нужны:
+// обводка стыка — это обводки рёбер двух соседей на одной линии,
+// заливка каждого вагона клипается собственным контуром.
+//
+// Геометрия совместима со старым блоком 1:1: логические границы —
+// ячейка + зона стыка (point), внешние рёбра крайних вагонов —
+// выемки фрейма; боксы расширены на line и сдвинуты на пол-линии,
+// так что видимый внешний край и диагонали стыков лежат там же,
+// где были; зазоры заливок от стыков (gapDx — полторы линии по
+// перпендикуляру диагонали) сохранены.
 Item {
     id: r
 
-    // Полная динамическая ширина всей панели: строка элементов + скосы по краям
-    width: statsRow.implicitWidth + root.point * 2
+    width: cpuCar.width + tempCar.width + ramCar.width
+        - 2 * Settings.line
     height: Settings.barHeight
 
     Item {
@@ -18,7 +32,6 @@ Item {
         x: Settings.barGap + Settings.line * InfexGeometry.edgeMult * 1.5
         width: parent.width
         height: Settings.barHeight
-        anchors.verticalCenter: parent.verticalCenter
 
         property string cpuText: "CPU --%"
         property string tempText: "TEMP --°C"
@@ -33,404 +46,97 @@ Item {
         property double previousTotal: 0
         property double previousIdle: 0
 
-        readonly property real point: height * InfexGeometry.notchFrac
+        // шаг выемки стыков и торцов (как у SFrame)
+        readonly property real point:
+            Settings.barHeight * InfexGeometry.notchFrac
 
-        // горизонтальный отступ кромки заливки от оси перегородки:
-        // полторы линии по перпендикуляру диагонали — обводка (линия)
-        // плюс зазор-тень (линия), как у внутренней тени фрейма
+        // ширина ячеек: реальная ширина текста + по 3 линии с каждой
+        // стороны (скрытые SText — точный источник, TextMetrics занижал)
+        readonly property real cpuW: cpuItem.implicitWidth
+            + Settings.line * 6
+        readonly property real tempW: tempItem.implicitWidth
+            + Settings.line * 6
+        readonly property real ramW: ramItem.implicitWidth
+            + Settings.line * 6
+
+        // логическая ширина паровозика: ячейки + зоны стыков
+        readonly property real logicalWidth:
+            cpuW + point + tempW + point + ramW
+
+
+        // горизонтальный отступ кромки заливки от стыка:
+        // полторы линии по перпендикуляру диагонали — обводка
+        // плюс зазор-тень, как у внутренней тени фрейма
         readonly property real gapDx: 1.5 * Settings.line
             * Math.sqrt(1 + Math.pow(2 * point / height, 2))
 
-        // x на диагонали перегородки (dvx — её левый край в координатах
-        // фрейма) на высоте y. Диагональ идёт от (dvx + point, line/2)
-        // через вершину (dvx, H/2) к (dvx + point, H − line/2)
-        function diagX(dvx, y) {
-            const H = statsFrame.height
-            const mid = H / 2
-            const top = Settings.line / 2
-            const bot = H - Settings.line / 2
+        // эталонные тексты: дают точный implicitWidth рендера
+        SText {
+            id: cpuItem
 
-            if (y <= mid)
-                return dvx + root.point * (mid - y) / (mid - top)
-
-            return dvx + root.point * (y - mid) / (bot - mid)
+            visible: false
+            text: root.cpuText
+            font.pixelSize: Settings.textSm
+            font.bold: true
         }
 
-        // x левой грани силуэта на высоте y: выемка контура — вершина
-        // на mid, сдвинутая внутрь на point. Формулы те же, что у
-        // HexContour силуэта (inset = line/2, shift = 0), поэтому
-        // кромка заливки прячется точно под обводку — маска не нужна
-        // (Shape внутри layer у части драйверов не рендерится)
-        function leftEdgeX(y) {
-            const H = statsFrame.height
-            const t = Settings.line / 2
-            const b = H - t
-            const mid = H / 2
+        SText {
+            id: tempItem
 
-            if (y <= mid)
-                return t + root.point * (y - t) / (mid - t)
-
-            return t + root.point * (b - y) / (b - mid)
+            visible: false
+            text: root.tempText
+            font.pixelSize: Settings.textSm
+            font.bold: true
         }
 
-        // x правой грани силуэта — зеркально
-        function rightEdgeX(y) {
-            const H = statsFrame.height
-            const W = statsFrame.width
-            const t = Settings.line / 2
-            const b = H - t
-            const mid = H / 2
+        SText {
+            id: ramItem
 
-            if (y <= mid)
-                return W - t - root.point * (y - t) / (mid - t)
-
-            return W - t - root.point * (b - y) / (b - mid)
+            visible: false
+            text: root.ramText
+            font.pixelSize: Settings.textSm
+            font.bold: true
         }
 
-        // контур заливки секции ниже уровня level, обрезанный точно
-        // по силуэту фрейма: верхняя кромка — уровень, бока —
-        // диагонали перегородок с отступом под тень (null — грань
-        // силуэта), низ и края — по контуру HexContour
-        function sectionPath(leftDv, rightDv, level) {
-            const H = statsFrame.height
-            const mid = H / 2
-            const t = Settings.line / 2
-            const b = H - t
-            const f = function (v) { return v.toFixed(2) }
+        // === вагон 1: CPU. Левая выемка фрейма врезается на point,
+        // стык справа — Notch: диагональ уходит влево к середине,
+        // как у старого разделителя ===
+        InfexBox {
+            id: cpuCar
 
-            // уровень не выше верхней грани силуэта; выше внутренней
-            // грани нижней обводки заливки нет
-            const lv = Math.max(level, t)
-            if (lv >= H - Settings.line)
-                return "M 0,0"
-
-            const xl = leftDv === null ? leftEdgeX(lv) : diagX(leftDv, lv)
-            const xr = rightDv === null ? rightEdgeX(lv) : diagX(rightDv, lv)
-
-            let s = "M " + f(xl) + "," + f(lv)
-                + " L " + f(xr) + "," + f(lv)
-
-            // правая кромка вниз до дна силуэта
-            if (rightDv === null) {
-                if (lv < mid)
-                    s += " L " + f(rightEdgeX(mid)) + "," + f(mid)
-
-                s += " L " + f(rightEdgeX(b)) + "," + f(b)
-            } else {
-                if (lv < mid)
-                    s += " L " + f(diagX(rightDv, mid)) + "," + f(mid)
-
-                s += " L " + f(diagX(rightDv, b)) + "," + f(b)
-            }
-
-            // низ и левая кромка вверх до уровня
-            if (leftDv === null) {
-                s += " L " + f(leftEdgeX(b)) + "," + f(b)
-
-                if (lv < mid)
-                    s += " L " + f(leftEdgeX(mid)) + "," + f(mid)
-            } else {
-                s += " L " + f(diagX(leftDv, b)) + "," + f(b)
-
-                if (lv < mid)
-                    s += " L " + f(diagX(leftDv, mid)) + "," + f(mid)
-            }
-
-            return s + " Z"
-        }
-
-        // границы фрейма = видимому внешнему краю обводки
-        // (старая обводка выпирала на пол-линию — компенсируем ростом).
-        // Весь контент — дети фрейма: строка (текст c1 и перегородки)
-        // под заливками, над ними копии текста c2 в полосе заливки;
-        // обводка и внутренняя тень (z:1) поверх всего. Маска не нужна
-        // — контуры заливок обрезаны аналитически по силуэту
-        SFrame {
-            id: statsFrame
-
-            x: -Settings.line / 2
+            x: 0
             y: -Settings.line / 2
-            width: parent.width + Settings.line
-            height: parent.height + Settings.line
-            shadowOverContent: true
-            contentMasked: false
+            width: root.cpuW + 2 * root.point + Settings.line
+            height: Settings.barHeight + Settings.line
 
-            // === строка контента: адаптивные ячейки и перегородки ===
-            // базовый текст c1 — под заливками: там, где проходит
-            // заливка, его показывают инвертированные копии ниже
-            Row {
-                id: statsRow
-                anchors.centerIn: parent
-                spacing: 0
+            edgeLeft: "Notch"
+            edgeRight: "Notch"
+            fillGapLeft: 0
+            fillGapRight: root.gapDx
 
-                // --- [ЯЧЕЙКА 1: CPU] ---
-                Item {
-                    id: cpuCell
+            fillFraction: root.cpuFraction
 
-                    width: cpuItem.implicitWidth + Settings.line * 6
-                    height: root.height
-
-                    SText {
-                        id: cpuItem
-
-                        anchors.centerIn: parent
-                        text: root.cpuText
-                        color: Settings.c1
-                        font.pixelSize: Settings.textSm
-                        font.bold: true
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                }
-
-                // --- [ПЕРЕГОРОДКА 1: разметка раскладки] ---
-                // сама перегородка рисуется над фреймом (div1Shape):
-                // её c1 проходит поверх внутренней тени основы
-                Item {
-                    id: div1
-
-                    width: root.point // Ширина равна шагу наклона, чтобы не было наложений
-                    height: root.height
-                }
-
-                // --- [ЯЧЕЙКА 2: TEMP] ---
-                Item {
-                    id: tempCell
-
-                    width: tempItem.implicitWidth + Settings.line * 6
-                    height: root.height
-
-                    SText {
-                        id: tempItem
-
-                        anchors.centerIn: parent
-                        text: root.tempText
-                        color: Settings.c1
-                        font.pixelSize: Settings.textSm
-                        font.bold: true
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                }
-
-                // --- [ПЕРЕГОРОДКА 2: разметка раскладки] ---
-                Item {
-                    id: div2
-
-                    width: root.point
-                    height: root.height
-                }
-
-                // --- [ЯЧЕЙКА 3: RAM] ---
-                Item {
-                    id: ramCell
-
-                    width: ramItem.implicitWidth + Settings.line * 6
-                    height: root.height
-
-                    SText {
-                        id: ramItem
-
-                        anchors.centerIn: parent
-                        text: root.ramText
-                        color: Settings.c1
-                        font.pixelSize: Settings.textSm
-                        font.bold: true
-                        verticalAlignment: Text.AlignVCenter
-                    }
+            Behavior on fillFraction {
+                NumberAnimation {
+                    duration: Settings.animSlow
+                    easing.type: Easing.InOutQuad
                 }
             }
 
-            // === заливка CPU ===
-            // id обязателен: биндинг PathSvg живёт внутри SShapePath —
-            // чужого компонента, — через границу видны только id
-            Item {
-                id: cpuFill
-
-                anchors.fill: parent
-
-                // y верхней кромки заливки в координатах фрейма: ход от
-                // внутренней грани нижней обводки (0%) до внутренней
-                // грани верхней (100%) — видимое заполнение равно точной
-                // доле метрики от внутренней высоты; анимируется
-                property real level:
-                    parent.height - Settings.line
-                    - root.cpuFraction
-                        * (parent.height - 2 * Settings.line)
-
-                Behavior on level {
-                    NumberAnimation {
-                        duration: Settings.animSlow
-                        easing.type: Easing.InOutQuad
-                    }
-                }
-
-                Shape {
-                    anchors.fill: parent
-                    preferredRendererType: Shape.CurveRenderer
-
-                    SShapePath {
-                        fillColor: Settings.c1
-                        strokeColor: "transparent"
-                        strokeWidth: 0
-
-                        PathSvg {
-                            path: root.sectionPath(null,
-                                statsRow.x + div1.x - root.gapDx,
-                                cpuFill.level)
-                        }
-                    }
-                }
-            }
-
-            // === заливка TEMP ===
-            Item {
-                id: tempFill
-
-                anchors.fill: parent
-
-                property real level:
-                    parent.height - Settings.line
-                    - root.tempFraction
-                        * (parent.height - 2 * Settings.line)
-
-                Behavior on level {
-                    NumberAnimation {
-                        duration: Settings.animSlow
-                        easing.type: Easing.InOutQuad
-                    }
-                }
-
-                Shape {
-                    anchors.fill: parent
-                    preferredRendererType: Shape.CurveRenderer
-
-                    SShapePath {
-                        fillColor: Settings.c1
-                        strokeColor: "transparent"
-                        strokeWidth: 0
-
-                        PathSvg {
-                            path: root.sectionPath(
-                                statsRow.x + div1.x + root.gapDx,
-                                statsRow.x + div2.x - root.gapDx,
-                                tempFill.level)
-                        }
-                    }
-                }
-            }
-
-            // === заливка RAM ===
-            Item {
-                id: ramFill
-
-                anchors.fill: parent
-
-                property real level:
-                    parent.height - Settings.line
-                    - root.ramFraction
-                        * (parent.height - 2 * Settings.line)
-
-                Behavior on level {
-                    NumberAnimation {
-                        duration: Settings.animSlow
-                        easing.type: Easing.InOutQuad
-                    }
-                }
-
-                Shape {
-                    anchors.fill: parent
-                    preferredRendererType: Shape.CurveRenderer
-
-                    SShapePath {
-                        fillColor: Settings.c1
-                        strokeColor: "transparent"
-                        strokeWidth: 0
-
-                        PathSvg {
-                            path: root.sectionPath(
-                                statsRow.x + div2.x + root.gapDx,
-                                null,
-                                ramFill.level)
-                        }
-                    }
-                }
-            }
-
-            // === инвертированный контент (паттерн слайдеров панели
-            // управления): полоса-клип от уровня заливки до дна, внутри
-            // — полноразмерный слепок зоны с текстом c2. Виден только
-            // там, где под ним заливка; базовый текст c1 прикрыт ею
-
-            // --- [CPU] ---
-            Item {
-                id: cpuCopy
-
-                x: statsRow.x + cpuCell.x
-                y: cpuFill.level
-                width: cpuCell.width
-                height: statsFrame.height - cpuFill.level
-                clip: true
-
+            content: Component {
                 Item {
-                    width: parent.width
-                    height: statsFrame.height
-                    y: -cpuFill.level
+                    id: cpuContent
+
+                    property bool inverted: false
+
+                    width: root.cpuW
+                    height: Settings.barHeight
 
                     SText {
                         anchors.centerIn: parent
                         text: root.cpuText
-                        color: Settings.c2
-                        font.pixelSize: Settings.textSm
-                        font.bold: true
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                }
-            }
-
-            // --- [TEMP] ---
-            Item {
-                id: tempCopy
-
-                x: statsRow.x + tempCell.x
-                y: tempFill.level
-                width: tempCell.width
-                height: statsFrame.height - tempFill.level
-                clip: true
-
-                Item {
-                    width: parent.width
-                    height: statsFrame.height
-                    y: -tempFill.level
-
-                    SText {
-                        anchors.centerIn: parent
-                        text: root.tempText
-                        color: Settings.c2
-                        font.pixelSize: Settings.textSm
-                        font.bold: true
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                }
-            }
-
-            // --- [RAM] ---
-            Item {
-                id: ramCopy
-
-                x: statsRow.x + ramCell.x
-                y: ramFill.level
-                width: ramCell.width
-                height: statsFrame.height - ramFill.level
-                clip: true
-
-                Item {
-                    width: parent.width
-                    height: statsFrame.height
-                    y: -ramFill.level
-
-                    SText {
-                        anchors.centerIn: parent
-                        text: root.ramText
-                        color: Settings.c2
+                        color: cpuContent.inverted
+                            ? Settings.c2 : Settings.c1
                         font.pixelSize: Settings.textSm
                         font.bold: true
                         verticalAlignment: Text.AlignVCenter
@@ -439,54 +145,95 @@ Item {
             }
         }
 
-        // перегородки c1 — НАД фреймом: их обводка рендерится поверх
-        // внутренней тени основы (c2) и не режется ею у краёв; зазоры-
-        // тени вокруг перегородок (отступ заливок) остаются под ней.
-        // Позиции берутся из раскладки строки; координаты корня —
-        // строка живёт во фрейме, тот сдвинут на пол-линии
-        Shape {
-            id: div1Shape
+        // === вагон 2: TEMP. Стыки: слева Tab (заполняет выемку
+        // CPU), справа Notch ===
+        InfexBox {
+            id: tempCar
 
-            x: statsRow.x + div1.x - Settings.line / 2
-            y: statsRow.y - Settings.line / 2
-            width: root.point
-            height: root.height
-            preferredRendererType: Shape.CurveRenderer
+            x: cpuCar.width - Settings.line
+            y: -Settings.line / 2
+            width: root.tempW + root.point + Settings.line
+            height: Settings.barHeight + Settings.line
 
-            SShapePath {
-                joinStyle: ShapePath.MiterJoin
-                capStyle: ShapePath.FlatCap
-                strokeColor: Settings.c1
-                strokeWidth: Settings.line
-                fillColor: "transparent"
+            edgeLeft: "Tab"
+            edgeRight: "Notch"
+            fillGapLeft: root.gapDx
+            fillGapRight: root.gapDx
 
-                startX: root.point
-                startY: 0
-                PathLine { x: 0; y: root.height / 2 }
-                PathLine { x: root.point; y: root.height }
+            fillFraction: root.tempFraction
+
+            Behavior on fillFraction {
+                NumberAnimation {
+                    duration: Settings.animSlow
+                    easing.type: Easing.InOutQuad
+                }
+            }
+
+            content: Component {
+                Item {
+                    id: tempContent
+
+                    property bool inverted: false
+
+                    width: root.tempW
+                    height: Settings.barHeight
+
+                    SText {
+                        anchors.centerIn: parent
+                        text: root.tempText
+                        color: tempContent.inverted
+                            ? Settings.c2 : Settings.c1
+                        font.pixelSize: Settings.textSm
+                        font.bold: true
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
             }
         }
 
-        Shape {
-            id: div2Shape
+        // === вагон 3: RAM. Стык слева — Tab, правый торец —
+        // выемка фрейма ===
+        InfexBox {
+            id: ramCar
 
-            x: statsRow.x + div2.x - Settings.line / 2
-            y: statsRow.y - Settings.line / 2
-            width: root.point
-            height: root.height
-            preferredRendererType: Shape.CurveRenderer
+            x: cpuCar.width + tempCar.width - 2 * Settings.line
+            y: -Settings.line / 2
+            width: root.ramW + root.point + Settings.line
+            height: Settings.barHeight + Settings.line
 
-            SShapePath {
-                joinStyle: ShapePath.MiterJoin
-                capStyle: ShapePath.FlatCap
-                strokeColor: Settings.c1
-                strokeWidth: Settings.line
-                fillColor: "transparent"
+            edgeLeft: "Tab"
+            edgeRight: "Notch"
+            fillGapLeft: root.gapDx
+            fillGapRight: 0
 
-                startX: root.point
-                startY: 0
-                PathLine { x: 0; y: root.height / 2 }
-                PathLine { x: root.point; y: root.height }
+            fillFraction: root.ramFraction
+
+            Behavior on fillFraction {
+                NumberAnimation {
+                    duration: Settings.animSlow
+                    easing.type: Easing.InOutQuad
+                }
+            }
+
+            content: Component {
+                Item {
+                    id: ramContent
+
+                    property bool inverted: false
+
+                    width: root.ramW
+                    height: Settings.barHeight
+
+                    SText {
+                        anchors.centerIn: parent
+                        text: root.ramText
+                        color: ramContent.inverted
+                            ? Settings.c2 : Settings.c1
+                        font.pixelSize: Settings.textSm
+                        font.bold: true
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
             }
         }
 
@@ -568,5 +315,6 @@ Item {
             interval: 1000; repeat: true; running: true; triggeredOnStart: true
             onTriggered: if (!statsProcess.running) statsProcess.running = true
         }
+
     }
 }
