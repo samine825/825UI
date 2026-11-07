@@ -1,2 +1,10 @@
 build
 compile_commands.json
+# тестовые стенды
+check.sh
+apptests.sh
+visualtest.sh
+paneltest.sh
+
+# zcode служебное
+.zcode/
