@@ -111,7 +111,7 @@ Item {
         InfexBox {
             id: cpuCar
 
-            ringFlatRight: true
+            shadowFlatRight: true
 
             x: 0
             y: -Settings.line / 2
@@ -121,7 +121,7 @@ Item {
             edgeLeft: "Notch"
             edgeRight: "Notch"
             fillGapLeft: 0
-            fillGapRight: root.gapDx
+            fillGapRight: Settings.line
 
             fillFraction: r.debugCpu >= 0
                 ? r.debugCpu : root.cpuFraction
@@ -160,8 +160,8 @@ Item {
         InfexBox {
             id: tempCar
 
-            ringFlatLeft: true
-            ringFlatRight: true
+            shadowFlatLeft: true
+            shadowFlatRight: true
 
             x: cpuCar.width - Settings.line
             y: -Settings.line / 2
@@ -170,8 +170,8 @@ Item {
 
             edgeLeft: "Tab"
             edgeRight: "Notch"
-            fillGapLeft: root.gapDx
-            fillGapRight: root.gapDx
+            fillGapLeft: Settings.line
+            fillGapRight: Settings.line
 
             fillFraction: r.debugTemp >= 0
                 ? r.debugTemp : root.tempFraction
@@ -210,7 +210,7 @@ Item {
         InfexBox {
             id: ramCar
 
-            ringFlatLeft: true
+            shadowFlatLeft: true
 
             x: cpuCar.width + tempCar.width - 2 * Settings.line
             y: -Settings.line / 2
@@ -219,7 +219,7 @@ Item {
 
             edgeLeft: "Tab"
             edgeRight: "Notch"
-            fillGapLeft: root.gapDx
+            fillGapLeft: Settings.line
             fillGapRight: 0
 
             fillFraction: r.debugRam >= 0

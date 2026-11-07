@@ -23,6 +23,12 @@ import ".."
 // пол-линии от угла и не перекрывает его размеры). Заливка —
 // аналитический многоугольник по боковым рёбрам (маски и шейдеры
 // не нужны — рендерится и в софтверном бэкенде).
+//
+// Тень (нарост + внутреннее кольцо) на стыковых рёбрах — плоская
+// (shadowFlat*): не вылезает за бокс на соседа и не перекрывает
+// его c1. Слои — 1:1 со SFrame: нарост под фоном (внешний пояс
+// уходит на фон бара, внутренний маскируется фоном), фон, базовый
+// контент, кольцо, заливка, полосовой контент, обводка.
 Item {
     id: box
 
@@ -43,14 +49,12 @@ Item {
     property color fillColor: Settings.c1
     property color strokeColor: Settings.c1
 
-    // кольцо внутренней тени на этих рёбрах — плоское (без вершины
-    // Tab): у стыков кольцо не должно вылезать за бокс на соседа и
-    // перекрывать его c1-обводку
-    property bool ringFlatLeft: false
-    property bool ringFlatRight: false
+    // тень (нарост + кольцо) на этих рёбрах — плоская (без вершины
+    // Tab): у стыков тень не вылезает за бокс на соседа и не
+    // перекрывает его c1-обводку
+    property bool shadowFlatLeft: false
+    property bool shadowFlatRight: false
 
-    // глубина выемки/выступа — как у SFrame: пропорциональна
-    // видимой высоте на данном инсете
     function notchFor(inset) {
         return (height - 2 * inset) * InfexGeometry.notchFrac
     }
@@ -72,17 +76,13 @@ Item {
         const mid = o + h / 2
 
         const base = atLeft ? o : width - o
-        const k = edge === "Notch" ? (atLeft ? n() : -n())
-            : edge === "Tab" ? (atLeft ? -n() : n()) : 0
+        const k = edge === "Notch" ? (atLeft ? notch : -notch)
+            : edge === "Tab" ? (atLeft ? -notch : notch) : 0
 
         if (y <= mid)
             return base + k * (y - top) / (mid - top)
 
         return base + k * (top + h - y) / (mid - top)
-    }
-
-    function n() {
-        return notch
     }
 
     // многоугольник заливки ниже уровня: верхняя кромка — уровень
@@ -147,32 +147,12 @@ Item {
         ]
     }
 
-    function closedContour(inset, flatL, flatR) {
-        const pts = contourPoints(inset, flatL, flatR)
+    function closedContour(inset, edgeL, edgeR) {
+        const pts = contourPoints(inset, edgeL, edgeR)
         return pts.concat([pts[0]])
     }
 
-    // тень-нарост: 3 линии по контуру — внешняя половина уходит на
-    // фон бара (незаметна на c2), внутренняя маскируется заливкой
-    // фона ниже; клип по боксу — c2 не покидает свой вагон
-    Shape {
-        anchors.fill: parent
-        preferredRendererType: Shape.CurveRenderer
-
-        SShapePath {
-            joinStyle: ShapePath.MiterJoin
-            capStyle: ShapePath.FlatCap
-            fillColor: "transparent"
-            strokeColor: Settings.c2
-            strokeWidth: Settings.line * 3
-
-            PathPolyline { path: box.closedContour(Settings.line / 2,
-                box.edgeLeft, box.edgeRight) }
-        }
-    }
-
-    // фон: заливка c2 с инсетом в линию — маскирует внутреннюю
-    // половину нароста; её край прячется под основной обводкой
+    // фон: заливка c2 по контуру (край под обводкой)
     Shape {
         anchors.fill: parent
         preferredRendererType: Shape.CurveRenderer
@@ -184,7 +164,7 @@ Item {
             strokeColor: "transparent"
             strokeWidth: 0
 
-            PathPolyline { path: box.closedContour(Settings.line,
+            PathPolyline { path: box.closedContour(Settings.line / 2,
                 box.edgeLeft, box.edgeRight) }
         }
     }
@@ -203,7 +183,7 @@ Item {
             item.inverted = false
     }
 
-    // заливка: аналитический многоугольник
+    // заливка (c1)
     Shape {
         anchors.fill: parent
         preferredRendererType: Shape.CurveRenderer
@@ -236,9 +216,8 @@ Item {
     }
 
     // внутренняя тень: тонкое кольцо c2 шириной в линию, в линию
-    // внутрь от обводки (как shadowOverContent у SFrame) — поверх
-    // заливки и контента; Tab-рёбра кольца плоские (ringFlat*), у
-    // стыков кольцо не вылезает на соседа и не трогает его c1
+    // внутрь от обводки (как shadowOverContent у SFrame), с плоскими
+    // стыковыми рёбрами — лежит на заливке по всем сторонам
     Shape {
         anchors.fill: parent
         preferredRendererType: Shape.CurveRenderer
@@ -251,11 +230,12 @@ Item {
             strokeWidth: Settings.line
 
             PathPolyline { path: box.closedContour(Settings.line * 1.5,
-                box.ringFlatLeft, box.ringFlatRight) }
+                box.shadowFlatLeft ? "Flat" : box.edgeLeft,
+                box.shadowFlatRight ? "Flat" : box.edgeRight) }
         }
     }
 
-    // обводка — поверх всего
+    // обводка — поверх всего, с реальными рёбрами
     Shape {
         anchors.fill: parent
         preferredRendererType: Shape.CurveRenderer
