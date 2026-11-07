@@ -111,6 +111,8 @@ Item {
         InfexBox {
             id: cpuCar
 
+            ringFlatRight: true
+
             x: 0
             y: -Settings.line / 2
             width: root.cpuW + 2 * root.point + Settings.line
@@ -158,6 +160,9 @@ Item {
         InfexBox {
             id: tempCar
 
+            ringFlatLeft: true
+            ringFlatRight: true
+
             x: cpuCar.width - Settings.line
             y: -Settings.line / 2
             width: root.tempW + root.point + Settings.line
@@ -204,6 +209,8 @@ Item {
         // выемка фрейма ===
         InfexBox {
             id: ramCar
+
+            ringFlatLeft: true
 
             x: cpuCar.width + tempCar.width - 2 * Settings.line
             y: -Settings.line / 2

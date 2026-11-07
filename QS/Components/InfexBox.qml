@@ -43,6 +43,12 @@ Item {
     property color fillColor: Settings.c1
     property color strokeColor: Settings.c1
 
+    // кольцо внутренней тени на этих рёбрах — плоское (без вершины
+    // Tab): у стыков кольцо не должно вылезать за бокс на соседа и
+    // перекрывать его c1-обводку
+    property bool ringFlatLeft: false
+    property bool ringFlatRight: false
+
     // глубина выемки/выступа — как у SFrame: пропорциональна
     // видимой высоте на данном инсете
     function notchFor(inset) {
@@ -118,16 +124,16 @@ Item {
 
     // контур бокса с произвольным инсетом: 8 точек — углы, середины
     // верха/низа и вершины боковых рёбер (у Flat вершина вырождена
-    // в середину ребра)
-    function contourPoints(inset) {
+    // в середину ребра). edgeL/edgeR — переопределение типов рёбер
+    function contourPoints(inset, edgeL, edgeR) {
         const n = notchFor(inset)
         const w = width - 2 * inset
         const h = height - 2 * inset
         const mid = inset + h / 2
-        const rx = edgeRight === "Notch" ? inset + w - n
-            : edgeRight === "Tab" ? inset + w + n : inset + w
-        const lx = edgeLeft === "Notch" ? inset + n
-            : edgeLeft === "Tab" ? inset - n : inset
+        const rx = edgeR === "Notch" ? inset + w - n
+            : edgeR === "Tab" ? inset + w + n : inset + w
+        const lx = edgeL === "Notch" ? inset + n
+            : edgeL === "Tab" ? inset - n : inset
 
         return [
             Qt.point(inset, inset),
@@ -141,8 +147,8 @@ Item {
         ]
     }
 
-    function closedContour(inset) {
-        const pts = contourPoints(inset)
+    function closedContour(inset, flatL, flatR) {
+        const pts = contourPoints(inset, flatL, flatR)
         return pts.concat([pts[0]])
     }
 
@@ -160,7 +166,8 @@ Item {
             strokeColor: Settings.c2
             strokeWidth: Settings.line * 3
 
-            PathPolyline { path: box.closedContour(Settings.line / 2) }
+            PathPolyline { path: box.closedContour(Settings.line / 2,
+                box.edgeLeft, box.edgeRight) }
         }
     }
 
@@ -177,7 +184,8 @@ Item {
             strokeColor: "transparent"
             strokeWidth: 0
 
-            PathPolyline { path: box.closedContour(Settings.line) }
+            PathPolyline { path: box.closedContour(Settings.line,
+                box.edgeLeft, box.edgeRight) }
         }
     }
 
@@ -193,26 +201,6 @@ Item {
 
         onLoaded: if (item.inverted !== undefined)
             item.inverted = false
-    }
-
-    // внутренняя тень: тонкое кольцо c2 шириной в линию, в линию
-    // внутрь от обводки (как shadowOverContent у SFrame) — видна над
-    // уровнем заливки; сама заливка (c1) рисуется поверх кольца и
-    // доходит до нижней обводки без тёмного зазора
-    Shape {
-        anchors.fill: parent
-        preferredRendererType: Shape.CurveRenderer
-
-        SShapePath {
-            joinStyle: ShapePath.MiterJoin
-            capStyle: ShapePath.FlatCap
-            fillColor: "transparent"
-            strokeColor: Settings.c2
-            strokeWidth: Settings.line
-
-            PathPolyline { path: box.closedContour(
-                Settings.line * 1.5) }
-        }
     }
 
     // заливка: аналитический многоугольник
@@ -247,6 +235,26 @@ Item {
         }
     }
 
+    // внутренняя тень: тонкое кольцо c2 шириной в линию, в линию
+    // внутрь от обводки (как shadowOverContent у SFrame) — поверх
+    // заливки и контента; Tab-рёбра кольца плоские (ringFlat*), у
+    // стыков кольцо не вылезает на соседа и не трогает его c1
+    Shape {
+        anchors.fill: parent
+        preferredRendererType: Shape.CurveRenderer
+
+        SShapePath {
+            joinStyle: ShapePath.MiterJoin
+            capStyle: ShapePath.FlatCap
+            fillColor: "transparent"
+            strokeColor: Settings.c2
+            strokeWidth: Settings.line
+
+            PathPolyline { path: box.closedContour(Settings.line * 1.5,
+                box.ringFlatLeft, box.ringFlatRight) }
+        }
+    }
+
     // обводка — поверх всего
     Shape {
         anchors.fill: parent
@@ -259,7 +267,8 @@ Item {
             strokeColor: box.strokeColor
             strokeWidth: Settings.line
 
-            PathPolyline { path: box.closedContour(Settings.line / 2) }
+            PathPolyline { path: box.closedContour(Settings.line / 2,
+                box.edgeLeft, box.edgeRight) }
         }
     }
 }
