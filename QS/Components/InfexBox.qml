@@ -24,11 +24,14 @@ import ".."
 // аналитический многоугольник по боковым рёбрам (маски и шейдеры
 // не нужны — рендерится и в софтверном бэкенде).
 //
-// Тень (нарост + внутреннее кольцо) на стыковых рёбрах — плоская
-// (shadowFlat*): не вылезает за бокс на соседа и не перекрывает
-// его c1. Слои — 1:1 со SFrame: нарост под фоном (внешний пояс
-// уходит на фон бара, внутренний маскируется фоном), фон, базовый
-// контент, кольцо, заливка, полосовой контент, обводка.
+// Внутренняя тень — тонкое кольцо c2: истинный параллельный сдвиг
+// контура внутрь на линию (та же семантика shift, что у HexContour
+// SFrame: косые грани смещаются по перпендикуляру через
+// shift·√(1+k²)), поэтому кольцо повторяет шевроны рёбер, а не
+// сползает в прямоугольник. На стыке кольца соседей идут параллельно
+// диагонали стыка на линию с каждой стороны — c1 поверх c2 всегда
+// сверху порядком отрисовки вагонов. Слои — 1:1 со SFrame: фон,
+// базовый контент, заливка, полосовой контент, кольцо, обводка.
 Item {
     id: box
 
@@ -48,12 +51,6 @@ Item {
 
     property color fillColor: Settings.c1
     property color strokeColor: Settings.c1
-
-    // тень (нарост + кольцо) на этих рёбрах — плоская (без вершины
-    // Tab): у стыков тень не вылезает за бокс на соседа и не
-    // перекрывает его c1-обводку
-    property bool shadowFlatLeft: false
-    property bool shadowFlatRight: false
 
     function notchFor(inset) {
         return (height - 2 * inset) * InfexGeometry.notchFrac
@@ -122,33 +119,65 @@ Item {
         return pts
     }
 
-    // контур бокса с произвольным инсетом: 8 точек — углы, середины
-    // верха/низа и вершины боковых рёбер (у Flat вершина вырождена
-    // в середину ребра). edgeL/edgeR — переопределение типов рёбер
-    function contourPoints(inset, edgeL, edgeR) {
-        const n = notchFor(inset)
-        const w = width - 2 * inset
-        const h = height - 2 * inset
-        const mid = inset + h / 2
-        const rx = edgeR === "Notch" ? inset + w - n
-            : edgeR === "Tab" ? inset + w + n : inset + w
-        const lx = edgeL === "Notch" ? inset + n
-            : edgeL === "Tab" ? inset - n : inset
+    // контур бокса, смещённый внутрь на shift: истинный параллельный
+    // сдвиг, как HexContour у SFrame. Прямые кромки (верх, низ,
+    // Flat-рёбра) сдвигаются на shift по нормали; косые грани
+    // выемок/наростов имеют наклон k, их перпендикулярному сдвигу на
+    // shift соответствует горизонтальный shift·√(1+k²) — вершина
+    // ребра уходит вглубь на shift·√(1+k²), угол перестыковывается
+    // на пересечении сдвинутых граней (shift·(k±√(1+k²))). Только так
+    // кольцо внутренней тени повторяет шевроны рёбер с одинаковой
+    // шириной band'ы на прямых и косых участках; пересчёт глубины от
+    // уменьшенной высоты дал бы на диагоналях почти нулевую тень.
+    // shift 0 — сам контур (фон, обводка), shift = line — кольцо.
+    // edgeL/edgeR — переопределение типов рёбер
+    function offsetPoints(shift, edgeL, edgeR) {
+        const o = Settings.line / 2
+        const k = 2 * InfexGeometry.notchFrac
+        const sq = Math.sqrt(1 + k * k)
+        const n = notchFor(o)
+        const t = o + shift
+        const b = height - o - shift
+        const mid = height / 2
+
+        let lx, lTip
+        if (edgeL === "Notch") {
+            lx = o + shift * (k + sq)
+            lTip = o + n + shift * sq
+        } else if (edgeL === "Tab") {
+            lx = o + shift * (sq - k)
+            lTip = o - n + shift * sq
+        } else {
+            lx = o + shift
+            lTip = o + shift
+        }
+
+        let rx, rTip
+        if (edgeR === "Notch") {
+            rx = width - o - shift * (k + sq)
+            rTip = width - o - n - shift * sq
+        } else if (edgeR === "Tab") {
+            rx = width - o - shift * (sq - k)
+            rTip = width - o + n - shift * sq
+        } else {
+            rx = width - o - shift
+            rTip = width - o - shift
+        }
 
         return [
-            Qt.point(inset, inset),
-            Qt.point(inset + w / 2, inset),
-            Qt.point(inset + w, inset),
-            Qt.point(rx, mid),
-            Qt.point(inset + w, inset + h),
-            Qt.point(inset + w / 2, inset + h),
-            Qt.point(inset, inset + h),
-            Qt.point(lx, mid)
+            Qt.point(lx, t),
+            Qt.point(width / 2, t),
+            Qt.point(rx, t),
+            Qt.point(rTip, mid),
+            Qt.point(rx, b),
+            Qt.point(width / 2, b),
+            Qt.point(lx, b),
+            Qt.point(lTip, mid)
         ]
     }
 
-    function closedContour(inset, edgeL, edgeR) {
-        const pts = contourPoints(inset, edgeL, edgeR)
+    function offsetContour(shift, edgeL, edgeR) {
+        const pts = offsetPoints(shift, edgeL, edgeR)
         return pts.concat([pts[0]])
     }
 
@@ -164,7 +193,7 @@ Item {
             strokeColor: "transparent"
             strokeWidth: 0
 
-            PathPolyline { path: box.closedContour(Settings.line / 2,
+            PathPolyline { path: box.offsetContour(0,
                 box.edgeLeft, box.edgeRight) }
         }
     }
@@ -215,9 +244,12 @@ Item {
         }
     }
 
-    // внутренняя тень: тонкое кольцо c2 шириной в линию, в линию
-    // внутрь от обводки (как shadowOverContent у SFrame), с плоскими
-    // стыковыми рёбрами — лежит на заливке по всем сторонам
+    // внутренняя тень: тонкое кольцо c2 шириной в линию — истинный
+    // параллельный сдвиг контура внутрь на линию (как shadowOverContent
+    // у SFrame), с настоящими рёбрами: повторяет шевроны, лежит на
+    // заливке по всем сторонам. У стыков кольцо идёт параллельно
+    // диагонали на линию внутрь своего вагона — обводка соседа (c1,
+    // позже по отрисовке) всегда поверх него
     Shape {
         anchors.fill: parent
         preferredRendererType: Shape.CurveRenderer
@@ -229,9 +261,8 @@ Item {
             strokeColor: Settings.c2
             strokeWidth: Settings.line
 
-            PathPolyline { path: box.closedContour(Settings.line * 1.5,
-                box.shadowFlatLeft ? "Flat" : box.edgeLeft,
-                box.shadowFlatRight ? "Flat" : box.edgeRight) }
+            PathPolyline { path: box.offsetContour(Settings.line,
+                box.edgeLeft, box.edgeRight) }
         }
     }
 
@@ -247,7 +278,7 @@ Item {
             strokeColor: box.strokeColor
             strokeWidth: Settings.line
 
-            PathPolyline { path: box.closedContour(Settings.line / 2,
+            PathPolyline { path: box.offsetContour(0,
                 box.edgeLeft, box.edgeRight) }
         }
     }
