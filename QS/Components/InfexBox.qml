@@ -199,6 +199,24 @@ Item {
         }
     }
 
+    // тень: нарост c2 на 3 линии по контуру — лежит на заливке и
+    // контенте (как у SFrame, shadowOverContent), под обводкой
+    Shape {
+        anchors.fill: parent
+        preferredRendererType: Shape.CurveRenderer
+
+        SShapePath {
+            joinStyle: ShapePath.MiterJoin
+            capStyle: ShapePath.FlatCap
+            fillColor: "transparent"
+            strokeColor: Settings.c2
+            strokeWidth: Settings.line * 3
+
+            PathPolyline { path: box.contourPoints()
+                .concat([box.contourPoints()[0]]) }
+        }
+    }
+
     // обводка — поверх всего
     Shape {
         anchors.fill: parent

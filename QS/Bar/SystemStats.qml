@@ -30,6 +30,7 @@ Item {
     Item {
         id: root
         x: Settings.barGap + Settings.line * InfexGeometry.edgeMult * 1.5
+        anchors.verticalCenter: parent.verticalCenter
         width: parent.width
         height: Settings.barHeight
 
