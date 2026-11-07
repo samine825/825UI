@@ -20,30 +20,32 @@ Item {
     property color strokeColor: Settings.c1
     property real cornerCut: Settings.line * 2
 
-    readonly property real padX:
-        0.5 * InfexGeometry.tipMult * Settings.line
-    readonly property real padY: Settings.line / 2
+    // глубина талии — как у шапки и слайдеров (SFrame)
+    readonly property real notch: height * InfexGeometry.notchFrac
 
-    // точка контура i: интерполяция шестигранник → восьмиугольник
+    // точка контура i: интерполяция шестигранник → восьмиугольник.
+    // Шестигранник — контур по границам элемента: острые углы и
+    // малые выемки-талии на боках (слоты 4 и 8). Восьмиугольник —
+    // квадрат со срезами. Вырожденные слоты 2 и 6 лежат на
+    // верхней/нижней рёбрах шестигранника и становятся углами
+    // восьмиугольника — тогда каждая точка скользит монотонно вдоль
+    // своего конечного ребра, и граница не волнуется при морфе
     function point(i) {
         const w = width
         const h = height
         const t = morph
-        const px = padX
-        const py = padY
         const c = cornerCut
-        const rw = w - h / 2
-        const lw = h / 2
+        const n = notch
 
         const hex = [
-            Qt.point(px, py),
-            Qt.point(w - px, py),
-            Qt.point((w - px + rw) / 2, (py + h / 2) / 2),
-            Qt.point(rw, h / 2),
-            Qt.point((rw + w - px) / 2, (h / 2 + h - py) / 2),
-            Qt.point(w - px, h - py),
-            Qt.point(px, h - py),
-            Qt.point((px + lw) / 2, (h - py + h / 2) / 2)
+            Qt.point(0, 0),
+            Qt.point(w / 2, 0),
+            Qt.point(w, 0),
+            Qt.point(w - n, h / 2),
+            Qt.point(w, h),
+            Qt.point(w / 2, h),
+            Qt.point(0, h),
+            Qt.point(n, h / 2)
         ]
         const oct = [
             Qt.point(c, 0),
@@ -89,14 +91,14 @@ Item {
         }
     }
 
-    // контент: над заливкой; бока разъезжаются от талии
+    // контент: над заливкой; бока разъезжаются от выемки
     Item {
         id: contentHolder
 
         anchors.fill: parent
-        anchors.leftMargin: morphCard.height / 2
+        anchors.leftMargin: morphCard.notch
             * (1 - morphCard.morph)
-        anchors.rightMargin: morphCard.height / 2
+        anchors.rightMargin: morphCard.notch
             * (1 - morphCard.morph)
     }
 

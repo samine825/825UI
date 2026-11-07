@@ -1451,7 +1451,7 @@ PanelWindow {
                                                 Behavior on morph {
                                                     NumberAnimation {
                                                         duration: Settings.animBase
-                                                        easing.type: Easing.OutQuad
+                                                        easing.type: Easing.OutCubic
                                                     }
                                                 }
 
