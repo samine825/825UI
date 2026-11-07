@@ -43,9 +43,13 @@ Item {
     property color fillColor: Settings.c1
     property color strokeColor: Settings.c1
 
-    // глубина выемки/выступа — как у SFrame
-    readonly property real notch:
-        (height - Settings.line) * InfexGeometry.notchFrac
+    // глубина выемки/выступа — как у SFrame: пропорциональна
+    // видимой высоте на данном инсете
+    function notchFor(inset) {
+        return (height - 2 * inset) * InfexGeometry.notchFrac
+    }
+
+    readonly property real notch: notchFor(Settings.line / 2)
 
     // y верхней кромки заливки
     readonly property real fillLevel:
@@ -112,31 +116,56 @@ Item {
         return pts
     }
 
-    // контур бокса: 8 точек — углы, середины верха/низа и вершины
-    // боковых рёбер (у Flat вершина вырождена в середину ребра)
-    function contourPoints() {
-        const o = Settings.line / 2
-        const w = width - Settings.line
-        const h = height - Settings.line
-        const mid = o + h / 2
-        const rx = edgeRight === "Notch" ? o + w - notch
-            : edgeRight === "Tab" ? o + w + notch : o + w
-        const lx = edgeLeft === "Notch" ? o + notch
-            : edgeLeft === "Tab" ? o - notch : o
+    // контур бокса с произвольным инсетом: 8 точек — углы, середины
+    // верха/низа и вершины боковых рёбер (у Flat вершина вырождена
+    // в середину ребра)
+    function contourPoints(inset) {
+        const n = notchFor(inset)
+        const w = width - 2 * inset
+        const h = height - 2 * inset
+        const mid = inset + h / 2
+        const rx = edgeRight === "Notch" ? inset + w - n
+            : edgeRight === "Tab" ? inset + w + n : inset + w
+        const lx = edgeLeft === "Notch" ? inset + n
+            : edgeLeft === "Tab" ? inset - n : inset
 
         return [
-            Qt.point(o, o),
-            Qt.point(o + w / 2, o),
-            Qt.point(o + w, o),
+            Qt.point(inset, inset),
+            Qt.point(inset + w / 2, inset),
+            Qt.point(inset + w, inset),
             Qt.point(rx, mid),
-            Qt.point(o + w, o + h),
-            Qt.point(o + w / 2, o + h),
-            Qt.point(o, o + h),
+            Qt.point(inset + w, inset + h),
+            Qt.point(inset + w / 2, inset + h),
+            Qt.point(inset, inset + h),
             Qt.point(lx, mid)
         ]
     }
 
-    // фон: заливка c2 по контуру
+    function closedContour(inset) {
+        const pts = contourPoints(inset)
+        return pts.concat([pts[0]])
+    }
+
+    // тень-нарост: 3 линии по контуру — внешняя половина уходит на
+    // фон бара (незаметна на c2), внутренняя маскируется заливкой
+    // фона ниже; клип по боксу — c2 не покидает свой вагон
+    Shape {
+        anchors.fill: parent
+        preferredRendererType: Shape.CurveRenderer
+
+        SShapePath {
+            joinStyle: ShapePath.MiterJoin
+            capStyle: ShapePath.FlatCap
+            fillColor: "transparent"
+            strokeColor: Settings.c2
+            strokeWidth: Settings.line * 3
+
+            PathPolyline { path: box.closedContour(Settings.line / 2) }
+        }
+    }
+
+    // фон: заливка c2 с инсетом в линию — маскирует внутреннюю
+    // половину нароста; её край прячется под основной обводкой
     Shape {
         anchors.fill: parent
         preferredRendererType: Shape.CurveRenderer
@@ -148,8 +177,7 @@ Item {
             strokeColor: "transparent"
             strokeWidth: 0
 
-            PathPolyline { path: box.contourPoints()
-                .concat([box.contourPoints()[0]]) }
+            PathPolyline { path: box.closedContour(Settings.line) }
         }
     }
 
@@ -199,28 +227,22 @@ Item {
         }
     }
 
-    // тень: нарост c2 на 3 линии по контуру — лежит на заливке и
-    // контенте (как у SFrame, shadowOverContent), под обводкой.
-    // Клип по боксу: тень не вылезает за границы своего вагона,
-    // поэтому c1 любого соседа на том же уровне всегда выше чужой c2
-    Item {
+    // внутренняя тень: тонкое кольцо c2 шириной в линию, в линию
+    // внутрь от обводки (как shadowOverContent у SFrame) — лежит на
+    // заливке и контенте
+    Shape {
         anchors.fill: parent
-        clip: true
+        preferredRendererType: Shape.CurveRenderer
 
-        Shape {
-            anchors.fill: parent
-            preferredRendererType: Shape.CurveRenderer
+        SShapePath {
+            joinStyle: ShapePath.MiterJoin
+            capStyle: ShapePath.FlatCap
+            fillColor: "transparent"
+            strokeColor: Settings.c2
+            strokeWidth: Settings.line
 
-            SShapePath {
-                joinStyle: ShapePath.MiterJoin
-                capStyle: ShapePath.FlatCap
-                fillColor: "transparent"
-                strokeColor: Settings.c2
-                strokeWidth: Settings.line * 3
-
-                PathPolyline { path: box.contourPoints()
-                    .concat([box.contourPoints()[0]]) }
-            }
+            PathPolyline { path: box.closedContour(
+                Settings.line * 1.5) }
         }
     }
 
@@ -236,8 +258,7 @@ Item {
             strokeColor: box.strokeColor
             strokeWidth: Settings.line
 
-            PathPolyline { path: box.contourPoints()
-                .concat([box.contourPoints()[0]]) }
+            PathPolyline { path: box.closedContour(Settings.line / 2) }
         }
     }
 }
