@@ -195,6 +195,26 @@ Item {
             item.inverted = false
     }
 
+    // внутренняя тень: тонкое кольцо c2 шириной в линию, в линию
+    // внутрь от обводки (как shadowOverContent у SFrame) — видна над
+    // уровнем заливки; сама заливка (c1) рисуется поверх кольца и
+    // доходит до нижней обводки без тёмного зазора
+    Shape {
+        anchors.fill: parent
+        preferredRendererType: Shape.CurveRenderer
+
+        SShapePath {
+            joinStyle: ShapePath.MiterJoin
+            capStyle: ShapePath.FlatCap
+            fillColor: "transparent"
+            strokeColor: Settings.c2
+            strokeWidth: Settings.line
+
+            PathPolyline { path: box.closedContour(
+                Settings.line * 1.5) }
+        }
+    }
+
     // заливка: аналитический многоугольник
     Shape {
         anchors.fill: parent
@@ -224,25 +244,6 @@ Item {
 
             onLoaded: if (item.inverted !== undefined)
                 item.inverted = true
-        }
-    }
-
-    // внутренняя тень: тонкое кольцо c2 шириной в линию, в линию
-    // внутрь от обводки (как shadowOverContent у SFrame) — лежит на
-    // заливке и контенте
-    Shape {
-        anchors.fill: parent
-        preferredRendererType: Shape.CurveRenderer
-
-        SShapePath {
-            joinStyle: ShapePath.MiterJoin
-            capStyle: ShapePath.FlatCap
-            fillColor: "transparent"
-            strokeColor: Settings.c2
-            strokeWidth: Settings.line
-
-            PathPolyline { path: box.closedContour(
-                Settings.line * 1.5) }
         }
     }
 

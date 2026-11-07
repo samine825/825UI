@@ -23,6 +23,12 @@ import "../"
 Item {
     id: r
 
+    // тестовый хук: статические фракции для пиксельного сравнения
+    // (отрицательные — жить на реальных метриках)
+    property real debugCpu: -1
+    property real debugTemp: -1
+    property real debugRam: -1
+
     width: cpuCar.width + tempCar.width + ramCar.width
         - 2 * Settings.line
     height: Settings.barHeight
@@ -115,7 +121,8 @@ Item {
             fillGapLeft: 0
             fillGapRight: root.gapDx
 
-            fillFraction: root.cpuFraction
+            fillFraction: r.debugCpu >= 0
+                ? r.debugCpu : root.cpuFraction
 
             Behavior on fillFraction {
                 NumberAnimation {
@@ -161,7 +168,8 @@ Item {
             fillGapLeft: root.gapDx
             fillGapRight: root.gapDx
 
-            fillFraction: root.tempFraction
+            fillFraction: r.debugTemp >= 0
+                ? r.debugTemp : root.tempFraction
 
             Behavior on fillFraction {
                 NumberAnimation {
@@ -207,7 +215,8 @@ Item {
             fillGapLeft: root.gapDx
             fillGapRight: 0
 
-            fillFraction: root.ramFraction
+            fillFraction: r.debugRam >= 0
+                ? r.debugRam : root.ramFraction
 
             Behavior on fillFraction {
                 NumberAnimation {
