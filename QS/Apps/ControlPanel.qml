@@ -577,7 +577,10 @@ PanelWindow {
             }
         }
 
+        // клики вне contentHolder: невизуальный элемент не должен
+        // включать маску силуэта на контейнере
         MouseArea {
+            parent: tileBox
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             cursorShape: Qt.PointingHandCursor
@@ -663,14 +666,15 @@ PanelWindow {
                     width: parent.width
                     height: parent.height - dateBar.height - Settings.line * 3
 
-                    // Панель основного контента, тень ровно в линию
-                    SPanel {
+                    // Панель основного контента: InfexBox-контейнер
+                    // (дети маскируются силуэтом), внешняя тень — нарост
+                    InfexBox {
                         anchors.fill: parent
+                        edgeLeft: "Flat"
+                        edgeRight: "Flat"
                         cornerCut: Settings.line * 2
-                        strokeColor: Settings.c1
-                        fillColor: Settings.c2
-                        shadow: "outside"
-                        shadowColor: Settings.c2
+                        shadowOuter: true
+                        fillFraction: 0
 
                         Row {
                             anchors.fill: parent
@@ -811,15 +815,18 @@ PanelWindow {
                                         }
                                     }
                                     
-                                    // фон и рамка карточки; обложка и полоса — контент
-                                    // панели: режутся по силуэту и остаются под обводкой
-                                    SPanel {
+                                    // фон и рамка карточки: InfexBox-контейнер —
+                                    // обложка, полоса и кнопки — дети контейнера:
+                                    // режутся по силуэту и остаются под обводкой;
+                                    // кольцо-тень лежит на контенте (как
+                                    // shadow: "inside" у SPanel)
+                                    InfexBox {
                                         anchors.fill: parent
+                                        edgeLeft: "Flat"
+                                        edgeRight: "Flat"
                                         cornerCut: playerTile.cornerCut
-                                        shadow: "inside"
-                                        shadowColor: Settings.c2
-                                        strokeColor: Settings.c1
-                                        fillColor: Settings.c2
+                                        shadowOuter: false
+                                        fillFraction: 0
 
                                         Image {
                                             anchors.fill: parent
@@ -1265,12 +1272,14 @@ PanelWindow {
                                         readonly property int btnCount: 5
                                         readonly property real btnW: width / btnCount
 
-                                        // коробка секции
-                                        SPanel {
+                                        // коробка секции: InfexBox-октагон
+                                        InfexBox {
                                             anchors.fill: parent
+                                            edgeLeft: "Flat"
+                                            edgeRight: "Flat"
                                             cornerCut: Settings.line * 2
-                                            strokeColor: Settings.c1
-                                            fillColor: Settings.c2
+                                            shadowOuter: false
+                                            fillFraction: 0
                                         }
 
                                         // вертикальные перегородки между секторами
@@ -1442,6 +1451,7 @@ PanelWindow {
                                         MouseArea {
                                             id: clearHover
 
+                                            parent: clearAllBtn
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Shapes
+import Qt5Compat.GraphicalEffects
 import ".."
 
 // Пилот универсального инфекс-элемента: форма с типами рёбер,
@@ -37,8 +38,22 @@ import ".."
 // фоном). На стыках нароста нет (shadowOuter*), кольца соседей идут
 // параллельно диагонали стыка; c1 поверх любого c2 обеспечивает
 // порядок отрисовки вагонов.
+//
+// Дети-контейнер (контейнерный режим): элементы, объявленные прямо
+// в боксе, идут в contentHolder — над фоном и базовым контентом,
+// под заливкой и обводкой, маскируются силуэтом бокса (1:1 со
+// SPanel). У боксов без детей (вагоны бара, тайлы с Component)
+// маска не создаётся.
 Item {
     id: box
+
+    // дети-контейнер: маскируются по силуэту бокса
+    default property alias container: contentHolder.data
+
+    // маскировать ли детей по силуэту; тестовый хук
+    // Settings.unmaskedTest снимает маску для снимков в софтверном
+    // рендере
+    property bool contentMasked: true
 
     // контент: Component с корнем, объявляющим property bool inverted
     property Component content: null
@@ -403,6 +418,50 @@ Item {
 
         onLoaded: if (item.inverted !== undefined)
             item.inverted = false
+    }
+
+    // дети-контейнер: режутся по силуэту бокса, не перекрывают
+    // обводку; без детей маска не создаётся
+    Item {
+        id: contentHolder
+
+        anchors.fill: parent
+        layer.enabled: box.contentMasked
+            && !Settings.unmaskedTest
+            && contentHolder.children.length > 0
+        layer.effect: OpacityMask {
+            maskSource: silhouetteSource
+        }
+    }
+
+    // силуэт бокса для маски контента
+    ShaderEffectSource {
+        id: silhouetteSource
+
+        sourceItem: silhouette
+        hideSource: true
+        enabled: box.contentMasked
+            && !Settings.unmaskedTest
+            && contentHolder.children.length > 0
+    }
+
+    Shape {
+        id: silhouette
+
+        visible: silhouetteSource.enabled
+        anchors.fill: parent
+        preferredRendererType: Shape.CurveRenderer
+
+        SShapePath {
+            joinStyle: ShapePath.MiterJoin
+            capStyle: ShapePath.FlatCap
+            fillColor: "white"
+            strokeColor: "transparent"
+            strokeWidth: 0
+
+            PathPolyline { path: box.offsetContour(0,
+                box.edgeLeft, box.edgeRight) }
+        }
     }
 
     // заливка (c1)
