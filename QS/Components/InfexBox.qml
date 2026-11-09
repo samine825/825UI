@@ -290,10 +290,14 @@ Item {
         // съезжают к срезанным углам, сами углы сползают по боковым
         // рёбрам, кончики талии уходят по диагонали в углы октагона.
         // Вырождающихся рёбер нет — острые углы нарастают непрерывно
-        // до последнего кадра. Морф поддержан на Notch/Notch (карточки)
-        if (morph > 0 && edgeL === "Notch" && edgeR === "Notch") {
+        // до последнего кадра. Ветка действует на всех Notch/Notch
+        // (морф 0 поточечно = чистый шестигранник, без срезов —
+        // статичный путь с cornerCut на карточках рвал бы форму при
+        // старте анимации), срез масштабируется морфом
+        if (edgeL === "Notch" && edgeR === "Notch") {
             const tm = Math.max(0, Math.min(1, morph))
-            const c = Math.max(0, cornerCut + shift * (Math.sqrt(2) - 2))
+            const c = Math.max(0, cornerCut * tm
+                + shift * (Math.sqrt(2) - 2))
             const xL = x0 + o + shift * (k + sq)
             const xR = x1 - o - shift * (k + sq)
             const nS = n + shift * sq
