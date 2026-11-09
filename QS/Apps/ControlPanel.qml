@@ -838,6 +838,10 @@ PanelWindow {
                                         shadowOuter: false
                                         fillFraction: 0
 
+                                        // обложка привязана к границам —
+                                        // рамка до края
+                                        sideInset: 0
+
                                         Image {
                                             anchors.fill: parent
                                             asynchronous: true

@@ -279,10 +279,55 @@ Item {
         const o = Settings.line / 2
         const k = 2 * InfexGeometry.notchFrac
         const sq = Math.sqrt(1 + k * k)
-        const n = notchFor(o) * (1 - Math.max(0, Math.min(1, morph)))
+        const n = notchFor(o)
         const t = o + shift
         const b = height - o - shift
         const mid = height / 2
+
+        // морф (талия → октагон): восьмиточечный контур в семантике
+        // бывшего MorphCard — линейная интерполяция hex ↔ oct по тем
+        // же слотам. Вершины едут по своим рёбрам: середины верха/низа
+        // съезжают к срезанным углам, сами углы сползают по боковым
+        // рёбрам, кончики талии уходят по диагонали в углы октагона.
+        // Вырождающихся рёбер нет — острые углы нарастают непрерывно
+        // до последнего кадра. Морф поддержан на Notch/Notch (карточки)
+        if (morph > 0 && edgeL === "Notch" && edgeR === "Notch") {
+            const tm = Math.max(0, Math.min(1, morph))
+            const c = Math.max(0, cornerCut + shift * (Math.sqrt(2) - 2))
+            const xL = x0 + o + shift * (k + sq)
+            const xR = x1 - o - shift * (k + sq)
+            const nS = n + shift * sq
+            const w = xR - xL
+
+            const hex = [
+                Qt.point(xL, t),
+                Qt.point(xL + w / 2, t),
+                Qt.point(xR, t),
+                Qt.point(xR - nS, mid),
+                Qt.point(xR, b),
+                Qt.point(xL + w / 2, b),
+                Qt.point(xL, b),
+                Qt.point(xL + nS, mid)
+            ]
+            const oct = [
+                Qt.point(xL + c, t),
+                Qt.point(xR - c, t),
+                Qt.point(xR, t + c),
+                Qt.point(xR, b - c),
+                Qt.point(xR - c, b),
+                Qt.point(xL + c, b),
+                Qt.point(xL, b - c),
+                Qt.point(xL, t + c)
+            ]
+
+            const pts = []
+            for (let i = 0; i < 8; i++)
+                pts.push(Qt.point(
+                    hex[i].x + (oct[i].x - hex[i].x) * tm,
+                    hex[i].y + (oct[i].y - hex[i].y) * tm))
+
+            return pts
+        }
 
         let lx, lTip
         if (edgeL === "Notch") {
@@ -320,10 +365,9 @@ Item {
         ]
 
         // срез угла на текущем сдвиге: как у CutContour SPanel, фаска
-        // 45° — параллельный перенос меняет срез на shift·(√2 − 2);
-        // сам срез растёт с морфом (углы острые до морфа)
-        const c = Math.max(0, cornerCut * morph
-            + shift * (Math.sqrt(2) - 2))
+        // 45° — параллельный перенос меняет срез на shift·(√2 − 2).
+        // Статичные элементы (morph = 0) получают срез всегда
+        const c = Math.max(0, cornerCut + shift * (Math.sqrt(2) - 2))
         if (c <= 0)
             return pts
 
