@@ -111,6 +111,10 @@ Item {
         InfexBox {
             id: cpuCar
 
+            // рамка до края бокса: стыки совпадают поточечно
+            // только при нулевой узкости
+            sideInset: 0
+
             shadowOuterRight: false
 
             x: 0
@@ -159,6 +163,10 @@ Item {
         // CPU), справа Notch ===
         InfexBox {
             id: tempCar
+
+            // рамка до края бокса: стыки совпадают поточечно
+            // только при нулевой узкости
+            sideInset: 0
 
             shadowOuterLeft: false
             shadowOuterRight: false
@@ -209,6 +217,10 @@ Item {
         // выемка фрейма ===
         InfexBox {
             id: ramCar
+
+            // рамка до края бокса: стыки совпадают поточечно
+            // только при нулевой узкости
+            sideInset: 0
 
             shadowOuterLeft: false
 

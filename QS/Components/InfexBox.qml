@@ -61,8 +61,31 @@ Item {
     property string edgeLeft: "Notch"    // Notch | Tab | Flat
     property string edgeRight: "Notch"
 
+    // узкость: видимая рамка уже бокса на line/2 слева и справа
+    // (единый дефолт для всех боксов — рамка не доходит до границ
+    // бокса, потребители раздают боксы с запасом на пол-линии с
+    // боков, как тайлы грида). Ноль — рамка до края бокса: ставится
+    // только там, где рамка обязана доходить до границы — вагоны
+    // паровозика (стыки поточечно) и контейнеры, чьи дети привязаны
+    // к границам бокса
+    property real sideInset: Settings.line / 2
+
+    // x левой/правой грани видимой рамки
+    readonly property real x0: sideInset
+    readonly property real x1: width - sideInset
+
+    // ширина видимой рамки
+    readonly property real innerWidth: x1 - x0
+
     // срез углов: 0 — чистое шестигранное семейство, > 0 — октагон
     property real cornerCut: 0
+
+    // морф шестигранник → восьмиугольник: 0 — талия на рёбрах на
+    // полную глубину notch, углы острые; 1 — рёбра плоские, углы
+    // срезаны на cornerCut. Глубина талии масштабируется на (1−morph),
+    // срез — на morph: обе границы едут монотонно, контур не волнуется,
+    // конечные состояния совпадают с отдельными cornerCut/талией
+    property real morph: 0
 
     // ось заливки: "vertical" — снизу вверх, "horizontal" — слева
     // направо (зазоры fillGap* поддерживаются только на вертикальной)
@@ -104,9 +127,9 @@ Item {
     // x правой кромки заливки (горизонтальная ось): от кромки кольца
     // слева до кромки кольца справа — зеркально fillLevel
     readonly property real fillX:
-        Settings.line
+        x0 + Settings.line
         + Math.max(0, Math.min(1, fillFraction))
-            * (width - 2 * Settings.line)
+            * (innerWidth - 2 * Settings.line)
 
     // y бокового ребра на высоте y (в координатах бокса):
     // линейно от нуля в углах до ±notch на середине высоты
@@ -116,7 +139,7 @@ Item {
         const top = o
         const mid = o + h / 2
 
-        const base = atLeft ? o : width - o
+        const base = atLeft ? x0 + o : x1 - o
         const k = edge === "Notch" ? (atLeft ? notch : -notch)
             : edge === "Tab" ? (atLeft ? -notch : notch) : 0
 
@@ -151,8 +174,8 @@ Item {
             pts.push(Qt.point(
                 sideX(edgeLeft, mid, true) + fillGapLeft, mid))
 
-        pts.push(Qt.point(o + fillGapLeft, o + h))
-        pts.push(Qt.point(width - o - fillGapRight, o + h))
+        pts.push(Qt.point(x0 + o + fillGapLeft, o + h))
+        pts.push(Qt.point(x1 - o - fillGapRight, o + h))
 
         if (lv < mid)
             pts.push(Qt.point(
@@ -256,33 +279,33 @@ Item {
         const o = Settings.line / 2
         const k = 2 * InfexGeometry.notchFrac
         const sq = Math.sqrt(1 + k * k)
-        const n = notchFor(o)
+        const n = notchFor(o) * (1 - Math.max(0, Math.min(1, morph)))
         const t = o + shift
         const b = height - o - shift
         const mid = height / 2
 
         let lx, lTip
         if (edgeL === "Notch") {
-            lx = o + shift * (k + sq)
-            lTip = o + n + shift * sq
+            lx = x0 + o + shift * (k + sq)
+            lTip = x0 + o + n + shift * sq
         } else if (edgeL === "Tab") {
-            lx = o + shift * (sq - k)
-            lTip = o - n + shift * sq
+            lx = x0 + o + shift * (sq - k)
+            lTip = x0 + o - n + shift * sq
         } else {
-            lx = o + shift
-            lTip = o + shift
+            lx = x0 + o + shift
+            lTip = x0 + o + shift
         }
 
         let rx, rTip
         if (edgeR === "Notch") {
-            rx = width - o - shift * (k + sq)
-            rTip = width - o - n - shift * sq
+            rx = x1 - o - shift * (k + sq)
+            rTip = x1 - o - n - shift * sq
         } else if (edgeR === "Tab") {
-            rx = width - o - shift * (sq - k)
-            rTip = width - o + n - shift * sq
+            rx = x1 - o - shift * (sq - k)
+            rTip = x1 - o + n - shift * sq
         } else {
-            rx = width - o - shift
-            rTip = width - o - shift
+            rx = x1 - o - shift
+            rTip = x1 - o - shift
         }
 
         const pts = [
@@ -297,8 +320,10 @@ Item {
         ]
 
         // срез угла на текущем сдвиге: как у CutContour SPanel, фаска
-        // 45° — параллельный перенос меняет срез на shift·(√2 − 2)
-        const c = Math.max(0, cornerCut + shift * (Math.sqrt(2) - 2))
+        // 45° — параллельный перенос меняет срез на shift·(√2 − 2);
+        // сам срез растёт с морфом (углы острые до морфа)
+        const c = Math.max(0, cornerCut * morph
+            + shift * (Math.sqrt(2) - 2))
         if (c <= 0)
             return pts
 
@@ -411,7 +436,7 @@ Item {
     // x — за левой вершиной ребра: у Notch она врезается внутрь на
     // notch, у Tab торчит наружу (контент в самом боксе)
     Loader {
-        x: Settings.line / 2
+        x: box.x0 + Settings.line / 2
             + (box.edgeLeft === "Notch" ? box.notch : 0)
         y: Settings.line / 2
         sourceComponent: box.content
@@ -490,7 +515,7 @@ Item {
         clip: true
 
         Loader {
-            x: Settings.line / 2
+            x: box.x0 + Settings.line / 2
                 + (box.edgeLeft === "Notch" ? box.notch : 0)
             y: box.fillAxis === "horizontal"
                 ? Settings.line / 2

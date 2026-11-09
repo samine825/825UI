@@ -476,7 +476,7 @@ PanelWindow {
 
                     property bool inverted: false
 
-                    width: box.width - Settings.line
+                    width: box.innerWidth - Settings.line
                         - 2 * box.notch
                     height: box.height - Settings.line
 
@@ -563,7 +563,7 @@ PanelWindow {
 
                 property bool inverted: false
 
-                width: tileBox.width - Settings.line
+                width: tileBox.innerWidth - Settings.line
                 height: tileBox.height - Settings.line
 
                 VIcon {
@@ -627,7 +627,8 @@ PanelWindow {
                 // --- Большой бар с датой (в стиле табов из настроек, но без табов) ---
                 Item {
                     id: dateBar
-                    width: parent.width - (InfexGeometry.tipMult * Settings.line / 2)
+                    // узкость — дефолт InfexBox (sideInset), бокс на всю ширину
+                    width: parent.width
                     height: Settings.barHeight
                     anchors.horizontalCenter: parent.horizontalCenter
 
@@ -637,6 +638,8 @@ PanelWindow {
 
                     // тело бара: InfexBox с выемками-талией и тенью-наростом
                     InfexBox {
+                        id: dateBox
+
                         anchors.fill: parent
                         edgeLeft: "Notch"
                         edgeRight: "Notch"
@@ -645,7 +648,7 @@ PanelWindow {
                             Item {
                                 property bool inverted: false
 
-                                width: dateBar.width - Settings.line
+                                width: dateBox.innerWidth - Settings.line
                                     - 2 * dateBar.point
                                 height: dateBar.height - Settings.line
 
@@ -675,6 +678,10 @@ PanelWindow {
                         cornerCut: Settings.line * 2
                         shadowOuter: true
                         fillFraction: 0
+
+                        // контейнер: дети привязаны к границам бокса,
+                        // рамка до края
+                        sideInset: 0
 
                         Row {
                             anchors.fill: parent
@@ -718,9 +725,10 @@ PanelWindow {
                                     // совпадают с кромками плиток (у них срез углов)
                                     // слайдер занимает свою зону целиком
                                     // (3 клетки + 2 зазора), рамка = зоне
-                                    x: leftPart.cellX(0)
+                                    x: leftPart.cellX(0) - Settings.line / 2
                                     y: leftPart.cellY(0) - Settings.line / 2
                                     width: leftPart.cell * 3 + leftPart.gap * 2
+                                        + Settings.line
                                     height: leftPart.cell + Settings.line
 
                                     value: root.volumeMuted
@@ -746,9 +754,10 @@ PanelWindow {
                                     // совпадают с кромками плиток (у них срез углов)
                                     // слайдер занимает свою зону целиком
                                     // (3 клетки + 2 зазора), рамка = зоне
-                                    x: leftPart.cellX(0)
+                                    x: leftPart.cellX(0) - Settings.line / 2
                                     y: leftPart.cellY(1) - Settings.line / 2
                                     width: leftPart.cell * 3 + leftPart.gap * 2
+                                        + Settings.line
                                     height: leftPart.cell + Settings.line
 
                                     available: brightnessCtl.available
@@ -766,9 +775,10 @@ PanelWindow {
                                     // совпадают с кромками плиток (у них срез углов)
                                     // слайдер занимает свою зону целиком
                                     // (3 клетки + 2 зазора), рамка = зоне
-                                    x: leftPart.cellX(0)
+                                    x: leftPart.cellX(0) - Settings.line / 2
                                     y: leftPart.cellY(2) - Settings.line / 2
                                     width: leftPart.cell * 3 + leftPart.gap * 2
+                                        + Settings.line
                                     height: leftPart.cell + Settings.line
 
                                     available: root.sourceAudio !== null
@@ -1157,9 +1167,9 @@ PanelWindow {
                                     // Wi-Fi и Bluetooth 1x1 — первые клетки
                                     // ряда пустышек, открывают свои колёса
                                     Tile {
-                                        x: leftPart.cellX(0) - Settings.line / 2
+                                        x: leftPart.cellX(0) - Settings.line
                                         y: leftPart.cellY(3) - Settings.line / 2
-                                        width: leftPart.cell + Settings.line
+                                        width: leftPart.cell + Settings.line * 2
                                         height: leftPart.cell + Settings.line
                                         iconStroke: Glyphs.iconWifi
                                             + Glyphs.iconWifiDot
@@ -1179,9 +1189,9 @@ PanelWindow {
                                     }
 
                                     Tile {
-                                        x: leftPart.cellX(1) - Settings.line / 2
+                                        x: leftPart.cellX(1) - Settings.line
                                         y: leftPart.cellY(3) - Settings.line / 2
-                                        width: leftPart.cell + Settings.line
+                                        width: leftPart.cell + Settings.line * 2
                                         height: leftPart.cell + Settings.line
                                         iconStroke: Glyphs.iconBluetooth
 
@@ -1224,9 +1234,9 @@ PanelWindow {
                                         delegate: Tile {
                                             required property var modelData
 
-                                            x: leftPart.cellX(modelData.col) - Settings.line / 2
+                                            x: leftPart.cellX(modelData.col) - Settings.line
                                             y: leftPart.cellY(modelData.row) - Settings.line / 2
-                                            width: leftPart.cell + Settings.line
+                                            width: leftPart.cell + Settings.line * 2
                                             height: leftPart.cell + Settings.line
                                             iconStroke: modelData.icon
 
@@ -1242,11 +1252,10 @@ PanelWindow {
                                     // грида: залитый колокольчик с
                                     // перечёркиванием = попапы скрыты
                                     Tile {
-                                        x: leftPart.cellX(1)
-                                            - Settings.line / 2
+                                        x: leftPart.cellX(1) - Settings.line
                                         y: leftPart.cellY(4)
                                             - Settings.line / 2
-                                        width: leftPart.cell + Settings.line
+                                        width: leftPart.cell + Settings.line * 2
                                         height: leftPart.cell + Settings.line
                                         iconStroke: Settings.dnd
                                             ? Glyphs.iconBellOff
@@ -1280,6 +1289,10 @@ PanelWindow {
                                             cornerCut: Settings.line * 2
                                             shadowOuter: false
                                             fillFraction: 0
+
+                                            // дети (перегородки, иконки)
+                                            // по всей ширине — рамка до края
+                                            sideInset: 0
                                         }
 
                                         // вертикальные перегородки между секторами
@@ -1415,7 +1428,7 @@ PanelWindow {
                                         anchors.right: parent.right
                                         anchors.verticalCenter: parent.verticalCenter
                                         width: clearAllLabel.implicitWidth
-                                            + Settings.line * 5
+                                            + Settings.line * 6
                                         height: Settings.textLg
                                         edgeLeft: "Flat"
                                         edgeRight: "Flat"
@@ -1431,7 +1444,7 @@ PanelWindow {
                                             Item {
                                                 property bool inverted: false
 
-                                                width: clearAllBtn.width
+                                                width: clearAllBtn.innerWidth
                                                     - Settings.line
                                                 height: clearAllBtn.height
                                                     - Settings.line
@@ -1493,8 +1506,12 @@ PanelWindow {
                                         Repeater {
                                             model: Notifications.history
 
-                                            delegate: MorphCard {
+                                            delegate: InfexBox {
                                                 id: card
+
+                                                edgeLeft: "Notch"
+                                                edgeRight: "Notch"
+                                                shadowOuter: false
 
                                                 required property var modelData
                                                 required property int index
@@ -1599,11 +1616,27 @@ PanelWindow {
                                                     }
                                                 }
 
-                                                // контент: обычные поля,
-                                                // талию добавляет contentHolder
+                                                // контент: обычные поля; бока
+                                                // расступаются перед талией
+                                                // (талия уходит с морфом)
                                                 Item {
                                                     anchors.fill: parent
-                                                    anchors.margins: Settings.line * 2
+                                                    anchors.topMargin:
+                                                        Settings.line * 2
+                                                    anchors.bottomMargin:
+                                                        Settings.line * 2
+                                                    anchors.leftMargin:
+                                                        card.sideInset
+                                                        + Settings.line / 2
+                                                        + card.notch
+                                                        * (1 - card.morph)
+                                                        + Settings.line * 2
+                                                    anchors.rightMargin:
+                                                        card.sideInset
+                                                        + Settings.line / 2
+                                                        + card.notch
+                                                        * (1 - card.morph)
+                                                        + Settings.line * 2
 
                                                     Image {
                                                         id: thumb
@@ -1703,7 +1736,13 @@ PanelWindow {
                                                 Item {
                                                     anchors.top: parent.top
                                                     anchors.right: parent.right
-                                                    anchors.margins: Settings.line / 2
+                                                    anchors.topMargin:
+                                                        Settings.line / 2
+                                                    anchors.rightMargin:
+                                                        card.sideInset
+                                                        + Settings.line
+                                                        + card.notch
+                                                        * (1 - card.morph)
                                                     width: Settings.textSm
                                                     height: width
 
