@@ -300,7 +300,10 @@ Item {
                 + shift * (Math.sqrt(2) - 2))
             const xL = x0 + o + shift * (k + sq)
             const xR = x1 - o - shift * (k + sq)
-            const nS = n + shift * sq
+            // сдвиг уже вошёл в xL/xR; кончик отстоит от угла на
+            // n − s·k (иначе сдвиг применялся бы дважды и кольцо
+            // уезжало)
+            const nS = n - shift * k
             const w = xR - xL
 
             const hex = [
@@ -408,6 +411,18 @@ Item {
 
         if (shadowOuterLeft && shadowOuterRight)
             return [pts.concat([pts[0]]), []]
+
+        // морф-раскладка 8 точек: [0] срез верх-лево, [1] верх-право,
+        // [2..4] право (срез, кончик, срез), [5..6] низ, [7] лево
+        if (morph > 0 && edgeLeft === "Notch" && edgeRight === "Notch") {
+            if (shadowOuterLeft)
+                return [[pts[4], pts[5], pts[6], pts[7],
+                    pts[0], pts[1]], []]
+            if (shadowOuterRight)
+                return [[pts[0], pts[1], pts[2], pts[3],
+                    pts[4], pts[5]], []]
+            return [[pts[0], pts[1]], [pts[5], pts[6]]]
+        }
 
         if (pts.length === 12) {
             if (shadowOuterLeft)
