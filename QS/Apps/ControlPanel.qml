@@ -436,8 +436,9 @@ PanelWindow {
 
     // === ИНЛАЙН-КОМПОНЕНТЫ ===
 
-    // Слайдр в стиле уведомлений: два слоя одного контента, верхний
-    // обрезан по уровню заполнения, цвета внутри заполнения инвертированы.
+    // Слайдр: InfexBox с горизонтальной заливкой слева направо.
+    // Два экземпляра контента (базовый и инвертированный в полосе
+    // заливки) даёт сам InfexBox — ручной клип-слой больше не нужен
     component SliderTile: Item {
         id: sliderTile
 
@@ -456,56 +457,36 @@ PanelWindow {
         // выключенный слайдер прячется целиком
         visible: available
 
-        // базовый слой: заливка — ребёнок рамки, обводка z1 всегда поверх
-        SFrame {
-            anchors.fill: parent
-            fillColor: Settings.c2
-            strokeColor: Settings.c1
+        InfexBox {
+            id: box
 
-            VIcon {
-                visible: sliderTile.showIcon
-                anchors.centerIn: parent
-                width: parent.height * sliderTile.iconScale
-                height: width
-                lineColor: Settings.c1
-                fillPath: sliderTile.iconFill
-                strokePath: sliderTile.iconStroke
+            anchors.fill: parent
+            edgeLeft: "Notch"
+            edgeRight: "Notch"
+            fillAxis: "horizontal"
+            fillFraction: Math.max(0, Math.min(1, sliderTile.value))
+
+            Behavior on fillFraction {
+                NumberAnimation { duration: Settings.animInstant }
             }
 
-            // слой заполнения (клип по уровню, инвертированные цвета)
-            Item {
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.left: parent.left
-                height: parent.height
-                width: parent.width * Math.max(0, Math.min(1, sliderTile.value))
-                clip: true
-
-                Behavior on width {
-                    NumberAnimation { duration: Settings.animInstant }
-                }
-
+            content: Component {
                 Item {
-                    width: sliderTile.width
-                    height: sliderTile.height
+                    id: iconHolder
 
-                    // заливка c1 с зазором-тенью внутри: отделяет заливку
-                    // от обводки слайдера ровно одной линией и на прямых,
-                    // и на косых гранях
-                    SFrame {
-                        anchors.fill: parent
-                        fillColor: Settings.c1
-                        strokeColor: "transparent"
-                        shadow: "inside"
-                        shadowColor: Settings.c2
-                        fillInset: -Settings.line / 2
-                    }
+                    property bool inverted: false
+
+                    width: box.width - Settings.line
+                        - 2 * box.notch
+                    height: box.height - Settings.line
 
                     VIcon {
                         visible: sliderTile.showIcon
                         anchors.centerIn: parent
                         width: parent.height * sliderTile.iconScale
                         height: width
-                        lineColor: Settings.c2
+                        lineColor: iconHolder.inverted
+                            ? Settings.c2 : Settings.c1
                         fillPath: sliderTile.iconFill
                         strokePath: sliderTile.iconStroke
                     }
@@ -554,6 +535,62 @@ PanelWindow {
         }
     }
 
+    // Плитка-переключатель: InfexBox-октагон (плоские рёбра и срезы
+    // углов, как CutContour у SPanel). Активная — полная заливка c1,
+    // кольцо-тень лежит на заливке, иконка инвертируется полосой
+    // заливки. Левый клик — activated, правый — secondaryActivated
+    component Tile: InfexBox {
+        id: tileBox
+
+        property string iconStroke: ""
+        property bool active: false
+        property real iconScale: 0.55
+
+        signal activated()
+        signal secondaryActivated()
+
+        visible: enabled
+
+        edgeLeft: "Flat"
+        edgeRight: "Flat"
+        cornerCut: Settings.line * 2
+        fillFraction: tileBox.active ? 1 : 0
+        shadowOuter: false
+
+        content: Component {
+            Item {
+                id: iconHolder
+
+                property bool inverted: false
+
+                width: tileBox.width - Settings.line
+                height: tileBox.height - Settings.line
+
+                VIcon {
+                    anchors.centerIn: parent
+                    width: parent.height * tileBox.iconScale
+                    height: width
+                    lineColor: iconHolder.inverted
+                        ? Settings.c2 : Settings.c1
+                    strokePath: tileBox.iconStroke
+                }
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            cursorShape: Qt.PointingHandCursor
+
+            onClicked: (mouse) => {
+                if (mouse.button === Qt.RightButton)
+                    tileBox.secondaryActivated()
+                else
+                    tileBox.activated()
+            }
+        }
+    }
+
     MouseArea {
         anchors.fill: parent
         onClicked: root.hide()
@@ -595,18 +632,28 @@ PanelWindow {
                     property real tabBorderWidth: Settings.line
                     property real blackOutlineWidth: Settings.line
 
-                    // тело бара: гранёный фрейм с тенью
-                    SFrame {
+                    // тело бара: InfexBox с выемками-талией и тенью-наростом
+                    InfexBox {
                         anchors.fill: parent
-                    }
+                        edgeLeft: "Notch"
+                        edgeRight: "Notch"
 
-                    // Текст даты внутри бара
-                    SText {
-                        id: date
-                        anchors.centerIn: parent
-                        text: "null"
-                        color: Settings.c1
-                        font.bold: true
+                        content: Component {
+                            Item {
+                                property bool inverted: false
+
+                                width: dateBar.width - Settings.line
+                                    - 2 * dateBar.point
+                                height: dateBar.height - Settings.line
+
+                                SText {
+                                    anchors.centerIn: parent
+                                    text: "null"
+                                    color: Settings.c1
+                                    font.bold: true
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -1102,7 +1149,7 @@ PanelWindow {
 
                                     // Wi-Fi и Bluetooth 1x1 — первые клетки
                                     // ряда пустышек, открывают свои колёса
-                                    STile {
+                                    Tile {
                                         x: leftPart.cellX(0) - Settings.line / 2
                                         y: leftPart.cellY(3) - Settings.line / 2
                                         width: leftPart.cell + Settings.line
@@ -1124,7 +1171,7 @@ PanelWindow {
                                         }
                                     }
 
-                                    STile {
+                                    Tile {
                                         x: leftPart.cellX(1) - Settings.line / 2
                                         y: leftPart.cellY(3) - Settings.line / 2
                                         width: leftPart.cell + Settings.line
@@ -1167,7 +1214,7 @@ PanelWindow {
                                             { col: 0, row: 4, app: "camera",     icon: Glyphs.iconCamera }
                                         ]
 
-                                        delegate: STile {
+                                        delegate: Tile {
                                             required property var modelData
 
                                             x: leftPart.cellX(modelData.col) - Settings.line / 2
@@ -1187,7 +1234,7 @@ PanelWindow {
                                     // режим без уведомлений — виджет
                                     // грида: залитый колокольчик с
                                     // перечёркиванием = попапы скрыты
-                                    STile {
+                                    Tile {
                                         x: leftPart.cellX(1)
                                             - Settings.line / 2
                                         y: leftPart.cellY(4)
@@ -1342,8 +1389,18 @@ PanelWindow {
                                     }
 
                                     // кнопка в стиле плиток: скосы,
-                                    // спокойная заливка, подсветка по ховеру
-                                    SPanel {
+                                    // заливка по ховеру, текст инвертируется
+                                    // (скрытый SText — точный источник ширины,
+                                    // текст инстанцируется внутри Component)
+                                    SText {
+                                        id: clearAllLabel
+
+                                        visible: false
+                                        text: "Clear all"
+                                        font.pixelSize: Settings.textXs
+                                    }
+
+                                    InfexBox {
                                         id: clearAllBtn
 
                                         anchors.right: parent.right
@@ -1351,23 +1408,35 @@ PanelWindow {
                                         width: clearAllLabel.implicitWidth
                                             + Settings.line * 5
                                         height: Settings.textLg
+                                        edgeLeft: "Flat"
+                                        edgeRight: "Flat"
                                         cornerCut: Settings.line
-                                        strokeColor: Settings.c1
+                                        fillFraction:
+                                            clearAllBtn.hot ? 1 : 0
+                                        shadowOuter: false
 
                                         property bool hot:
                                             clearHover.containsMouse
 
-                                        fillColor: hot
-                                            ? Settings.c1 : Settings.c2
+                                        content: Component {
+                                            Item {
+                                                property bool inverted: false
 
-                                        SText {
-                                            id: clearAllLabel
+                                                width: clearAllBtn.width
+                                                    - Settings.line
+                                                height: clearAllBtn.height
+                                                    - Settings.line
 
-                                            anchors.centerIn: parent
-                                            text: "Clear all"
-                                            color: clearAllBtn.hot
-                                                ? Settings.c2 : Settings.c1
-                                            font.pixelSize: Settings.textXs
+                                                SText {
+                                                    anchors.centerIn: parent
+                                                    text: "Clear all"
+                                                    color: inverted
+                                                        ? Settings.c2
+                                                        : Settings.c1
+                                                    font.pixelSize:
+                                                        Settings.textXs
+                                                }
+                                            }
                                         }
 
                                         MouseArea {

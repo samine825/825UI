@@ -2,36 +2,41 @@ import QtQuick
 import QtQuick.Shapes
 import ".."
 
-// Пилот универсального инфекс-элемента: форма с типами рёбер и
-// заливкой снизу вверх с инверсией контента. Проверяется на
-// SystemStats (паровозик из трёх машин), прежде чем раскатывать
-// на слайдеры и тайлы.
+// Пилот универсального инфекс-элемента: форма с типами рёбер,
+// срезами углов и заливкой (снизу вверх или слева направо) с
+// инверсией контента. Проверен на SystemStats (паровозик из трёх
+// машин), раскатывается на виджеты панели управления.
 //
 // Рёбра: "Notch" — впуклое (выемка внутрь на notch, как у SFrame),
 // "Tab" — выпуклое (выступ наружу на notch), "Flat" — прямое.
-// Глубина — чистая функция высоты, поэтому стык двух машин
-// (Notch правого ребра левой + Tab левого ребра правой) совпадает
-// поточечно без ручной подгонки: боксы соседей перекрываются на
-// line (потребитель расширяет каждый бокс на line и сдвигает на
-// пол-линии), и обводки стыка ложатся на одну линию.
+// cornerCut > 0 срезает углы по смежным рёбрам (октагон, как
+// CutContour у SPanel; при параллельном сдвиге контура срез меняется
+// на shift·(√2 − 2)). Глубина выемки — чистая функция высоты,
+// поэтому стык двух машин (Notch правого ребра левой + Tab левого
+// ребра правой) совпадает поточечно без ручной подгонки: боксы
+// соседей перекрываются на line (потребитель расширяет каждый бокс
+// на line и сдвигает на пол-линии), и обводки стыка ложатся на одну
+// линию.
 //
 // Контент — Component: он инстанцируется дважды. Базовый экземпляр
 // (inverted: false) лежит под заливкой, полосовой экземпляр
-// (inverted: true) — над ней в клип-полосе от уровня заливки до
-// дна; корень компонента обязан объявить property bool inverted
-// и собственные width/height (Loader позиционирует контент на
-// пол-линии от угла и не перекрывает его размеры). Заливка —
-// аналитический многоугольник по боковым рёбрам (маски и шейдеры
-// не нужны — рендерится и в софтверном бэкенде).
+// (inverted: true) — над ней в клип-полосе заливки (при
+// fillAxis "vertical" — от уровня до дна, при "horizontal" — от
+// левого ребра до кромки); корень компонента обязан объявить
+// property bool inverted и собственные width/height. Полосовой
+// экземпляр создаётся только при непустой заливке. Заливка —
+// аналитический многоугольник: при срезах и горизонтальной оси —
+// отсечение контура полуплоскостью уровня, при вертикальной оси без
+// срезов — явный построитель (пиксельно свернён со старым блоком
+// SystemStats, включая шевронные зазоры fillGap*).
 //
-// Внутренняя тень — тонкое кольцо c2: истинный параллельный сдвиг
-// контура внутрь на линию (та же семантика shift, что у HexContour
-// SFrame: косые грани смещаются по перпендикуляру через
-// shift·√(1+k²)), поэтому кольцо повторяет шевроны рёбер, а не
-// сползает в прямоугольник. На стыке кольца соседей идут параллельно
-// диагонали стыка на линию с каждой стороны — c1 поверх c2 всегда
-// сверху порядком отрисовки вагонов. Слои — 1:1 со SFrame: фон,
-// базовый контент, заливка, полосовой контент, кольцо, обводка.
+// Тени: внутреннее кольцо c2 (линия, истинный параллельный сдвиг
+// контура на линию — семантика HexContour SFrame) поверх заливки и
+// контента; внешний нарост 3 линии по силуэтным рёбрам под фоном
+// (внешние полторы линии видны, внутренняя половина маскируется
+// фоном). На стыках нароста нет (shadowOuter*), кольца соседей идут
+// параллельно диагонали стыка; c1 поверх любого c2 обеспечивает
+// порядок отрисовки вагонов.
 Item {
     id: box
 
@@ -41,22 +46,31 @@ Item {
     property string edgeLeft: "Notch"    // Notch | Tab | Flat
     property string edgeRight: "Notch"
 
-    // заливка снизу вверх: доля видимой высоты между внутренними
-    // гранями обводок (0 — пусто, 1 — до внутренней грани верхней)
+    // срез углов: 0 — чистое шестигранное семейство, > 0 — октагон
+    property real cornerCut: 0
+
+    // ось заливки: "vertical" — снизу вверх, "horizontal" — слева
+    // направо (зазоры fillGap* поддерживаются только на вертикальной)
+    property string fillAxis: "vertical"
+
+    // заливка: доля между внутренними гранями обводок (0 — пусто,
+    // 1 — до кромки кольца)
     property real fillFraction: 0
 
     // горизонтальный отступ кромки заливки от левого/правого ребра
+    // (шевронный зазор у стыков паровозика)
     property real fillGapLeft: 0
     property real fillGapRight: 0
 
     property color fillColor: Settings.c1
     property color strokeColor: Settings.c1
 
-    // внешняя тень (нарост) на боковых рёбрах: у одиночного бокса
-    // пояс идёт по всему контуру; у вагонов паровозика стыковые
-    // стороны выключаются — пояс силуэтного торца заканчивается в
-    // углу стыка, пояса соседей стыкуются там встык, как у цельного
-    // SFrame-фрейма (у него стыки внутренние и нароста на них нет)
+    // внешняя тень (нарост) вообще и на боковых рёбрах: у одиночного
+    // бокса пояс идёт по всему контуру; у вагонов паровозика
+    // shadowOuterLeft/Right выключаются — пояс силуэтного торца
+    // заканчивается в углу стыка, пояса соседей стыкуются там встык,
+    // как у цельного SFrame-фрейма (у него стыки внутренние)
+    property bool shadowOuter: true
     property bool shadowOuterLeft: true
     property bool shadowOuterRight: true
 
@@ -66,13 +80,20 @@ Item {
 
     readonly property real notch: notchFor(Settings.line / 2)
 
-    // y верхней кромки заливки
+    // y верхней кромки заливки (вертикальная ось)
     readonly property real fillLevel:
         height - Settings.line
         - Math.max(0, Math.min(1, fillFraction))
             * (height - 2 * Settings.line)
 
-    // x бокового ребра на высоте y (в координатах бокса):
+    // x правой кромки заливки (горизонтальная ось): от кромки кольца
+    // слева до кромки кольца справа — зеркально fillLevel
+    readonly property real fillX:
+        Settings.line
+        + Math.max(0, Math.min(1, fillFraction))
+            * (width - 2 * Settings.line)
+
+    // y бокового ребра на высоте y (в координатах бокса):
     // линейно от нуля в углах до ±notch на середине высоты
     function sideX(edge, y, atLeft) {
         const o = Settings.line / 2
@@ -90,10 +111,11 @@ Item {
         return base + k * (top + h - y) / (mid - top)
     }
 
-    // многоугольник заливки ниже уровня: верхняя кромка — уровень
-    // с отступами fillGap*, бока — рёбра с теми же отступами,
-    // низ — по внутреннему прямоугольнику
-    function fillPoints() {
+    // заливка на вертикальной оси без срезов: явный построитель —
+    // верхняя кромка — уровень с отступами fillGap*, бока — рёбра с
+    // теми же отступами (шевронный зазор), низ — по внутреннему
+    // прямоугольнику. Пиксельно сверен со старым блоком SystemStats
+    function fillPointsPlain() {
         if (fillFraction <= 0)
             return []
 
@@ -127,6 +149,80 @@ Item {
         return pts
     }
 
+    // отсечение полигона полуплоскостью plane = [a, b, c]:
+    // остаются точки с a·x + b·y >= c
+    function clipPlane(pts, plane) {
+        const a = plane[0]
+        const b = plane[1]
+        const c = plane[2]
+        const out = []
+        const n = pts.length
+
+        for (let i = 0; i < n; i++) {
+            const p = pts[i]
+            const q = pts[(i + 1) % n]
+            const dp = a * p.x + b * p.y - c
+            const dq = a * q.x + b * q.y - c
+
+            if (dp >= 0)
+                out.push(p)
+
+            if ((dp >= 0) !== (dq >= 0)) {
+                const t = dp / (dp - dq)
+                out.push(Qt.point(
+                    p.x + (q.x - p.x) * t,
+                    p.y + (q.y - p.y) * t))
+            }
+        }
+
+        return out
+    }
+
+    // полуплоскость с границей через прямую p→q, содержащая inside
+    function planeAt(p, q, inside) {
+        const a = q.y - p.y
+        const b = p.x - q.x
+        const c = a * p.x + b * p.y
+
+        if (a * inside.x + b * inside.y >= c)
+            return [a, b, c]
+
+        return [-a, -b, -c]
+    }
+
+    // многоугольник заливки: контур бокса, отсечённый кромкой уровня.
+    // Горизонтальная ось и срезы углов — общее отсечение; вертикальная
+    // без срезов — явный построитель выше (шевронные зазоры fillGap*)
+    function fillPoints() {
+        if (fillFraction <= 0)
+            return []
+
+        if (fillAxis === "horizontal")
+            return clipPlane(offsetPoints(0, edgeLeft, edgeRight),
+                [-1, 0, -fillX])
+
+        if (cornerCut > 0) {
+            // срезы + зазоры не сочетаются (зазоры нужны только
+            // паровозику, срезы — статичным виджетам)
+            return clipPlane(offsetPoints(0, edgeLeft, edgeRight),
+                [0, 1, fillLevel])
+        }
+
+        return fillPointsPlain()
+    }
+
+    // точка на ребре a→b: fromA — на cut от a, иначе — на cut от b
+    function edgePoint(a, b, fromA, cut) {
+        const dx = b.x - a.x
+        const dy = b.y - a.y
+        const len = Math.hypot(dx, dy)
+        const r = len > 0 ? Math.min(cut, len) / len : 0
+
+        return fromA
+            ? Qt.point(a.x + dx * r, a.y + dy * r)
+            : Qt.point(b.x - dx * r, b.y - dy * r)
+    }
+
     // контур бокса, смещённый внутрь на shift: истинный параллельный
     // сдвиг, как HexContour у SFrame. Прямые кромки (верх, низ,
     // Flat-рёбра) сдвигаются на shift по нормали; косые грани
@@ -135,10 +231,12 @@ Item {
     // ребра уходит вглубь на shift·√(1+k²), угол перестыковывается
     // на пересечении сдвинутых граней (shift·(k±√(1+k²))). Только так
     // кольцо внутренней тени повторяет шевроны рёбер с одинаковой
-    // шириной band'ы на прямых и косых участках; пересчёт глубины от
-    // уменьшенной высоты дал бы на диагоналях почти нулевую тень.
+    // шириной band'ы на прямых и косых участках.
     // shift 0 — сам контур (фон, обводка), shift = line — кольцо.
-    // edgeL/edgeR — переопределение типов рёбер
+    // Без срезов — 8 точек: [0..2] верх, [3] право, [4..6] низ,
+    // [7] лево; со срезами каждый угол расходится в две точки на
+    // смежных рёбрах — 12 точек: [0..2] верх, [3..5] право,
+    // [6..8] низ, [9..11] лево
     function offsetPoints(shift, edgeL, edgeR) {
         const o = Settings.line / 2
         const k = 2 * InfexGeometry.notchFrac
@@ -172,7 +270,7 @@ Item {
             rTip = width - o - shift
         }
 
-        return [
+        const pts = [
             Qt.point(lx, t),
             Qt.point(width / 2, t),
             Qt.point(rx, t),
@@ -181,6 +279,27 @@ Item {
             Qt.point(width / 2, b),
             Qt.point(lx, b),
             Qt.point(lTip, mid)
+        ]
+
+        // срез угла на текущем сдвиге: как у CutContour SPanel, фаска
+        // 45° — параллельный перенос меняет срез на shift·(√2 − 2)
+        const c = Math.max(0, cornerCut + shift * (Math.sqrt(2) - 2))
+        if (c <= 0)
+            return pts
+
+        return [
+            edgePoint(pts[0], pts[1], true, c),
+            pts[1],
+            edgePoint(pts[1], pts[2], false, c),
+            edgePoint(pts[2], pts[3], true, c),
+            pts[3],
+            edgePoint(pts[3], pts[4], false, c),
+            edgePoint(pts[4], pts[5], true, c),
+            pts[5],
+            edgePoint(pts[5], pts[6], false, c),
+            edgePoint(pts[6], pts[7], true, c),
+            pts[7],
+            edgePoint(pts[7], pts[0], false, c)
         ]
     }
 
@@ -195,8 +314,24 @@ Item {
     // маршрута с плоскими торцами в углах стыков)
     readonly property var outerShadowRuns: {
         const pts = offsetPoints(0, edgeLeft, edgeRight)
+
+        if (!shadowOuter)
+            return [[], []]
+
         if (shadowOuterLeft && shadowOuterRight)
             return [pts.concat([pts[0]]), []]
+
+        if (pts.length === 12) {
+            if (shadowOuterLeft)
+                return [[pts[6], pts[7], pts[8], pts[9], pts[10],
+                    pts[11], pts[0], pts[1], pts[2]], []]
+            if (shadowOuterRight)
+                return [[pts[0], pts[1], pts[2], pts[3], pts[4],
+                    pts[5], pts[6], pts[7], pts[8]], []]
+            return [[pts[0], pts[1], pts[2]],
+                [pts[6], pts[7], pts[8]]]
+        }
+
         if (shadowOuterLeft)
             return [[pts[4], pts[5], pts[6], pts[7],
                 pts[0], pts[1], pts[2]], []]
@@ -284,17 +419,24 @@ Item {
         }
     }
 
-    // полосовой контент (c2) — над заливкой, виден только в заливке
+    // полосовой контент (c2) — над заливкой, виден только в заливке:
+    // вертикальная ось — полоса от уровня до дна, горизонтальная —
+    // от левого ребра до кромки fillX
     Item {
-        width: box.width
-        y: box.fillLevel
-        height: box.height - box.fillLevel
+        width: box.fillAxis === "horizontal"
+            ? box.fillX : box.width
+        y: box.fillAxis === "horizontal" ? 0 : box.fillLevel
+        height: box.fillAxis === "horizontal"
+            ? box.height : box.height - box.fillLevel
         clip: true
 
         Loader {
             x: Settings.line / 2
                 + (box.edgeLeft === "Notch" ? box.notch : 0)
-            y: Settings.line / 2 - box.fillLevel
+            y: box.fillAxis === "horizontal"
+                ? Settings.line / 2
+                : Settings.line / 2 - box.fillLevel
+            active: box.fillFraction > 0
             sourceComponent: box.content
 
             onLoaded: if (item.inverted !== undefined)
