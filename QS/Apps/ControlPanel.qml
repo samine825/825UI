@@ -498,9 +498,12 @@ PanelWindow {
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             cursorShape: Qt.PointingHandCursor
 
-            // левый — выставление значения, правый — колесо устройств
+            // левый — выставление значения, правый — колесо устройств.
+            // Проверка по mouse.buttons (маска удерживаемых), а не
+            // mouse.button: в onPositionChanged button = Qt.NoButton,
+            // и фильтр по нему отбрасывал весь драг
             function apply(mouse) {
-                if (mouse.button !== Qt.LeftButton)
+                if (!(mouse.buttons & Qt.LeftButton))
                     return
 
                 sliderTile.valueRequested(
