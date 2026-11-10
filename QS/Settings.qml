@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 
 Singleton {
     property alias barGap: settings.barGap
@@ -44,6 +45,59 @@ Singleton {
     readonly property bool unmaskedTest:
         Quickshell.env("X825_NOMASK") === "1"
 
+    // === ОБВОДКИ ОКОН HYPRLAND ===
+    // палитра шелла ведёт и обводками окон: активная — c1, неактивная
+    // — c2, через hyprctl keyword на лету. Применяется при смене
+    // c1/c2, при загрузке конфига шелла и при reload конфига Hyprland
+    // (keyword'ы сбрасываются к значениям из его конфига)
+    function toHyprRgba(colorStr) {
+        // "#rrggbb" / "#aarrggbb" → "rgba(rrggbbaa)"
+        let hex = colorStr.replace("#", "")
+        if (hex.length === 8)
+            hex = hex.slice(2) + hex.slice(0, 2)
+        else
+            hex += "ff"
+        return "rgba(" + hex + ")"
+    }
+
+    function applyWindowBorders() {
+        if (Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") === null)
+            return
+
+        hyprBorderProcess.command = ["bash", "-c",
+            "hyprctl keyword general:col.active_border "
+                + toHyprRgba(settings.c1)
+            + "; hyprctl keyword general:col.inactive_border "
+                + toHyprRgba(settings.c2)]
+        hyprBorderProcess.running = true
+    }
+
+    onC1Changed: hyprBorderDebounce.restart()
+    onC2Changed: hyprBorderDebounce.restart()
+
+    Timer {
+        // двойной сигнал при setColors (c1 и c2 вместе) — один прогон
+        id: hyprBorderDebounce
+
+        interval: animFast
+        onTriggered: applyWindowBorders()
+    }
+
+    Process {
+        id: hyprBorderProcess
+    }
+
+    Component.onCompleted: applyWindowBorders()
+
+    Connections {
+        target: Hyprland
+
+        function onRawEvent(event) {
+            if (event.name === "configreloaded")
+                hyprBorderDebounce.restart()
+        }
+    }
+
     FileView {
         id: configFile
 
@@ -67,7 +121,12 @@ Singleton {
             property bool dnd: false
         }
 
-        onAdapterUpdated: writeAdapter()
+        onAdapterUpdated: {
+            writeAdapter()
+
+            // конфиг шелла загружен/обновлён — обводки окон следуют
+            hyprBorderDebounce.restart()
+        }
         onFileChanged: reload()
     }
 
