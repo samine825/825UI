@@ -523,15 +523,18 @@ PanelWindow {
             }
         }
 
-        // клик по зоне иконки — доп. действие (например mute)
-        MouseArea {
+        // клик по зоне иконки — доп. действие (например mute).
+        // TapHandler, а не MouseArea: пассивный захват не срывает
+        // драг слайдера, когда нажатие началось на иконке
+        Item {
             anchors.centerIn: parent
             width: parent.height * 0.7
             height: parent.height * 0.7
-            z: 2
-            cursorShape: Qt.PointingHandCursor
 
-            onClicked: sliderTile.iconActivated()
+            TapHandler {
+                cursorShape: Qt.PointingHandCursor
+                onTapped: sliderTile.iconActivated()
+            }
         }
     }
 
