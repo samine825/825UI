@@ -61,14 +61,18 @@ Singleton {
     }
 
     function applyWindowBorders() {
-        if (Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") === null)
-            return
-
+        // значения в кавычках: скобки rgba() без кавычек — синтаксическая
+        // ошибка bash. Сигнатура инстанса: из окружения шелла, иначе —
+        // единственный инстанс в $XDG_RUNTIME_DIR/hypr
         hyprBorderProcess.command = ["bash", "-c",
-            "hyprctl keyword general:col.active_border "
-                + toHyprRgba(settings.c1)
-            + "; hyprctl keyword general:col.inactive_border "
-                + toHyprRgba(settings.c2)]
+            'sig="${HYPRLAND_INSTANCE_SIGNATURE:'
+            + '-$(ls "$XDG_RUNTIME_DIR/hypr" 2>/dev/null | head -1)}"\n'
+            + 'export HYPRLAND_INSTANCE_SIGNATURE="$sig"\n'
+            + "hyprctl keyword general:col.active_border '"
+                + toHyprRgba(settings.c1) + "'\n"
+            + "hyprctl keyword general:col.inactive_border '"
+                + toHyprRgba(settings.c2) + "'\n"
+            + "hyprctl keyword general:border_size " + settings.line]
         hyprBorderProcess.running = true
     }
 
@@ -85,6 +89,11 @@ Singleton {
 
     Process {
         id: hyprBorderProcess
+
+        // ответ hyprctl в qslog: «ok» или причина отказа
+        stdout: StdioCollector {
+            onStreamFinished: console.warn("[hyprctl]", this.text.trim())
+        }
     }
 
     Component.onCompleted: applyWindowBorders()
