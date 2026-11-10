@@ -557,6 +557,12 @@ PanelWindow {
         fillFraction: tileBox.active ? 1 : 0
         shadowOuter: false
 
+        // плавная заливка — как ColorAnimation fillColor у старого
+        // SPanel-тайла
+        Behavior on fillFraction {
+            NumberAnimation { duration: Settings.animBase }
+        }
+
         content: Component {
             Item {
                 id: iconHolder
@@ -644,6 +650,10 @@ PanelWindow {
                         edgeLeft: "Notch"
                         edgeRight: "Notch"
 
+                        // текст даты живёт на боксе: id из content:
+                        // Component наружу не видны
+                        property string dateText: "null"
+
                         content: Component {
                             Item {
                                 property bool inverted: false
@@ -654,7 +664,7 @@ PanelWindow {
 
                                 SText {
                                     anchors.centerIn: parent
-                                    text: "null"
+                                    text: dateBox.dateText
                                     color: Settings.c1
                                     font.bold: true
                                 }
@@ -1441,6 +1451,12 @@ PanelWindow {
                                             clearAllBtn.hot ? 1 : 0
                                         shadowOuter: false
 
+                                        Behavior on fillFraction {
+                                            NumberAnimation {
+                                                duration: Settings.animBase
+                                            }
+                                        }
+
                                         property bool hot:
                                             clearHover.containsMouse
 
@@ -1793,7 +1809,7 @@ PanelWindow {
                 command: ["bash", "-c", "date '+%A, %d %B'"]
                 stdout: StdioCollector {
                     onStreamFinished: {
-                        date.text = this.text.trim()
+                        dateBox.dateText = this.text.trim()
                     }
                 }
             }
