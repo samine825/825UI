@@ -323,9 +323,33 @@ PanelWindow {
                                 + Settings.line
                                 + (index === 0 ? tabBar.point : 0)
 
-                            edgeLeft: index === 0 ? "Notch" : "Tab"
-                            edgeRight: "Notch"
                             sideInset: 0
+
+                            // стенки: фреймовые выемки на торцах; стык
+                            // указывает выемкой на активный таб (логика
+                            // разделителей старого таб-бара) и при
+                            // переезде активного проезжает плоское
+                            // положение
+                            wallLeft: index === 0
+                                ? 1
+                                : (root.currentTab >= index ? 1 : -1)
+                            wallRight: index === root.tabNames.length - 1
+                                ? 1
+                                : (root.currentTab <= index ? 1 : -1)
+
+                            Behavior on wallLeft {
+                                NumberAnimation {
+                                    duration: Settings.animBase
+                                    easing.type: Easing.InOutQuad
+                                }
+                            }
+
+                            Behavior on wallRight {
+                                NumberAnimation {
+                                    duration: Settings.animBase
+                                    easing.type: Easing.InOutQuad
+                                }
+                            }
 
                             // нарост внешней тени — только по силуэту
                             // поезда: на стыках пояса нет
@@ -352,11 +376,49 @@ PanelWindow {
 
                                     property bool inverted: false
 
-                                    width: tabBar.cellW
+                                    // контент на всю рамку вагона:
+                                    // вершины рёбер на верхнем/нижнем
+                                    // крае стоят на месте при любой
+                                    // глубине стенок — текст центруется
+                                    // по клетке верхнего края
+                                    width: car.width - Settings.line
                                     height: tabBar.height
+
+                                    // компенсация слайда контента:
+                                    // Loader начинается правее выемки
+                                    readonly property real wallShift:
+                                        -Math.max(0,
+                                            car.wallLeft * car.notch)
+
+                                    // сдвиг текста из старого таб-бара:
+                                    // от вогнутой стенки на полшага
+                                    // выемки — центровка по клетке
+                                    // середины высоты
+                                    readonly property real leftCut:
+                                        index === 0
+                                        || root.currentTab >= index
+                                            ? 1 : 0
+                                    readonly property real rightCut:
+                                        index === root.tabNames.length - 1
+                                        || root.currentTab <= index
+                                            ? 1 : 0
+
+                                    property real textShift:
+                                        (leftCut - rightCut)
+                                            * tabBar.point / 2
+
+                                    Behavior on textShift {
+                                        NumberAnimation {
+                                            duration: Settings.animBase
+                                            easing.type: Easing.InOutQuad
+                                        }
+                                    }
 
                                     SText {
                                         anchors.centerIn: parent
+                                        anchors.horizontalCenterOffset:
+                                            tabContent.textShift
+                                                + tabContent.wallShift
                                         text: modelData
                                         color: tabContent.inverted
                                             ? Settings.c2 : Settings.c1

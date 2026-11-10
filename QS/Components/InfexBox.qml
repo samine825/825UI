@@ -10,6 +10,15 @@ import ".."
 //
 // Рёбра: "Notch" — впуклое (выемка внутрь на notch, как у SFrame),
 // "Tab" — выпуклое (выступ наружу на notch), "Flat" — прямое.
+// wallLeft/wallRight (−1..1) — знаковая глубина стенок, перекрывает
+// строковые рёбра: 1 — Notch, −1 — Tab, 0 — Flat; в отличие от строк
+// анимируется непрерывно — при смене знака стенка проезжает плоское
+// положение (стыки таб-бара настроек указывают выемкой на активный
+// таб, как разделители старого бара). Смещённый контур обобщён:
+// диагональ ребра глубиной sig наклонена на κ = k·sig/notch, её
+// сдвиг на shift даёт вершину верха shift·(sqrt(1+κ²)+κ) и кончик
+// sig + shift·sqrt(1+κ²) — на ±notch и 0 совпадает с дискретными
+// ветками поточечно.
 // cornerCut > 0 срезает углы по смежным рёбрам (октагон, как
 // CutContour у SPanel; при параллельном сдвиге контура срез меняется
 // на shift·(√2 − 2)). Глубина выемки — чистая функция высоты,
@@ -60,6 +69,14 @@ Item {
 
     property string edgeLeft: "Notch"    // Notch | Tab | Flat
     property string edgeRight: "Notch"
+
+    // знаковая глубина стенок −1..1: 1 — Notch, −1 — Tab, 0 — Flat.
+    // Значение в диапазоне перекрывает строковое ребро; NaN (по
+    // умолчанию) — глубина берётся из edgeLeft/edgeRight. В отличие
+    // от строк анимируется: стенка непрерывно проезжает Flat при
+    // смене знака
+    property real wallLeft: NaN
+    property real wallRight: NaN
 
     // узкость: видимая рамка уже бокса на line/2 слева и справа
     // (единый дефолт для всех боксов — рамка не доходит до границ
@@ -118,6 +135,22 @@ Item {
 
     readonly property real notch: notchFor(Settings.line / 2)
 
+    // знаковая глубина стенки в пикселях: +notch — Notch (внутрь),
+    // −notch — Tab (наружу), 0 — Flat
+    function sigmaLeft() {
+        if (wallLeft >= -1 && wallLeft <= 1)
+            return wallLeft * notch
+        return edgeLeft === "Notch" ? notch
+            : edgeLeft === "Tab" ? -notch : 0
+    }
+
+    function sigmaRight() {
+        if (wallRight >= -1 && wallRight <= 1)
+            return wallRight * notch
+        return edgeRight === "Notch" ? notch
+            : edgeRight === "Tab" ? -notch : 0
+    }
+
     // y верхней кромки заливки (вертикальная ось)
     readonly property real fillLevel:
         height - Settings.line
@@ -131,22 +164,20 @@ Item {
         + Math.max(0, Math.min(1, fillFraction))
             * (innerWidth - 2 * Settings.line)
 
-    // y бокового ребра на высоте y (в координатах бокса):
-    // линейно от нуля в углах до ±notch на середине высоты
-    function sideX(edge, y, atLeft) {
+    // x бокового ребра на высоте y (в координатах бокса): линейно от
+    // нуля в углах до знаковой глубины sig на середине высоты
+    function sideX(sig, y, atLeft) {
         const o = Settings.line / 2
         const h = height - Settings.line
         const top = o
         const mid = o + h / 2
 
         const base = atLeft ? x0 + o : x1 - o
-        const k = edge === "Notch" ? (atLeft ? notch : -notch)
-            : edge === "Tab" ? (atLeft ? -notch : notch) : 0
+        const tri = y <= mid
+            ? (y - top) / (mid - top)
+            : (top + h - y) / (mid - top)
 
-        if (y <= mid)
-            return base + k * (y - top) / (mid - top)
-
-        return base + k * (top + h - y) / (mid - top)
+        return atLeft ? base + sig * tri : base - sig * tri
     }
 
     // заливка на вертикальной оси без срезов: явный построитель —
@@ -168,21 +199,21 @@ Item {
         const pts = []
 
         pts.push(Qt.point(
-            sideX(edgeLeft, lv, true) + fillGapLeft, lv))
+            sideX(sigmaLeft(), lv, true) + fillGapLeft, lv))
 
         if (lv < mid)
             pts.push(Qt.point(
-                sideX(edgeLeft, mid, true) + fillGapLeft, mid))
+                sideX(sigmaLeft(), mid, true) + fillGapLeft, mid))
 
         pts.push(Qt.point(x0 + o + fillGapLeft, o + h))
         pts.push(Qt.point(x1 - o - fillGapRight, o + h))
 
         if (lv < mid)
             pts.push(Qt.point(
-                sideX(edgeRight, mid, false) - fillGapRight, mid))
+                sideX(sigmaRight(), mid, false) - fillGapRight, mid))
 
         pts.push(Qt.point(
-            sideX(edgeRight, lv, false) - fillGapRight, lv))
+            sideX(sigmaRight(), lv, false) - fillGapRight, lv))
 
         return pts
     }
@@ -236,13 +267,13 @@ Item {
             return []
 
         if (fillAxis === "horizontal")
-            return clipPlane(offsetPoints(0, edgeLeft, edgeRight),
+            return clipPlane(offsetPoints(0),
                 [-1, 0, -fillX])
 
         if (cornerCut > 0) {
             // срезы + зазоры не сочетаются (зазоры нужны только
             // паровозику, срезы — статичным виджетам)
-            return clipPlane(offsetPoints(0, edgeLeft, edgeRight),
+            return clipPlane(offsetPoints(0),
                 [0, 1, fillLevel])
         }
 
@@ -275,7 +306,7 @@ Item {
     // [7] лево; со срезами каждый угол расходится в две точки на
     // смежных рёбрах — 12 точек: [0..2] верх, [3..5] право,
     // [6..8] низ, [9..11] лево
-    function offsetPoints(shift, edgeL, edgeR) {
+    function offsetPoints(shift) {
         const o = Settings.line / 2
         const k = 2 * InfexGeometry.notchFrac
         const sq = Math.sqrt(1 + k * k)
@@ -284,17 +315,20 @@ Item {
         const b = height - o - shift
         const mid = height / 2
 
+        const sigL = sigmaLeft()
+        const sigR = sigmaRight()
+
         // морф (талия → октагон): восьмиточечный контур в семантике
         // бывшего MorphCard — линейная интерполяция hex ↔ oct по тем
         // же слотам. Вершины едут по своим рёбрам: середины верха/низа
         // съезжают к срезанным углам, сами углы сползают по боковым
         // рёбрам, кончики талии уходят по диагонали в углы октагона.
         // Вырождающихся рёбер нет — острые углы нарастают непрерывно
-        // до последнего кадра. Ветка действует на всех Notch/Notch
-        // (морф 0 поточечно = чистый шестигранник, без срезов —
-        // статичный путь с cornerCut на карточках рвал бы форму при
-        // старте анимации), срез масштабируется морфом
-        if (edgeL === "Notch" && edgeR === "Notch") {
+        // до последнего кадра. Ветка действует на полных выемках
+        // обоих рёбер (hex построен под них; срезы и морф с
+        // частичными стенками не сочетаются), срез масштабируется
+        // морфом
+        if ((morph > 0 || cornerCut > 0) && sigL > 0 && sigR > 0) {
             const tm = Math.max(0, Math.min(1, morph))
             const c = Math.max(0, cornerCut * tm
                 + shift * (Math.sqrt(2) - 2))
@@ -336,29 +370,21 @@ Item {
             return pts
         }
 
-        let lx, lTip
-        if (edgeL === "Notch") {
-            lx = x0 + o + shift * (k + sq)
-            lTip = x0 + o + n + shift * sq
-        } else if (edgeL === "Tab") {
-            lx = x0 + o + shift * (sq - k)
-            lTip = x0 + o - n + shift * sq
-        } else {
-            lx = x0 + o + shift
-            lTip = x0 + o + shift
-        }
+        // обобщённое ребро со знаковой глубиной sig: диагональ
+        // наклонена на κ = k·(sig/n), её параллельный сдвиг на shift
+        // даёт вершину верха shift·(sq_κ + κ) и кончик
+        // sig + shift·sq_κ. На sig = ±n и 0 совпадает с дискретными
+        // ветками (Notch/Tab/Flat) поточечно; при смене знака стенка
+        // непрерывно проезжает плоское положение
+        const kl = k * (n > 0 ? sigL / n : 0)
+        const sql = Math.sqrt(1 + kl * kl)
+        const lx = x0 + o + shift * (sql + kl)
+        const lTip = x0 + o + sigL + shift * sql
 
-        let rx, rTip
-        if (edgeR === "Notch") {
-            rx = x1 - o - shift * (k + sq)
-            rTip = x1 - o - n - shift * sq
-        } else if (edgeR === "Tab") {
-            rx = x1 - o - shift * (sq - k)
-            rTip = x1 - o + n - shift * sq
-        } else {
-            rx = x1 - o - shift
-            rTip = x1 - o - shift
-        }
+        const kr = k * (n > 0 ? sigR / n : 0)
+        const sqr = Math.sqrt(1 + kr * kr)
+        const rx = x1 - o - shift * (sqr + kr)
+        const rTip = x1 - o - sigR - shift * sqr
 
         const pts = [
             Qt.point(lx, t),
@@ -394,8 +420,8 @@ Item {
         ]
     }
 
-    function offsetContour(shift, edgeL, edgeR) {
-        const pts = offsetPoints(shift, edgeL, edgeR)
+    function offsetContour(shift) {
+        const pts = offsetPoints(shift)
         return pts.concat([pts[0]])
     }
 
@@ -404,7 +430,7 @@ Item {
     // открытый маршрут через торец; оба выключены — два отдельных
     // маршрута с плоскими торцами в углах стыков)
     readonly property var outerShadowRuns: {
-        const pts = offsetPoints(0, edgeLeft, edgeRight)
+        const pts = offsetPoints(0)
 
         if (!shadowOuter)
             return [[], []]
@@ -414,7 +440,8 @@ Item {
 
         // морф-раскладка 8 точек: [0] срез верх-лево, [1] верх-право,
         // [2..4] право (срез, кончик, срез), [5..6] низ, [7] лево
-        if (morph > 0 && edgeLeft === "Notch" && edgeRight === "Notch") {
+        if ((morph > 0 || cornerCut > 0)
+                && sigmaLeft() > 0 && sigmaRight() > 0) {
             if (shadowOuterLeft)
                 return [[pts[4], pts[5], pts[6], pts[7],
                     pts[0], pts[1]], []]
@@ -489,8 +516,7 @@ Item {
             strokeColor: "transparent"
             strokeWidth: 0
 
-            PathPolyline { path: box.offsetContour(0,
-                box.edgeLeft, box.edgeRight) }
+            PathPolyline { path: box.offsetContour(0) }
         }
     }
 
@@ -500,7 +526,7 @@ Item {
     // notch, у Tab торчит наружу (контент в самом боксе)
     Loader {
         x: box.x0 + Settings.line / 2
-            + (box.edgeLeft === "Notch" ? box.notch : 0)
+            + Math.max(0, box.sigmaLeft())
         y: Settings.line / 2
         sourceComponent: box.content
 
@@ -547,8 +573,7 @@ Item {
             strokeColor: "transparent"
             strokeWidth: 0
 
-            PathPolyline { path: box.offsetContour(0,
-                box.edgeLeft, box.edgeRight) }
+            PathPolyline { path: box.offsetContour(0) }
         }
     }
 
@@ -585,7 +610,7 @@ Item {
         // заливка просто открывает её клипом — инверсия чёткая
         Loader {
             x: box.x0 + Settings.line / 2
-                + (box.edgeLeft === "Notch" ? box.notch : 0)
+                + Math.max(0, box.sigmaLeft())
             y: box.fillAxis === "horizontal"
                 ? Settings.line / 2
                 : Settings.line / 2 - box.fillLevel
@@ -613,8 +638,7 @@ Item {
             strokeColor: Settings.c2
             strokeWidth: Settings.line
 
-            PathPolyline { path: box.offsetContour(Settings.line,
-                box.edgeLeft, box.edgeRight) }
+            PathPolyline { path: box.offsetContour(Settings.line) }
         }
     }
 
@@ -630,8 +654,7 @@ Item {
             strokeColor: box.strokeColor
             strokeWidth: Settings.line
 
-            PathPolyline { path: box.offsetContour(0,
-                box.edgeLeft, box.edgeRight) }
+            PathPolyline { path: box.offsetContour(0) }
         }
     }
 }
