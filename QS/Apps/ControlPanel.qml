@@ -464,11 +464,10 @@ PanelWindow {
             edgeLeft: "Notch"
             edgeRight: "Notch"
             fillAxis: "horizontal"
-            fillFraction: Math.max(0, Math.min(1, sliderTile.value))
 
-            Behavior on fillFraction {
-                NumberAnimation { duration: Settings.animInstant }
-            }
+            // без Behavior: заливка и инверсия следуют за курсором
+            // точно (Behavior давал лаг — инверсия «плыла» за драгом)
+            fillFraction: Math.max(0, Math.min(1, sliderTile.value))
 
             content: Component {
                 Item {
