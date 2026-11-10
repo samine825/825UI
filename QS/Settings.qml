@@ -3,7 +3,6 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import Quickshell.Hyprland
 
 Singleton {
     property alias barGap: settings.barGap
@@ -47,9 +46,12 @@ Singleton {
 
     // === ОБВОДКИ ОКОН HYPRLAND ===
     // палитра шелла ведёт и обводками окон: активная — c1, неактивная
-    // — c2, через hyprctl keyword на лету. Применяется при смене
-    // c1/c2, при загрузке конфига шелла и при reload конфига Hyprland
-    // (keyword'ы сбрасываются к значениям из его конфига)
+    // — c2. Значения пишутся ФИЗИЧЕСКИ в строки lua-конфига Hyprland
+    // (border_size — тоже, под line), затем hyprctl reload. Правка
+    // идемпотентна: если значения уже верны, файл не трогается (нет
+    // лишнего reload); закомментированные строки не затрагиваются.
+    // Применяется при смене c1/c2 и при загрузке/обновлении конфига
+    // шелла
     function toHyprRgba(colorStr) {
         // "#rrggbb" / "#aarrggbb" → "rgba(rrggbbaa)"
         let hex = colorStr.replace("#", "")
@@ -61,19 +63,34 @@ Singleton {
     }
 
     function applyWindowBorders() {
-        // значения в кавычках: скобки rgba() без кавычек — синтаксическая
-        // ошибка bash. Сигнатура инстанса: из окружения шелла, иначе —
-        // единственный инстанс в $XDG_RUNTIME_DIR/hypr
-        hyprBorderProcess.command = ["bash", "-c",
-            'sig="${HYPRLAND_INSTANCE_SIGNATURE:'
-            + '-$(ls "$XDG_RUNTIME_DIR/hypr" 2>/dev/null | head -1)}"\n'
-            + 'export HYPRLAND_INSTANCE_SIGNATURE="$sig"\n'
-            + "hyprctl keyword general:col.active_border '"
-                + toHyprRgba(settings.c1) + "'\n"
-            + "hyprctl keyword general:col.inactive_border '"
-                + toHyprRgba(settings.c2) + "'\n"
-            + "hyprctl keyword general:border_size " + settings.line]
-        hyprBorderProcess.running = true
+        const colA = toHyprRgba(settings.c1)
+        const colB = toHyprRgba(settings.c2)
+        // для grep-паттернов скобки rgba() экранируются: в ERE это
+        // группы, не литералы
+        const patA = colA.replace("(", "\\(").replace(")", "\\)")
+        const patB = colB.replace("(", "\\(").replace(")", "\\)")
+
+        hyprWindowConfigProcess.command = ["bash", "-c",
+            'cfg="$HOME/.config/hypr/hyprland.lua"\n'
+            + '[ -f "$cfg" ] || exit 0\n'
+            + "grep -qE 'active_border[[:space:]]*=[[:space:]]*\""
+                + patA + "\"' \"$cfg\" && "
+            + "grep -qE 'inactive_border[[:space:]]*=[[:space:]]*\""
+                + patB + "\"' \"$cfg\" && "
+            + "grep -qE 'border_size[[:space:]]*=[[:space:]]*"
+                + settings.line + "[[:space:]]*,' \"$cfg\" && exit 0\n"
+            + "sed -i -E \\\n"
+            + "  -e '/^[[:space:]]*--/!s/active_border[[:space:]]*="
+                + "[[:space:]]*\"[^\"]*\"/active_border   = \""
+                + colA + "\"/' \\\n"
+            + "  -e '/^[[:space:]]*--/!s/inactive_border[[:space:]]*="
+                + "[[:space:]]*\"[^\"]*\"/inactive_border = \""
+                + colB + "\"/' \\\n"
+            + "  -e '/^[[:space:]]*--/!s/border_size[[:space:]]*="
+                + "[[:space:]]*[0-9]+/border_size = "
+                + settings.line + "/' \\\n"
+            + "  \"$cfg\" && hyprctl reload"]
+        hyprWindowConfigProcess.running = true
     }
 
     onC1Changed: hyprBorderDebounce.restart()
@@ -88,22 +105,11 @@ Singleton {
     }
 
     Process {
-        id: hyprBorderProcess
+        id: hyprWindowConfigProcess
 
-        // ответ hyprctl в qslog: «ok» или причина отказа
+        // вывод sed/hyprctl reload в qslog
         stdout: StdioCollector {
-            onStreamFinished: console.warn("[hyprctl]", this.text.trim())
-        }
-    }
-
-    Component.onCompleted: applyWindowBorders()
-
-    Connections {
-        target: Hyprland
-
-        function onRawEvent(event) {
-            if (event.name === "configreloaded")
-                hyprBorderDebounce.restart()
+            onStreamFinished: console.warn("[hypr-borders]", this.text.trim())
         }
     }
 
