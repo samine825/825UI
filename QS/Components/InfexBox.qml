@@ -577,13 +577,18 @@ Item {
             ? box.height : box.height - box.fillLevel
         clip: true
 
+        // полосовой контент живёт всегда (создаётся на старте): если
+        // инстанцировать его при fill > 0, копия рождается с цветом c1
+        // (inverted=false до onLoaded) и SShapePath/SText своим
+        // ColorAnimation плавно перекрашивают её в c2 — инверсия
+        // превращается в кроссфейд. Всегда существующая копия уже c2,
+        // заливка просто открывает её клипом — инверсия чёткая
         Loader {
             x: box.x0 + Settings.line / 2
                 + (box.edgeLeft === "Notch" ? box.notch : 0)
             y: box.fillAxis === "horizontal"
                 ? Settings.line / 2
                 : Settings.line / 2 - box.fillLevel
-            active: box.fillFraction > 0
             sourceComponent: box.content
 
             onLoaded: if (item.inverted !== undefined)
