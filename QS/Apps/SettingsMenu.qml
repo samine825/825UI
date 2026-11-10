@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -228,18 +227,58 @@ PanelWindow {
                 anchors.fill: parent
                 spacing: Settings.line * 4
 
-                // --- Tabs ---
+                // --- Таб-бар: паровозик из InfexBox, как SystemStats.
+                // Стыки статичны (Tab/Notch-пары, совпадают поточечно),
+                // активный таб выделяется горизонтальной заливкой c1:
+                // переход заливки между соседними боксами вместо
+                // отдельной формы-индикатора, текст инвертируется
+                // полосой заливки
                 Item {
                     id: tabBar
-                    width: parent.width - (InfexGeometry.tipMult * Settings.line/2)
-                    height: Settings.barHeight - Settings.line
                     anchors.horizontalCenter: parent.horizontalCenter
 
-                    property real point: height * InfexGeometry.notchFrac
-                    property real tabWidth: width / root.tabNames.length
+                    height: Settings.barHeight - Settings.line
 
-                    property real tabBorderWidth: Settings.line
-                    property real blackOutlineWidth: Settings.line
+                    // шаг стыков и торцов — чистая функция высоты
+                    property real point: height * InfexGeometry.notchFrac
+
+                    // количество табов: чтение под защитой — при разборке
+                    // шелла корень уже null, а cellW/width пересчитываются
+                    // из-за умирающих зависимостей (availW, maxTextW)
+                    readonly property int tabCount:
+                        root ? root.tabNames.length : 0
+
+                    // доступная ширина: панель минус пояс-запас кончика
+                    // фрейма (как у старого таб-бара)
+                    readonly property real availW:
+                        parent.width - InfexGeometry.tipMult
+                            * Settings.line / 2
+
+                    // эталонные тексты: точная ширина рендера
+                    readonly property real maxTextW: {
+                        var m = 0
+                        if (tabMetrics.count === tabBar.tabCount) {
+                            for (var i = 0; i < root.tabNames.length; i++) {
+                                var it = tabMetrics.itemAt(i)
+                                if (it)
+                                    m = Math.max(m, it.implicitWidth)
+                            }
+                        }
+                        return m
+                    }
+
+                    // клетка: равные доли ширины минус стыковые зоны,
+                    // но не уже самого широкого текста со стандартным
+                    // полем по 3 линии с каждой стороны
+                    readonly property real cellW: Math.max(
+                        maxTextW + Settings.line * 6,
+                        (availW - (tabBar.tabCount + 1) * point
+                            - Settings.line) / tabBar.tabCount)
+
+                    // полная ширина поезда: клетки + стыковые зоны
+                    width: tabBar.tabCount * cellW
+                        + (tabBar.tabCount + 1) * point
+                        + Settings.line
 
                     WheelHandler {
                         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
@@ -252,180 +291,87 @@ PanelWindow {
                         }
                     }
 
-                    // черная обводка
-                    Shape {
-                        id: tabOuterOutline
+                    // скрытые эталонные тексты — точный источник ширины
+                    Repeater {
+                        id: tabMetrics
+                        model: root.tabNames
 
-                        anchors.fill: parent
-                        z: -1
-                        preferredRendererType: Shape.CurveRenderer
-
-                        SShapePath {
-                            joinStyle: ShapePath.MiterJoin
-                            capStyle: ShapePath.FlatCap
-
-                            strokeColor: Settings.c2
-
-                            strokeWidth: tabBar.tabBorderWidth
-                                        + tabBar.blackOutlineWidth * 2
-
-                            fillColor: "transparent"
-
-                            startX: 0
-                            startY: 0
-
-                            PathLine { x: tabShape.width;                y: 0 }
-                            PathLine { x: tabShape.width - tabBar.point; y: tabShape.height / 2 }
-                            PathLine { x: tabShape.width;                y: tabShape.height }
-                            PathLine { x: 0;                             y: tabShape.height }
-                            PathLine { x: tabBar.point;                  y: tabShape.height / 2 }
-                            PathLine { x: 0;                             y: 0 }
-                        }
-                    }
-
-                    Shape {
-                        id: tabShape
-                        anchors.fill: parent
-                        preferredRendererType: Shape.CurveRenderer
-
-                        SShapePath {
-                            joinStyle: ShapePath.MiterJoin
-                            capStyle: ShapePath.FlatCap
-                            strokeColor: Settings.c1
-                            strokeWidth: Settings.line
-                            fillColor: Settings.c2
-
-                            startX: 0
-                            startY: 0
-
-                            PathLine { x: tabShape.width;                y: 0 }
-                            PathLine { x: tabShape.width - tabBar.point; y: tabShape.height / 2 }
-                            PathLine { x: tabShape.width;                y: tabShape.height }
-                            PathLine { x: 0;                             y: tabShape.height }
-                            PathLine { x: tabBar.point;                  y: tabShape.height / 2 }
-                            PathLine { x: 0;                             y: 0 }
-                        }
-                    }
-
-                    Shape {
-                        id: activeIndicator
-                        preferredRendererType: Shape.CurveRenderer
-
-                        property real indH: tabBar.height - Settings.line * 3
-                        property real indPoint: indH * InfexGeometry.notchFrac
-
-                        width: tabBar.tabWidth - Settings.line * 6
-                        height: indH
-                        y: (tabBar.height - indH) / 2
-                        x: root.currentTab * tabBar.tabWidth + Settings.line * 3
-
-                        Behavior on x {
-                            NumberAnimation { duration: 300; easing.type: Easing.OutQuad }
-                        }
-
-                        SShapePath {
-                            joinStyle: ShapePath.MiterJoin
-                            capStyle: ShapePath.FlatCap
-                            fillColor: Settings.c1
-                            strokeColor: "transparent"
-
-                            startX: 0
-                            startY: 0
-
-                            PathLine { x: activeIndicator.width;                            y: 0 }
-                            PathLine { x: activeIndicator.width - activeIndicator.indPoint; y: activeIndicator.height / 2 }
-                            PathLine { x: activeIndicator.width;                            y: activeIndicator.height }
-                            PathLine { x: 0;                                                y: activeIndicator.height }
-                            PathLine { x: activeIndicator.indPoint;                         y: activeIndicator.height / 2 }
-                            PathLine { x: 0;                                                y: 0 }
+                        SText {
+                            visible: false
+                            text: modelData
+                            font.bold: true
                         }
                     }
 
                     Repeater {
-                        model: root.tabNames.length - 1
+                        model: root.tabNames
 
-                        delegate: Shape {
-                            id: dividerShape
-                            preferredRendererType: Shape.CurveRenderer
-                            anchors.fill: parent
-                            z: 2
+                        delegate: InfexBox {
+                            id: car
 
-                            property real xPos: (index + 1) * tabBar.tabWidth
+                            y: -Settings.line / 2
+                            height: Settings.barHeight
 
-                            SShapePath {
-                                joinStyle: ShapePath.MiterJoin
-                                capStyle: ShapePath.FlatCap
-                                strokeColor: Settings.c1
-                                strokeWidth: Settings.line
-                                fillColor: "transparent"
+                            // рамка до края бокса (sideInset: 0): стыки
+                            // совпадают поточечно; торцевой вагон шире
+                            // на стыковую зону фреймовой выемки
+                            x: index === 0
+                                ? 0
+                                : index * tabBar.cellW
+                                    + (index + 1) * tabBar.point
+                            width: tabBar.cellW + tabBar.point
+                                + Settings.line
+                                + (index === 0 ? tabBar.point : 0)
 
-                                startX: dividerShape.xPos
-                                startY: 0
+                            edgeLeft: index === 0 ? "Notch" : "Tab"
+                            edgeRight: "Notch"
+                            sideInset: 0
 
-                                PathLine {
-                                    x: root.currentTab <= index
-                                        ? dividerShape.xPos - tabBar.point
-                                        : dividerShape.xPos + tabBar.point
-                                    y: tabBar.height / 2
+                            // нарост внешней тени — только по силуэту
+                            // поезда: на стыках пояса нет
+                            shadowOuterLeft: index === 0
+                            shadowOuterRight:
+                                index === root.tabNames.length - 1
 
-                                    Behavior on x {
-                                        NumberAnimation { duration: 300; easing.type: Easing.InOutQuad }
-                                    }
-                                }
+                            fillAxis: "horizontal"
 
-                                PathLine {
-                                    x: dividerShape.xPos
-                                    y: tabBar.height
+                            // активный таб — полная заливка; переход
+                            // заливки едет по вагонам
+                            fillFraction: root.currentTab === index ? 1 : 0
+
+                            Behavior on fillFraction {
+                                NumberAnimation {
+                                    duration: Settings.animBase
+                                    easing.type: Easing.OutQuad
                                 }
                             }
-                        }
-                    }
 
-                    Row {
-                        anchors.fill: parent
-                        z: 3
+                            content: Component {
+                                Item {
+                                    id: tabContent
 
-                        Repeater {
-                            model: root.tabNames
+                                    property bool inverted: false
 
-                            delegate: Item {
-                                width: tabBar.tabWidth
-                                height: tabBar.height
+                                    width: tabBar.cellW
+                                    height: tabBar.height
 
-                                property real textOffset: {
-                                    var i = index
-                                    var last = root.tabNames.length - 1
-
-                                    var leftNotch = (i === 0) || (root.currentTab >= i)
-                                    var rightNotch = (i === last) || (root.currentTab <= i)
-
-                                    if (leftNotch && !rightNotch)
-                                        return tabBar.point / 2
-
-                                    if (rightNotch && !leftNotch)
-                                        return -tabBar.point / 2
-
-                                    return 0
-                                }
-
-                                SText {
-                                    text: modelData
-                                    color: root.currentTab === index ? Settings.c2 : Settings.c1
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    anchors.horizontalCenterOffset: textOffset
-                                    font.bold: true
-
-                                    Behavior on anchors.horizontalCenterOffset {
-                                        NumberAnimation { duration: 300; easing.type: Easing.InOutQuad }
+                                    SText {
+                                        anchors.centerIn: parent
+                                        text: modelData
+                                        color: tabContent.inverted
+                                            ? Settings.c2 : Settings.c1
+                                        font.bold: true
                                     }
                                 }
+                            }
 
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.currentTab = index
-                                }
+                            // клики мимо contentHolder: невизуальный
+                            // элемент не включает маску силуэта
+                            MouseArea {
+                                parent: car
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.currentTab = index
                             }
                         }
                     }
@@ -437,361 +383,285 @@ PanelWindow {
                     width: parent.width
                     height: parent.height - tabBar.height - Settings.line*1.5
 
-                    SPanel {
+                    // Панель контента: InfexBox-контейнер — октагон
+                    // (плоские рёбра, срезы углов), тень-нарост снаружи;
+                    // дети-страницы маскируются силуэтом бокса
+                    InfexBox {
+                        id: contentPanel
+
                         x: -Settings.line / 2
                         y: -Settings.line / 2
                         width: parent.width + Settings.line
                         height: parent.height + Settings.line
+
+                        edgeLeft: "Flat"
+                        edgeRight: "Flat"
                         cornerCut: Settings.line * 2
-                        strokeColor: Settings.c1
-                        fillColor: Settings.c2
-                        shadow: "outside"
-                        shadowColor: Settings.c2
-                    }
+                        sideInset: 0
 
-                    // system
-                    Item {
-                        visible: root.currentTab === 0
-                        anchors.fill: parent
-                        anchors.margins: Settings.line
-
-                        SText {
-                            text: "System"
-                            color: Settings.c1
-                            anchors.centerIn: parent
-                        }
-                    }
-
-                    // bar
-                    Item {
-                        visible: root.currentTab === 1
-                        anchors.fill: parent
-                        anchors.margins: Settings.line
-
-                        SText {
-                            text: "Bar"
-                            color: Settings.c1
-                            anchors.centerIn: parent
-                        }
-                    }
-
-                    // wallpapers
-                    Item {
-                        id: wallpapersTab
-                        visible: root.currentTab === 2
-                        anchors.fill: parent
-                        anchors.margins: Settings.line
-                        clip: true
-
-                        Flickable {
-                            id: wallpaperFlick
+                        // system
+                        Item {
+                            visible: root.currentTab === 0
                             anchors.fill: parent
-                            clip: true
-                            interactive: true
-                            boundsBehavior: Flickable.StopAtBounds
-                            flickDeceleration: 1000
-
-                            property real margin: Settings.line*1.5
-                            property real gap: Settings.line*2
-                            property real columns: 4
-
-                            property real itemSize: Math.max(
-                                80,
-                                Math.floor((width - margin * 2 - gap * (columns - 1)) / columns)
-                            )
-
-                            property real rows: Math.ceil(root.wallpaperModel.length / columns)
-
-                            contentWidth: width
-                            contentHeight: Math.max(
-                                height,
-                                rows * (itemSize + gap) + margin * 2
-                            )
-
-                            Repeater {
-                                model: root.wallpaperModel
-
-                                delegate: Item {
-                                    id: wallpaperDelegate
-
-                                    property string path: modelData
-                                    property real col: index % wallpaperFlick.columns
-                                    property real row: Math.floor(index / wallpaperFlick.columns)
-
-                                    property real cornerCut: Settings.line * 2
-
-                                    property bool inViewport: {
-                                        var top = y - wallpaperFlick.contentY
-                                        var bottom = top + height
-                                        return top < wallpaperFlick.height + 300 && bottom > -300
-                                    }
-
-                                    width: wallpaperFlick.itemSize
-                                    height: wallpaperFlick.itemSize
-
-                                    x: wallpaperFlick.margin + col * (wallpaperFlick.itemSize + wallpaperFlick.gap)
-                                    y: wallpaperFlick.margin + row * (wallpaperFlick.itemSize + wallpaperFlick.gap)
-
-                                    Loader {
-                                        id: imgLoader
-                                        anchors.fill: parent
-                                        active: wallpaperDelegate.inViewport
-                                        z: 0
-
-                                        sourceComponent: Component {
-                                            Image {
-                                                anchors.fill: parent
-                                                asynchronous: true
-                                                cache: false
-                                                smooth: true
-                                                sourceSize: Qt.size(320, 320)
-                                                source: "file://" + wallpaperDelegate.path.replace(/ /g, "%20")
-                                                fillMode: Image.PreserveAspectCrop
-                                            }
-                                        }
-                                    }
-
-                                    // уголки
-                                    Shape {
-                                    
-                                        anchors.fill: parent
-                                        z: 2
-
-                                        // ВЛ
-                                        SShapePath {
-                                            joinStyle: ShapePath.MiterJoin
-                                            capStyle: ShapePath.FlatCap
-                                            strokeColor: "transparent"
-                                            fillColor: Settings.c2
-                                            startX: 0
-                                            startY: 0
-                                            PathLine { x: wallpaperDelegate.cornerCut; y: 0 }
-                                            PathLine { x: 0; y: wallpaperDelegate.cornerCut }
-                                            PathLine { x: 0; y: 0 }
-                                        }
-
-                                        // ВП
-                                        SShapePath {
-                                            joinStyle: ShapePath.MiterJoin
-                                            capStyle: ShapePath.FlatCap
-                                            strokeColor: "transparent"
-                                            fillColor: Settings.c2
-                                            startX: wallpaperDelegate.width - wallpaperDelegate.cornerCut
-                                            startY: 0
-                                            PathLine { x: wallpaperDelegate.width; y: 0 }
-                                            PathLine { x: wallpaperDelegate.width; y: wallpaperDelegate.cornerCut }
-                                            PathLine { x: wallpaperDelegate.width - wallpaperDelegate.cornerCut; y: 0 }
-                                        }
-
-                                        // НП
-                                        SShapePath {
-                                            joinStyle: ShapePath.MiterJoin
-                                            capStyle: ShapePath.FlatCap
-                                            strokeColor: "transparent"
-                                            fillColor: Settings.c2
-                                            startX: wallpaperDelegate.width
-                                            startY: wallpaperDelegate.height - wallpaperDelegate.cornerCut
-                                            PathLine { x: wallpaperDelegate.width; y: wallpaperDelegate.height }
-                                            PathLine { x: wallpaperDelegate.width - wallpaperDelegate.cornerCut; y: wallpaperDelegate.height }
-                                            PathLine { x: wallpaperDelegate.width; y: wallpaperDelegate.height - wallpaperDelegate.cornerCut }
-                                        }
-
-                                        // НЛ
-                                        SShapePath {
-                                            joinStyle: ShapePath.MiterJoin
-                                            capStyle: ShapePath.FlatCap
-                                            strokeColor: "transparent"
-                                            fillColor: Settings.c2
-                                            startX: wallpaperDelegate.cornerCut
-                                            startY: wallpaperDelegate.height
-                                            PathLine { x: 0; y: wallpaperDelegate.height }
-                                            PathLine { x: 0; y: wallpaperDelegate.height - wallpaperDelegate.cornerCut }
-                                            PathLine { x: wallpaperDelegate.cornerCut; y: wallpaperDelegate.height }
-                                        }
-                                    }
-
-                                    // белая рамка
-                                    Shape {
-                                        preferredRendererType: Shape.CurveRenderer
-                                        anchors.fill: parent
-                                        z: 3
-
-                                        SShapePath {
-                                            joinStyle: ShapePath.MiterJoin
-                                            capStyle: ShapePath.FlatCap
-                                            strokeColor: Settings.c1
-                                            strokeWidth: Settings.line 
-                                            fillColor: "transparent"
-
-                                            startX: wallpaperDelegate.cornerCut
-                                            startY: 0
-                                            PathLine { x: wallpaperDelegate.width - wallpaperDelegate.cornerCut; y: 0 }
-                                            PathLine { x: wallpaperDelegate.width; y: wallpaperDelegate.cornerCut }
-                                            PathLine { x: wallpaperDelegate.width; y: wallpaperDelegate.height - wallpaperDelegate.cornerCut }
-                                            PathLine { x: wallpaperDelegate.width - wallpaperDelegate.cornerCut; y: wallpaperDelegate.height }
-                                            PathLine { x: wallpaperDelegate.cornerCut; y: wallpaperDelegate.height }
-                                            PathLine { x: 0; y: wallpaperDelegate.height - wallpaperDelegate.cornerCut }
-                                            PathLine { x: 0; y: wallpaperDelegate.cornerCut }
-                                            PathLine { x: wallpaperDelegate.cornerCut; y: 0 }
-                                        }
-                                    }
-
-                                    // подпись
-                                    SRectangle {
-                                        anchors.bottom: parent.bottom
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        anchors.margins: Settings.line/2
-                                        height: 20
-                                        color: '#77' + Settings.c2.slice(1);
-                                        z: 1
-
-                                        SText {
-                                            anchors.left: parent.left
-                                            anchors.right: parent.right
-                                            anchors.rightMargin: 20
-                                            anchors.leftMargin: 20
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            text: wallpaperDelegate.path.split("/").pop()
-                                            color: "white"
-                                            elide: Text.ElideMiddle
-                                            font.pixelSize: 10
-                                            horizontalAlignment: Text.AlignHCenter
-                                        }
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        z: 4
-                                        onClicked: root.applyWallpaper(wallpaperDelegate.path)
-                                    }
-                                }
-                            }
+                            anchors.margins: Settings.line
 
                             SText {
-                                anchors.centerIn: parent
-                                visible: root.wallpaperModel.length === 0
-                                text: "~/Pictures/Wallpapers"
+                                text: "System"
                                 color: Settings.c1
+                                anchors.centerIn: parent
                             }
                         }
 
-                        // скролл
-                        SRectangle {
-                            id: wallpaperScrollTrack
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            anchors.bottom: parent.bottom
-                            width: Settings.line
-                            radius: 0
-                            color: Settings.c2
-                            visible: wallpaperFlick.contentHeight > wallpaperFlick.height + 2
+                        // bar
+                        Item {
+                            visible: root.currentTab === 1
+                            anchors.fill: parent
+                            anchors.margins: Settings.line
 
-                            SRectangle {
-                                id: wallpaperScrollHandle
-                                width: parent.width
-                                radius: parent.radius
+                            SText {
+                                text: "Bar"
                                 color: Settings.c1
+                                anchors.centerIn: parent
+                            }
+                        }
 
-                                height: Math.max(
-                                    20,
-                                    Math.floor(parent.height * (parent.height / Math.max(1, wallpaperFlick.contentHeight)))
+                        // wallpapers
+                        Item {
+                            id: wallpapersTab
+                            visible: root.currentTab === 2
+                            anchors.fill: parent
+                            anchors.margins: Settings.line
+                            clip: true
+
+                            Flickable {
+                                id: wallpaperFlick
+                                anchors.fill: parent
+                                clip: true
+                                interactive: true
+                                boundsBehavior: Flickable.StopAtBounds
+                                flickDeceleration: 1000
+
+                                property real margin: Settings.line*1.5
+                                property real gap: Settings.line*2
+                                property real columns: 4
+
+                                property real itemSize: Math.max(
+                                    80,
+                                    Math.floor((width - margin * 2 - gap * (columns - 1)) / columns)
                                 )
 
-                                y: {
-                                    var maxContent = Math.max(1, wallpaperFlick.contentHeight - wallpaperFlick.height)
-                                    var ratio = wallpaperFlick.contentY / maxContent
-                                    return Math.round((wallpaperScrollTrack.height - height) * ratio)
-                                }
-                            }
+                                property real rows: Math.ceil(root.wallpaperModel.length / columns)
 
-                            MouseArea {
-                                anchors.fill: parent
-                                anchors.margins: -Settings.line
-                                z: 2
-                                cursorShape: Qt.SizeVerCursor
+                                contentWidth: width
+                                contentHeight: Math.max(
+                                    height,
+                                    rows * (itemSize + gap) + margin * 2
+                                )
 
-                                property bool dragging: false
-                                property real grabOffset: 0
+                                Repeater {
+                                    model: root.wallpaperModel
 
-                                function contentYFromHandleY(handleY) {
-                                    var maxContent = Math.max(1, wallpaperFlick.contentHeight - wallpaperFlick.height)
-                                    var maxHandle = Math.max(1, wallpaperScrollTrack.height - wallpaperScrollHandle.height)
-                                    var ratio = Math.max(0, Math.min(1, handleY / maxHandle))
-                                    return ratio * maxContent
-                                }
+                                    delegate: Item {
+                                        id: wallpaperDelegate
 
-                                onPressed: {
-                                    var handleTop = wallpaperScrollHandle.y
-                                    var handleBottom = handleTop + wallpaperScrollHandle.height
+                                        property string path: modelData
+                                        property real col: index % wallpaperFlick.columns
+                                        property real row: Math.floor(index / wallpaperFlick.columns)
 
-                                    if (mouseY >= handleTop && mouseY <= handleBottom) {
-                                        dragging = true
-                                        grabOffset = mouseY - handleTop
-                                    } else {
-                                        var desiredY = mouseY - wallpaperScrollHandle.height / 2
-                                        var maxY = wallpaperScrollTrack.height - wallpaperScrollHandle.height
-                                        desiredY = Math.max(0, Math.min(maxY, desiredY))
-                                        wallpaperFlick.contentY = contentYFromHandleY(desiredY)
-                                        dragging = true
-                                        grabOffset = wallpaperScrollHandle.height / 2
+                                        property bool inViewport: {
+                                            var top = y - wallpaperFlick.contentY
+                                            var bottom = top + height
+                                            return top < wallpaperFlick.height + 300 && bottom > -300
+                                        }
+
+                                        width: wallpaperFlick.itemSize
+                                        height: wallpaperFlick.itemSize
+
+                                        x: wallpaperFlick.margin + col * (wallpaperFlick.itemSize + wallpaperFlick.gap)
+                                        y: wallpaperFlick.margin + row * (wallpaperFlick.itemSize + wallpaperFlick.gap)
+
+                                        // Плитка: InfexBox-октагон. Бокс раздат на
+                                        // пол-линии с каждой стороны — рамка (штрих
+                                        // идёт на пол-линии внутрь бокса) ложится
+                                        // на старые видимые границы; картинка и
+                                        // подпись — контейнер, режутся силуэтом
+                                        // (срезы углов вместо треугольников-заглушек)
+                                        InfexBox {
+                                            x: -Settings.line / 2
+                                            y: -Settings.line / 2
+                                            width: parent.width + Settings.line
+                                            height: parent.height + Settings.line
+
+                                            edgeLeft: "Flat"
+                                            edgeRight: "Flat"
+                                            cornerCut: Settings.line * 2
+                                            sideInset: 0
+
+                                            Loader {
+                                                anchors.fill: parent
+                                                active: wallpaperDelegate.inViewport
+
+                                                sourceComponent: Component {
+                                                    Image {
+                                                        anchors.fill: parent
+                                                        asynchronous: true
+                                                        cache: false
+                                                        smooth: true
+                                                        sourceSize: Qt.size(320, 320)
+                                                        source: "file://" + wallpaperDelegate.path.replace(/ /g, "%20")
+                                                        fillMode: Image.PreserveAspectCrop
+                                                    }
+                                                }
+                                            }
+
+                                            // подпись
+                                            SRectangle {
+                                                anchors.bottom: parent.bottom
+                                                anchors.left: parent.left
+                                                anchors.right: parent.right
+                                                anchors.margins: Settings.line
+                                                height: 20
+                                                color: '#77' + Settings.c2.slice(1);
+
+                                                SText {
+                                                    anchors.left: parent.left
+                                                    anchors.right: parent.right
+                                                    anchors.rightMargin: 20
+                                                    anchors.leftMargin: 20
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    text: wallpaperDelegate.path.split("/").pop()
+                                                    color: "white"
+                                                    elide: Text.ElideMiddle
+                                                    font.pixelSize: 10
+                                                    horizontalAlignment: Text.AlignHCenter
+                                                }
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            z: 4
+                                            onClicked: root.applyWallpaper(wallpaperDelegate.path)
+                                        }
                                     }
                                 }
 
-                                onPositionChanged: {
-                                    if (!pressed || !dragging)
-                                        return
+                                SText {
+                                    anchors.centerIn: parent
+                                    visible: root.wallpaperModel.length === 0
+                                    text: "~/Pictures/Wallpapers"
+                                    color: Settings.c1
+                                }
+                            }
 
-                                    var desiredY = mouseY - grabOffset
-                                    var maxY = wallpaperScrollTrack.height - wallpaperScrollHandle.height
-                                    desiredY = Math.max(0, Math.min(maxY, desiredY))
+                            // скролл
+                            SRectangle {
+                                id: wallpaperScrollTrack
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                width: Settings.line
+                                radius: 0
+                                color: Settings.c2
+                                visible: wallpaperFlick.contentHeight > wallpaperFlick.height + 2
 
-                                    wallpaperFlick.contentY = contentYFromHandleY(desiredY)
+                                SRectangle {
+                                    id: wallpaperScrollHandle
+                                    width: parent.width
+                                    radius: parent.radius
+                                    color: Settings.c1
+
+                                    height: Math.max(
+                                        20,
+                                        Math.floor(parent.height * (parent.height / Math.max(1, wallpaperFlick.contentHeight)))
+                                    )
+
+                                    y: {
+                                        var maxContent = Math.max(1, wallpaperFlick.contentHeight - wallpaperFlick.height)
+                                        var ratio = wallpaperFlick.contentY / maxContent
+                                        return Math.round((wallpaperScrollTrack.height - height) * ratio)
+                                    }
                                 }
 
-                                onReleased: {
-                                    dragging = false
+                                MouseArea {
+                                    anchors.fill: parent
+                                    anchors.margins: -Settings.line
+                                    z: 2
+                                    cursorShape: Qt.SizeVerCursor
+
+                                    property bool dragging: false
+                                    property real grabOffset: 0
+
+                                    function contentYFromHandleY(handleY) {
+                                        var maxContent = Math.max(1, wallpaperFlick.contentHeight - wallpaperFlick.height)
+                                        var maxHandle = Math.max(1, wallpaperScrollTrack.height - wallpaperScrollHandle.height)
+                                        var ratio = Math.max(0, Math.min(1, handleY / maxHandle))
+                                        return ratio * maxContent
+                                    }
+
+                                    onPressed: {
+                                        var handleTop = wallpaperScrollHandle.y
+                                        var handleBottom = handleTop + wallpaperScrollHandle.height
+
+                                        if (mouseY >= handleTop && mouseY <= handleBottom) {
+                                            dragging = true
+                                            grabOffset = mouseY - handleTop
+                                        } else {
+                                            var desiredY = mouseY - wallpaperScrollHandle.height / 2
+                                            var maxY = wallpaperScrollTrack.height - wallpaperScrollHandle.height
+                                            desiredY = Math.max(0, Math.min(maxY, desiredY))
+                                            wallpaperFlick.contentY = contentYFromHandleY(desiredY)
+                                            dragging = true
+                                            grabOffset = wallpaperScrollHandle.height / 2
+                                        }
+                                    }
+
+                                    onPositionChanged: {
+                                        if (!pressed || !dragging)
+                                            return
+
+                                        var desiredY = mouseY - grabOffset
+                                        var maxY = wallpaperScrollTrack.height - wallpaperScrollHandle.height
+                                        desiredY = Math.max(0, Math.min(maxY, desiredY))
+
+                                        wallpaperFlick.contentY = contentYFromHandleY(desiredY)
+                                    }
+
+                                    onReleased: {
+                                        dragging = false
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    // monitor
-                    Item {
-                        visible: root.currentTab === 3
-                        anchors.fill: parent
-                        anchors.margins: Settings.line
+                        // monitor
+                        Item {
+                            visible: root.currentTab === 3
+                            anchors.fill: parent
+                            anchors.margins: Settings.line
 
-                        SText {
-                            text: "Monitor"
-                            color: Settings.c1
-                            anchors.centerIn: parent
+                            SText {
+                                text: "Monitor"
+                                color: Settings.c1
+                                anchors.centerIn: parent
+                            }
                         }
-                    }
 
-                    // about
-                    Item {
-                        visible: root.currentTab === 4
-                        anchors.fill: parent
-                        anchors.margins: Settings.line
+                        // about
+                        Item {
+                            visible: root.currentTab === 4
+                            anchors.fill: parent
+                            anchors.margins: Settings.line
 
-                        SText {
-                            text: "About"
-                            color: Settings.c1
-                            anchors.centerIn: parent
+                            SText {
+                                text: "About"
+                                color: Settings.c1
+                                anchors.centerIn: parent
+                            }
                         }
                     }
                 }
-            }
-
-            // чорн обводка окна контента
-            SRectangle {
-                id: contentBlackOutline
-                anchors.fill: contentArea
-                anchors.margins: -Settings.line
-                z: -1
-                color: Settings.c2
             }
         }
     }
