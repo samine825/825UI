@@ -98,6 +98,11 @@ Item {
     // срез углов: 0 — чистое шестигранное семейство, > 0 — октагон
     property real cornerCut: 0
 
+    // срезы по сторонам (NaN — взять cornerCut): панели, прижатые к
+    // краю экрана, глушат срез на прижатой стороне
+    property real cornerCutLeft: NaN
+    property real cornerCutRight: NaN
+
     // морф шестигранник → восьмиугольник: 0 — талия на рёбрах на
     // полную глубину notch, углы острые; 1 — рёбра плоские, углы
     // срезаны на cornerCut. Глубина талии масштабируется на (1−morph),
@@ -125,6 +130,15 @@ Item {
 
     property color fillColor: Settings.c1
     property color strokeColor: Settings.c1
+
+    // цвет фона — панель под всем контентом. Прозрачный — бокса под
+    // контентом нет вовсе (силуэт рисуют тени и обводка)
+    property color backgroundColor: Settings.c2
+
+    // внутренняя тень (кольцо c2 на линии внутрь контура): боксы без
+    // внутренней тени в дизайне (старые SPanel/SFrame с shadow
+    // "none"/"outside") выключают
+    property bool shadowInner: true
 
     // внешняя тень (нарост) вообще и на боковых рёбрах: у одиночного
     // бокса пояс идёт по всему контуру; у вагонов паровозика
@@ -424,26 +438,31 @@ Item {
             Qt.point(lTip, mid)
         ]
 
-        // срез угла на текущем сдвиге: как у CutContour SPanel, фаска
+        // срез углов на текущем сдвиге: как у CutContour SPanel, фаска
         // 45° — параллельный перенос меняет срез на shift·(√2 − 2).
-        // Статичные элементы (morph = 0) получают срез всегда
-        const c = Math.max(0, cornerCut + shift * (Math.sqrt(2) - 2))
-        if (c <= 0)
+        // Стороны — независимо (панели у края экрана). Статичные
+        // элементы (morph = 0) получают срез всегда
+        const s45 = shift * (Math.sqrt(2) - 2)
+        const cutL = Math.max(0, (isNaN(cornerCutLeft)
+            ? cornerCut : cornerCutLeft) + s45)
+        const cutR = Math.max(0, (isNaN(cornerCutRight)
+            ? cornerCut : cornerCutRight) + s45)
+        if (cutL <= 0 && cutR <= 0)
             return pts
 
         return [
-            edgePoint(pts[0], pts[1], true, c),
+            edgePoint(pts[0], pts[1], true, cutL),
             pts[1],
-            edgePoint(pts[1], pts[2], false, c),
-            edgePoint(pts[2], pts[3], true, c),
+            edgePoint(pts[1], pts[2], false, cutR),
+            edgePoint(pts[2], pts[3], true, cutR),
             pts[3],
-            edgePoint(pts[3], pts[4], false, c),
-            edgePoint(pts[4], pts[5], true, c),
+            edgePoint(pts[3], pts[4], false, cutR),
+            edgePoint(pts[4], pts[5], true, cutR),
             pts[5],
-            edgePoint(pts[5], pts[6], false, c),
-            edgePoint(pts[6], pts[7], true, c),
+            edgePoint(pts[5], pts[6], false, cutL),
+            edgePoint(pts[6], pts[7], true, cutL),
             pts[7],
-            edgePoint(pts[7], pts[0], false, c)
+            edgePoint(pts[7], pts[0], false, cutL)
         ]
     }
 
@@ -531,15 +550,17 @@ Item {
         }
     }
 
-    // фон: заливка c2 по контуру (край под обводкой)
+    // фон: заливка по контуру (край под обводкой); прозрачный фон —
+    // под контентом ничего
     Shape {
         anchors.fill: parent
+        visible: box.backgroundColor.a > 0
         preferredRendererType: Shape.CurveRenderer
 
         SShapePath {
             joinStyle: ShapePath.MiterJoin
             capStyle: ShapePath.FlatCap
-            fillColor: Settings.c2
+            fillColor: box.backgroundColor
             strokeColor: "transparent"
             strokeWidth: 0
 
@@ -659,10 +680,11 @@ Item {
     // параллельный сдвиг контура внутрь на линию (как shadowOverContent
     // у SFrame), с настоящими рёбрами: повторяет шевроны, лежит на
     // заливке по всем сторонам. У стыков кольцо идёт параллельно
-    // диагонали на линию внутрь своего вагона — обводка соседа (c1,
+    // диагонали стыка на линию внутрь своего вагона — обводка соседа (c1,
     // позже по отрисовке) всегда поверх него
     Shape {
         anchors.fill: parent
+        visible: box.shadowInner
         preferredRendererType: Shape.CurveRenderer
 
         SShapePath {

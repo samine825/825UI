@@ -250,53 +250,32 @@ PanelWindow {
         y: -height
         rotation: 180
 
-        // тело
-        Shape {
+        // тело: InfexBox — фон c2, нарост-тень снаружи, обводка c1
+        InfexBox {
+            id: bannerBox
+
             anchors.fill: parent
-            preferredRendererType: Shape.CurveRenderer
+            edgeLeft: "Notch"
+            edgeRight: "Notch"
+            sideInset: 0
+            shadowOuter: true
+            shadowInner: false
 
-            NotifContour {
-                fillColor: Settings.c2
-                strokeColor: "transparent"
-                strokeWidth: 0
-            }
-        }
+            // контент: между кончиками выемок (талия на серединах
+            // боковых сторон)
+            Item {
+                id: content
 
-        // тёмный нарост снаружи, как у уведомления
-        Shape {
-            anchors.fill: parent
-            preferredRendererType: Shape.CurveRenderer
-
-            NotifContour {
-                fillColor: "transparent"
-                strokeColor: Settings.c2
-                strokeWidth: Settings.line * 3
-            }
-        }
-
-        // основная обводка c1 — поверх всего
-        Shape {
-            anchors.fill: parent
-            preferredRendererType: Shape.CurveRenderer
-
-            NotifContour {
-                fillColor: "transparent"
-                strokeColor: Settings.c1
-                strokeWidth: Settings.line
-            }
-        }
-
-        // контент: между кончиками выемок (талия = height/2 с боков)
-        Item {
-            id: content
-
-            x: box.height / 2 + Settings.line
-            width: box.width - box.height - Settings.line * 2
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            anchors.topMargin: Settings.line * 2
-            anchors.bottomMargin: Settings.line * 2
-            opacity: 0
+                x: bannerBox.x0 + Settings.line / 2
+                    + bannerBox.notch + Settings.line
+                width: bannerBox.width
+                    - 2 * (bannerBox.x0 + Settings.line / 2
+                        + bannerBox.notch + Settings.line)
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.topMargin: Settings.line * 2
+                anchors.bottomMargin: Settings.line * 2
+                opacity: 0
 
             Column {
                 width: parent.width
@@ -353,6 +332,7 @@ PanelWindow {
                     onActivated: banner.stopCurrent(true)
                 }
             }
+        }
         }
     }
 }

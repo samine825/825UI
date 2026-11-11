@@ -1,12 +1,12 @@
 import QtQuick
-import QtQuick.Shapes
 import ".."
 
-// Канонический таб-бар из настроек: гранёный контур с выемками
-// (контур цифры 8 инфекса), чёрная подложка-обводка, активный
-// индикатор с анимацией, перегородки с изломом к активному табу.
-// Владеет только визуалом и сигналами: состояние хранит потребитель
-// через current + onActivated.
+// Канонический таб-бар: паровозик InfexBox (как таб-бар настроек).
+// Стыки-замки указывают выемкой на активный таб и при переезде
+// проезжают плоское положение; активный таб выделяется горизонтальной
+// заливкой c1 с волной по направлению переезда, текст инвертируется
+// полосой заливки. Владеет только визуалом и сигналами: состояние
+// хранит потребитель через current + onActivated.
 Item {
     id: tabBar
 
@@ -18,8 +18,28 @@ Item {
     implicitWidth: 300
     implicitHeight: Settings.barHeight - Settings.line
 
+    // шаг стыков и торцов — чистая функция высоты
     readonly property real point: height * InfexGeometry.notchFrac
-    readonly property real tabWidth: width / Math.max(1, names.length)
+
+    // эталонные тексты: точная ширина рендера
+    readonly property real maxTextW: {
+        var m = 0
+        if (tabMetrics.count === names.length) {
+            for (var i = 0; i < names.length; i++) {
+                var it = tabMetrics.itemAt(i)
+                if (it)
+                    m = Math.max(m, it.implicitWidth)
+            }
+        }
+        return m
+    }
+
+    // клетка: равные доли ширины минус стыковые зоны, но не уже
+    // самого широкого текста со стандартным полем
+    readonly property real cellW: Math.max(
+        maxTextW + Settings.line * 6,
+        (width - (names.length + 1) * point - Settings.line)
+            / Math.max(1, names.length))
 
     function cycle(delta) {
         const n = Math.max(1, names.length)
@@ -38,199 +58,143 @@ Item {
         }
     }
 
-    // черная подложка-обводка
-    Shape {
-        id: tabOuterOutline
-
-        anchors.fill: parent
-        z: -1
-        preferredRendererType: Shape.CurveRenderer
-
-        SShapePath {
-            joinStyle: ShapePath.MiterJoin
-            capStyle: ShapePath.FlatCap
-
-            strokeColor: Settings.c2
-            strokeWidth: Settings.line * 3
-
-            fillColor: "transparent"
-
-            startX: 0
-            startY: 0
-
-            PathLine { x: tabBar.width;                y: 0 }
-            PathLine { x: tabBar.width - tabBar.point; y: tabBar.height / 2 }
-            PathLine { x: tabBar.width;                y: tabBar.height }
-            PathLine { x: 0;                           y: tabBar.height }
-            PathLine { x: tabBar.point;                y: tabBar.height / 2 }
-            PathLine { x: 0;                           y: 0 }
-        }
-    }
-
-    // основной контур
-    Shape {
-        anchors.fill: parent
-        preferredRendererType: Shape.CurveRenderer
-
-        SShapePath {
-            joinStyle: ShapePath.MiterJoin
-            capStyle: ShapePath.FlatCap
-            strokeColor: Settings.c1
-            strokeWidth: Settings.line
-            fillColor: Settings.c2
-
-            startX: 0
-            startY: 0
-
-            PathLine { x: tabBar.width;                y: 0 }
-            PathLine { x: tabBar.width - tabBar.point; y: tabBar.height / 2 }
-            PathLine { x: tabBar.width;                y: tabBar.height }
-            PathLine { x: 0;                           y: tabBar.height }
-            PathLine { x: tabBar.point;                y: tabBar.height / 2 }
-            PathLine { x: 0;                           y: 0 }
-        }
-    }
-
-    // активный индикатор
-    Shape {
-        id: activeIndicator
-
-        preferredRendererType: Shape.CurveRenderer
-
-        property real indH: tabBar.height - Settings.line * 3
-        property real indPoint: indH * InfexGeometry.notchFrac
-
-        width: tabBar.tabWidth - Settings.line * 6
-        height: indH
-        y: (tabBar.height - indH) / 2
-        x: tabBar.current * tabBar.tabWidth + Settings.line * 3
-
-        Behavior on x {
-            NumberAnimation {
-                duration: 300
-                easing.type: Easing.OutQuad
-            }
-        }
-
-        SShapePath {
-            joinStyle: ShapePath.MiterJoin
-            capStyle: ShapePath.FlatCap
-            fillColor: Settings.c1
-            strokeColor: "transparent"
-
-            startX: 0
-            startY: 0
-
-            PathLine { x: activeIndicator.width;                       y: 0 }
-            PathLine { x: activeIndicator.width - activeIndicator.indPoint; y: activeIndicator.height / 2 }
-            PathLine { x: activeIndicator.width;                       y: activeIndicator.height }
-            PathLine { x: 0;                                           y: activeIndicator.height }
-            PathLine { x: activeIndicator.indPoint;                    y: activeIndicator.height / 2 }
-            PathLine { x: 0;                                           y: 0 }
-        }
-    }
-
-    // перегородки: вертикали с изломом к выемке активного таба
+    // скрытые эталонные тексты — точный источник ширины
     Repeater {
-        model: tabBar.names.length - 1
+        id: tabMetrics
+        model: tabBar.names
 
-        delegate: Shape {
-            id: dividerShape
-
-            preferredRendererType: Shape.CurveRenderer
-            anchors.fill: parent
-            z: 2
-
-            property real xPos: (index + 1) * tabBar.tabWidth
-
-            SShapePath {
-                joinStyle: ShapePath.MiterJoin
-                capStyle: ShapePath.FlatCap
-                strokeColor: Settings.c1
-                strokeWidth: Settings.line
-                fillColor: "transparent"
-
-                startX: dividerShape.xPos
-                startY: 0
-
-                PathLine {
-                    x: tabBar.current <= index
-                        ? dividerShape.xPos - tabBar.point
-                        : dividerShape.xPos + tabBar.point
-                    y: tabBar.height / 2
-
-                    Behavior on x {
-                        NumberAnimation {
-                            duration: 300
-                            easing.type: Easing.InOutQuad
-                        }
-                    }
-                }
-
-                PathLine {
-                    x: dividerShape.xPos
-                    y: tabBar.height
-                }
-            }
+        SText {
+            visible: false
+            text: modelData
+            font.pixelSize: Settings.textXs
+            font.bold: true
         }
     }
 
-    // подписи
-    Row {
-        anchors.fill: parent
-        z: 3
+    Repeater {
+        model: tabBar.names
 
-        Repeater {
-            model: tabBar.names
+        delegate: InfexBox {
+            id: car
 
-            delegate: Item {
-                width: tabBar.tabWidth
-                height: tabBar.height
+            y: -Settings.line / 2
+            height: tabBar.height + Settings.line
 
-                property real textOffset: {
-                    var i = index
-                    var last = tabBar.names.length - 1
+            // рамка до края бокса (sideInset: 0): стыки совпадают
+            // поточечно; торцевой вагон шире на стыковую зону
+            // фреймовой выемки
+            x: index === 0
+                ? 0
+                : index * tabBar.cellW + (index + 1) * tabBar.point
+            width: tabBar.cellW + tabBar.point + Settings.line
+                + (index === 0 ? tabBar.point : 0)
 
-                    var leftNotch = (i === 0) || (tabBar.current >= i)
-                    var rightNotch = (i === last) || (tabBar.current <= i)
+            sideInset: 0
 
-                    // крайние подписи сдвинуты от выемок контура бара
-                    var edge = (i === 0 ? tabBar.point / 2 : 0)
-                        + (i === last ? -tabBar.point / 2 : 0)
+            // стенки: фреймовые выемки на торцах; стык указывает
+            // выемкой на активный таб и при переезде проезжает
+            // плоское положение
+            wallLeft: index === 0
+                ? 1
+                : (tabBar.current >= index ? 1 : -1)
+            wallRight: index === tabBar.names.length - 1
+                ? 1
+                : (tabBar.current <= index ? 1 : -1)
 
-                    if (leftNotch && !rightNotch)
-                        return tabBar.point / 2 + edge
-
-                    if (rightNotch && !leftNotch)
-                        return -tabBar.point / 2 + edge
-
-                    return edge
+            Behavior on wallLeft {
+                NumberAnimation {
+                    duration: Settings.animBase
+                    easing.type: Easing.InOutQuad
                 }
+            }
 
-                SText {
-                    text: modelData
-                    color: tabBar.current === index
-                        ? Settings.c2 : Settings.c1
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.horizontalCenterOffset: parent.textOffset
-                    font.pixelSize: Settings.textXs
-                    font.bold: true
+            Behavior on wallRight {
+                NumberAnimation {
+                    duration: Settings.animBase
+                    easing.type: Easing.InOutQuad
+                }
+            }
 
-                    Behavior on anchors.horizontalCenterOffset {
+            // нарост внешней тени — только по силуэту поезда
+            shadowOuterLeft: index === 0
+            shadowOuterRight: index === tabBar.names.length - 1
+
+            fillAxis: "horizontal"
+
+            // сторона заливки — по текущему ходу стенок (заливка
+            // тяготеет к стенке, которая глубже в Tab): старый таб
+            // опустошается в сторону нового, новый заполняется со
+            // стороны старого
+            fillFrom: wallLeft < wallRight
+                ? "left"
+                : wallLeft > wallRight ? "right" : "left"
+
+            // активный таб — полная заливка
+            fillFraction: tabBar.current === index ? 1 : 0
+
+            Behavior on fillFraction {
+                NumberAnimation {
+                    duration: Settings.animBase
+                    easing.type: Easing.OutQuad
+                }
+            }
+
+            content: Component {
+                Item {
+                    id: tabContent
+
+                    property bool inverted: false
+
+                    // контент на всю рамку вагона: вершины рёбер на
+                    // верхнем/нижнем крае стоят на месте при любой
+                    // глубине стенок
+                    width: car.width - Settings.line
+                    height: tabBar.height
+
+                    // компенсация слайда контента: Loader начинается
+                    // правее выемки
+                    readonly property real wallShift:
+                        -Math.max(0, car.wallLeft * car.notch)
+
+                    // сдвиг текста: от вогнутой стенки на полшага
+                    // выемки — центровка по клетке середины высоты
+                    readonly property real leftCut:
+                        index === 0 || tabBar.current >= index ? 1 : 0
+                    readonly property real rightCut:
+                        index === tabBar.names.length - 1
+                        || tabBar.current <= index ? 1 : 0
+
+                    property real textShift:
+                        (leftCut - rightCut) * tabBar.point / 2
+
+                    Behavior on textShift {
                         NumberAnimation {
-                            duration: 300
+                            duration: Settings.animBase
                             easing.type: Easing.InOutQuad
                         }
                     }
-                }
 
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-
-                    onClicked: tabBar.activated(index)
+                    SText {
+                        anchors.centerIn: parent
+                        anchors.horizontalCenterOffset:
+                            tabContent.textShift + tabContent.wallShift
+                        text: modelData
+                        color: tabContent.inverted
+                            ? Settings.c2 : Settings.c1
+                        font.pixelSize: Settings.textXs
+                        font.bold: true
+                    }
                 }
+            }
+
+            // клики мимо contentHolder: невизуальный элемент не
+            // включает маску силуэта
+            MouseArea {
+                parent: car
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+
+                onClicked: tabBar.activated(index)
             }
         }
     }
