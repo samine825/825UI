@@ -31,12 +31,13 @@ import ".."
 // Контент — Component: он инстанцируется дважды. Базовый экземпляр
 // (inverted: false) лежит под заливкой, полосовой экземпляр
 // (inverted: true) — над ней в клип-полосе заливки (при
-// fillAxis "vertical" — от уровня до дна, при "horizontal" — от
-// левого ребра до кромки); корень компонента обязан объявить
+// fillAxis "vertical" — от уровня до дна, при "horizontal" — полоса
+// между ребром заливки и кромкой, сторона заливки — fillFrom);
+// корень компонента обязан объявить
 // property bool inverted и собственные width/height. Полосовой
 // экземпляр создаётся только при непустой заливке. Заливка —
 // аналитический многоугольник: при срезах и горизонтальной оси —
-// отсечение контура полуплоскостью уровня, при вертикальной оси без
+// отсечение контура полуплоскостью кромки, при вертикальной оси без
 // срезов — явный построитель (пиксельно свернён со старым блоком
 // SystemStats, включая шевронные зазоры fillGap*).
 //
@@ -108,6 +109,11 @@ Item {
     // направо (зазоры fillGap* поддерживаются только на вертикальной)
     property string fillAxis: "vertical"
 
+    // сторона, от которой растёт горизонтальная заливка: "left" — от
+    // левого ребра (кромка едет вправо), "right" — от правого (кромка
+    // едет влево). Вертикальная заливка всегда снизу
+    property string fillFrom: "left"
+
     // заливка: доля между внутренними гранями обводок (0 — пусто,
     // 1 — до кромки кольца)
     property real fillFraction: 0
@@ -157,12 +163,31 @@ Item {
         - Math.max(0, Math.min(1, fillFraction))
             * (height - 2 * Settings.line)
 
-    // x правой кромки заливки (горизонтальная ось): от кромки кольца
-    // слева до кромки кольца справа — зеркально fillLevel
-    readonly property real fillX:
-        x0 + Settings.line
-        + Math.max(0, Math.min(1, fillFraction))
-            * (innerWidth - 2 * Settings.line)
+    // x кромки заливки (горизонтальная ось). Границы адаптированы к
+    // стенкам: при полном заполнении кромка доходит до края контура
+    // противоположной стороны (оба направления при frac=1 покрывают
+    // весь контур — смена направления без скачка), пустое — кромка
+    // кольца своей стороны, а при выпуклой стенке (Tab, σ < 0) —
+    // кончик выпуклости: заливка дренирует расширенную зону и
+    // исчезает без остатка, а не обрывается на её начале
+    readonly property real fillX: {
+        const f = Math.max(0, Math.min(1, fillFraction))
+        const o = Settings.line / 2
+
+        if (fillFrom === "right") {
+            const full = x0 + o + Math.min(0, sigmaLeft())
+            const empty = sigmaRight() < 0
+                ? x1 - o - sigmaRight()
+                : x1 - Settings.line
+            return empty + f * (full - empty)
+        }
+
+        const full = x1 - o - Math.min(0, sigmaRight())
+        const empty = sigmaLeft() < 0
+            ? x0 + o + sigmaLeft()
+            : x0 + Settings.line
+        return empty + f * (full - empty)
+    }
 
     // x бокового ребра на высоте y (в координатах бокса): линейно от
     // нуля в углах до знаковой глубины sig на середине высоты
@@ -268,7 +293,9 @@ Item {
 
         if (fillAxis === "horizontal")
             return clipPlane(offsetPoints(0),
-                [-1, 0, -fillX])
+                fillFrom === "right"
+                    ? [1, 0, fillX]
+                    : [-1, 0, -fillX])
 
         if (cornerCut > 0) {
             // срезы + зазоры не сочетаются (зазоры нужны только
@@ -592,11 +619,16 @@ Item {
     }
 
     // полосовой контент (c2) — над заливкой, виден только в заливке:
-    // вертикальная ось — полоса от уровня до дна, горизонтальная —
-    // от левого ребра до кромки fillX
+    // вертикальная ось — полоса от уровня до дна; горизонтальная —
+    // от ребра заливки до кромки (fillFrom "left": от левого ребра,
+    // "right": от кромки до правого ребра)
     Item {
+        x: box.fillAxis === "horizontal" && box.fillFrom === "right"
+            ? box.fillX : 0
         width: box.fillAxis === "horizontal"
-            ? box.fillX : box.width
+            ? (box.fillFrom === "right"
+                ? box.width - box.fillX : box.fillX)
+            : box.width
         y: box.fillAxis === "horizontal" ? 0 : box.fillLevel
         height: box.fillAxis === "horizontal"
             ? box.height : box.height - box.fillLevel
@@ -611,6 +643,8 @@ Item {
         Loader {
             x: box.x0 + Settings.line / 2
                 + Math.max(0, box.sigmaLeft())
+                - (box.fillAxis === "horizontal"
+                    && box.fillFrom === "right" ? box.fillX : 0)
             y: box.fillAxis === "horizontal"
                 ? Settings.line / 2
                 : Settings.line / 2 - box.fillLevel
