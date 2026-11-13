@@ -104,7 +104,8 @@ PanelWindow {
                 ? Settings.c2 : Settings.c1
         }
 
-        // подложка-октагон на hover — как у плиток ControlPanel
+        // подложка-октагон на hover — активный тайл: заливка c1,
+        // иконка инвертируется в c2
         InfexBox {
             anchors.fill: parent
             visible: actionBtn.hovered
@@ -113,6 +114,7 @@ PanelWindow {
             edgeRight: "Flat"
             cornerCut: Settings.line
             sideInset: 0
+            backgroundColor: Settings.c1
             shadowOuter: false
             shadowInner: false
         }
@@ -1552,6 +1554,10 @@ print("\n\n".join(out) if out else "ничего не найдено")
     }
 
     function loadChats(text) {
+        // повторный вызов после готовности — не затираем живое состояние
+        if (chatsReady)
+            return
+
         let list = []
 
         try {
@@ -2889,12 +2895,17 @@ print("\n\n".join(out) if out else "ничего не найдено")
         }
     }
 
-    // история чатов: на старте читаем синхронно, пишем процессом
+    // история чатов: читаем по onLoaded (FileView грузит асинхронно —
+    // чтение в onCompleted возвращало пустой текст, loadChats("")
+    // создавал пустой чат и перезаписывал файл — история пропадала),
+    // пишем процессом
     FileView {
         id: chatsFile
 
         path: cat.chatsPath
         printErrors: false
+
+        onLoaded: cat.loadChats(chatsFile.text())
     }
 
     Process {
@@ -2913,10 +2924,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
         }
     }
 
-    Component.onCompleted: {
-        modelsProc.running = true
-        cat.loadChats(chatsFile.text())
-    }
+    Component.onCompleted: modelsProc.running = true
 
     // === сцена кота: вся начинка окна ===
     // при открытой панели чатов уезжает влево на menuSlide,
@@ -3295,9 +3303,8 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                         }
                                     }
 
-                                    // === секция reasoning: раскрывается, от
-                                    // обычного текста — заголовок-ярлык и приглушённое
-                                    // мелкое тело ===
+                                    // === секция reasoning: рамка с ярлыком,
+                                    // тело раскрывается внутри рамки ===
                                     Column {
                                         id: reasonBlock
 
@@ -3308,72 +3315,99 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                         y: 4 - Settings.line / 2
                                             + attFlow.height + msgRoot.attGap
                                         width: bubble.width - 26
-                                        spacing: 3
                                         visible: present
                                         height: present
-                                            ? reasonHeader.height
-                                                + (msgRoot.reasonOpen
-                                                    ? reasonBody.height + 6 : 0)
-                                            : 0
+                                            ? reasonFrame.height : 0
 
                                         Item {
-                                            id: reasonHeader
+                                            id: reasonFrame
 
                                             width: parent.width
-                                            height: 18
+                                            height: reasonContent.height
+                                                + Settings.line * 3
 
-                                            SText {
-                                                x: 0
-                                                y: 0
-                                                width: 90
-                                                height: 18
-                                                verticalAlignment: Text.AlignVCenter
-                                                text: "reasoning"
-                                                color: Settings.c1
-                                                font.pixelSize: Settings.textXs
-                                                font.bold: true
-                                                opacity: 0.75
+                                            // рамка секции: контур c1 без
+                                            // заливки, штрих центрирован на
+                                            // кромке, внутренний прямоугольник
+                                            // с отступом полторы линии
+                                            Panel {
+                                                x: Settings.line / 2
+                                                y: Settings.line / 2
+                                                width: parent.width
+                                                    - Settings.line
+                                                height: parent.height
+                                                    - Settings.line
+                                                cornerCut: Settings.line * 2
+                                                strokeColor: Settings.c1
+                                                fillColor: "transparent"
+                                                strokeWidth: Settings.line
                                             }
 
-                                            VIcon {
-                                                x: 72
-                                                y: 4
-                                                width: 10
-                                                height: 10
-                                                strokePath: Glyphs.iconChevronDown
-                                                lineColor: Settings.c1
+                                            Column {
+                                                id: reasonContent
 
-                                                rotation: msgRoot.reasonOpen
-                                                    ? 0 : -90
-                                                opacity: 0.75
+                                                x: Settings.line * 1.5
+                                                y: Settings.line * 1.5
+                                                width: parent.width
+                                                    - Settings.line * 3
+                                                spacing: 3
+
+                                                Item {
+                                                    id: reasonHeader
+
+                                                    width: parent.width
+                                                    height: 18
+
+                                                    SText {
+                                                        x: 0
+                                                        y: 0
+                                                        width: 90
+                                                        height: 18
+                                                        verticalAlignment: Text.AlignVCenter
+                                                        text: "reasoning"
+                                                        color: Settings.c1
+                                                        font.pixelSize: Settings.textXs
+                                                        font.bold: true
+                                                    }
+
+                                                    VIcon {
+                                                        x: 72
+                                                        y: 4
+                                                        width: 10
+                                                        height: 10
+                                                        strokePath: Glyphs.iconChevronDown
+                                                        lineColor: Settings.c1
+
+                                                        rotation: msgRoot.reasonOpen
+                                                            ? 0 : -90
+                                                    }
+
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        cursorShape:
+                                                            Qt.PointingHandCursor
+
+                                                        onClicked:
+                                                            msgRoot.reasonOpen =
+                                                                !msgRoot.reasonOpen
+                                                    }
+                                                }
+
+                                                TextEdit {
+                                                    id: reasonBody
+
+                                                    visible: msgRoot.reasonOpen
+                                                    width: parent.width
+                                                    height: implicitHeight
+                                                    text: msgRoot.reasoning
+                                                    color: Settings.c1
+                                                    font.pixelSize: Settings.textXs
+                                                    wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
+                                                    readOnly: true
+                                                    selectByMouse: true
+                                                    textFormat: TextEdit.PlainText
+                                                }
                                             }
-
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                cursorShape:
-                                                    Qt.PointingHandCursor
-
-                                                onClicked:
-                                                    msgRoot.reasonOpen =
-                                                        !msgRoot.reasonOpen
-                                            }
-                                        }
-
-                                        TextEdit {
-                                            id: reasonBody
-
-                                            visible: msgRoot.reasonOpen
-                                            x: 8
-                                            width: parent.width - 16
-                                            height: implicitHeight
-                                            text: msgRoot.reasoning
-                                            color: Settings.c1
-                                            opacity: 0.65
-                                            font.pixelSize: Settings.textXs
-                                            wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
-                                            readOnly: true
-                                            selectByMouse: true
-                                            textFormat: TextEdit.PlainText
                                         }
                                     }
 
@@ -3390,15 +3424,40 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                         x: 13 - Settings.line / 2
                                         y: reasonBlock.y + reasonBlock.height
                                         width: bubble.width - 26
-                                        spacing: 3
                                         visible: present
-                                        height: present ? callsCol.height + 4 : 0
+                                        height: present
+                                            ? toolsFrame.height : 0
 
-                                        Column {
-                                            id: callsCol
+                                        Item {
+                                            id: toolsFrame
 
                                             width: parent.width
-                                            spacing: 3
+                                            height: callsCol.height
+                                                + Settings.line * 3
+
+                                            // рамка секции инструментов —
+                                            // одна на все вызовы хода
+                                            Panel {
+                                                x: Settings.line / 2
+                                                y: Settings.line / 2
+                                                width: parent.width
+                                                    - Settings.line
+                                                height: parent.height
+                                                    - Settings.line
+                                                cornerCut: Settings.line * 2
+                                                strokeColor: Settings.c1
+                                                fillColor: "transparent"
+                                                strokeWidth: Settings.line
+                                            }
+
+                                            Column {
+                                                id: callsCol
+
+                                                x: Settings.line * 1.5
+                                                y: Settings.line * 1.5
+                                                width: parent.width
+                                                    - Settings.line * 3
+                                                spacing: 3
 
                                             Repeater {
                                                 model: msgRoot.calls
@@ -3454,7 +3513,6 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                                             ? Glyphs.iconEye
                                                                             : Glyphs.iconAsk
                                                             lineColor: Settings.c1
-                                                            opacity: 0.85
                                                         }
 
                                                         SText {
@@ -3525,7 +3583,6 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                                 }
                                                             }
                                                             color: Settings.c1
-                                                            opacity: 0.6
                                                             font.pixelSize: Settings.textXs
                                                             wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
                                                             readOnly: true
@@ -3540,8 +3597,6 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                                 ? "(исполняется...)"
                                                                 : String(callBlock.modelData.result)
                                                             color: Settings.c1
-                                                            opacity: callBlock.pending
-                                                                ? 0.4 : 0.7
                                                             font.pixelSize: Settings.textXs
                                                             wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
                                                             readOnly: true
@@ -3732,8 +3787,8 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                                             visible: text === ""
                                                                             text: "свой вариант..."
                                                                             color: Settings.c1
-                                                                            opacity: 0.4
                                                                             font.pixelSize: Settings.textXs
+                                                                            font.italic: true
                                                                             verticalAlignment: Text.AlignVCenter
                                                                         }
 
@@ -3802,6 +3857,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                 }
                                             }
                                         }
+                                    }
                                     }
 
                                     // текст можно выделять и копировать
@@ -3895,13 +3951,6 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                 spacing: 2
                                 visible: !msgRoot.hidden
                                     && (msgRoot.isUser || !msgRoot.editing)
-                                opacity: actionsHover.containsMouse
-                                    || msgRoot.editing ? 1 : 0.45
-
-                                Behavior on opacity {
-                                    NumberAnimation { duration: 150 }
-                                }
-
                                 HoverHandler {
                                     id: actionsHover
                                 }
@@ -4044,8 +4093,8 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                 clip: true
 
                                 // живой reasoning: копится по мере стрима,
-                                // шапка-ярлык как у сообщений; тело до 140px
-                                Column {
+                                // та же рамка, что у сообщений
+                                Item {
                                     id: streamReason
 
                                     readonly property bool present:
@@ -4054,44 +4103,69 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                     x: 13 - Settings.line / 2
                                     y: 4 - Settings.line / 2
                                     width: catBubble.width - 26
-                                    spacing: 3
                                     visible: present
                                     height: present
-                                        ? 18 + Math.min(140,
-                                            streamReasonBody.height + 4)
-                                        : 0
+                                        ? streamReasonFrame.height : 0
 
-                                    SText {
-                                        width: 90
-                                        height: 18
-                                        verticalAlignment: Text.AlignVCenter
-                                        text: "reasoning"
-                                        color: Settings.c1
-                                        font.pixelSize: Settings.textXs
-                                        font.bold: true
-                                        opacity: 0.75
-                                    }
+                                    Item {
+                                        id: streamReasonFrame
 
-                                    TextEdit {
-                                        id: streamReasonBody
+                                        width: parent.width
+                                        height: streamReasonContent.height
+                                            + Settings.line * 3
 
-                                        x: 8
-                                        width: parent.width - 16
-                                        height: implicitHeight
-                                        text: cat.streamReasoning
-                                        color: Settings.c1
-                                        opacity: 0.65
-                                        font.pixelSize: Settings.textXs
-                                        wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
-                                        readOnly: true
-                                        selectByMouse: true
-                                        textFormat: TextEdit.PlainText
+                                        Panel {
+                                            x: Settings.line / 2
+                                            y: Settings.line / 2
+                                            width: parent.width
+                                                - Settings.line
+                                            height: parent.height
+                                                - Settings.line
+                                            cornerCut: Settings.line * 2
+                                            strokeColor: Settings.c1
+                                            fillColor: "transparent"
+                                            strokeWidth: Settings.line
+                                        }
+
+                                        Column {
+                                            id: streamReasonContent
+
+                                            x: Settings.line * 1.5
+                                            y: Settings.line * 1.5
+                                            width: parent.width
+                                                - Settings.line * 3
+                                            spacing: 3
+
+                                            SText {
+                                                width: 90
+                                                height: 18
+                                                verticalAlignment: Text.AlignVCenter
+                                                text: "reasoning"
+                                                color: Settings.c1
+                                                font.pixelSize: Settings.textXs
+                                                font.bold: true
+                                            }
+
+                                            TextEdit {
+                                                id: streamReasonBody
+
+                                                width: parent.width
+                                                height: implicitHeight
+                                                text: cat.streamReasoning
+                                                color: Settings.c1
+                                                font.pixelSize: Settings.textXs
+                                                wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
+                                                readOnly: true
+                                                selectByMouse: true
+                                                textFormat: TextEdit.PlainText
+                                            }
+                                        }
                                     }
                                 }
 
-                                // живые вызовы инструментов: имя + точка
-                                // исполнения
-                                Column {
+                                // живые вызовы инструментов: та же рамка,
+                                // имя + точка исполнения
+                                Item {
                                     id: streamTools
 
                                     readonly property bool present:
@@ -4101,10 +4175,38 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                     y: 4 - Settings.line / 2
                                         + streamReason.height
                                     width: catBubble.width - 26
-                                    spacing: 3
                                     visible: present
                                     height: present
-                                        ? cat.streamToolCalls.length * 21 : 0
+                                        ? streamToolsFrame.height : 0
+
+                                    Item {
+                                        id: streamToolsFrame
+
+                                        width: parent.width
+                                        height: streamToolsCol.height
+                                            + Settings.line * 3
+
+                                        Panel {
+                                            x: Settings.line / 2
+                                            y: Settings.line / 2
+                                            width: parent.width
+                                                - Settings.line
+                                            height: parent.height
+                                                - Settings.line
+                                            cornerCut: Settings.line * 2
+                                            strokeColor: Settings.c1
+                                            fillColor: "transparent"
+                                            strokeWidth: Settings.line
+                                        }
+
+                                        Column {
+                                            id: streamToolsCol
+
+                                            x: Settings.line * 1.5
+                                            y: Settings.line * 1.5
+                                            width: parent.width
+                                                - Settings.line * 3
+                                            spacing: 3
 
                                     Repeater {
                                         model: cat.streamToolCalls
@@ -4112,7 +4214,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                         delegate: Item {
                                             required property var modelData
 
-                                            width: streamTools.width
+                                            width: streamToolsCol.width
                                             height: 18
 
                                             VIcon {
@@ -4131,7 +4233,6 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                                 ? Glyphs.iconEye
                                                                 : Glyphs.iconAsk
                                                 lineColor: Settings.c1
-                                                opacity: 0.85
                                             }
 
                                             SText {
@@ -4160,6 +4261,8 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                 border.color: Settings.c1
                                                 border.width: 1
                                             }
+                                        }
+                                    }
                                         }
                                     }
                                 }
@@ -4712,9 +4815,8 @@ print("\n\n".join(out) if out else "ничего не найдено")
 
                                 SShapePath {
                                     fillColor: "transparent"
-                                    strokeColor: Qt.rgba(Settings.c1.r,
-                                        Settings.c1.g, Settings.c1.b, 0.25)
-                                    strokeWidth: 2.5
+                                    strokeColor: Settings.c1
+                                    strokeWidth: 1.5
                                     capStyle: ShapePath.RoundCap
 
                                     PathMove { x: 12; y: 4 }
