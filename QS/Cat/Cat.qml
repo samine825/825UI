@@ -836,13 +836,26 @@ PanelWindow {
 
         if (call.name === "terminal") {
             const args = parseArgs(call.args)
+            const cmd = String(args.command || "")
 
-            terminalRun(String(args.session || "main"),
-                String(args.command || ""))
+            if (cmd === "") {
+                toolDone("не удалось разобрать аргументы команды: "
+                    + call.args.slice(0, 200))
+                return
+            }
+
+            terminalRun(String(args.session || "main"), cmd)
         } else if (call.name === "web_search") {
             const args = parseArgs(call.args)
+            const q = String(args.query || "")
 
-            webSearch(String(args.query || ""))
+            if (q === "") {
+                toolDone("не удалось разобрать аргументы поиска: "
+                    + call.args.slice(0, 200))
+                return
+            }
+
+            webSearch(q)
         } else if (call.name === "view_image") {
             const args = parseArgs(call.args)
 
@@ -1075,67 +1088,72 @@ PanelWindow {
     // === поиск в интернете ===
     // парсер ленты результатов DuckDuckGo Lite — целиком в python,
     // чтобы не бороться с HTML-регэкспами в QML
-    readonly property string ddgCode: `import sys, re, html, urllib.request, urllib.parse
-UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"}
-q = sys.argv[1]
+    // парсер поисковых лент: лежит файлом (python-urllib у DDG не
+    // живёт — сервер рвёт его TLS, качает curl)
+    readonly property string ddgParseCode: `import sys, re, html
 
-def fetch(url):
-    req = urllib.request.Request(url, headers=UA)
-    return urllib.request.urlopen(req, timeout=20).read().decode("utf-8", "replace")
+def strip(t):
+    return html.unescape(re.sub("<[^>]+>", "", t)).strip()
 
 def decode(u):
     if "duckduckgo.com/l/" in u and "uddg=" in u:
         m = re.search(r"uddg=([^&]+)", u)
         if m:
             u = urllib.parse.unquote(m.group(1))
-    return u if u.startswith("http") else None
+    if not u or not u.startswith("http"):
+        return None
+    # внутренние ссылки DDG (страницы боту-детекта) — мусор
+    if "duckduckgo.com" in u and "uddg=" not in u:
+        return None
+    return u
 
+import urllib.parse
 out = []
-try:
-    t = fetch("https://lite.duckduckgo.com/lite/?q=" + urllib.parse.quote(q))
-    links = re.findall(r'<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', t)
-    snips = re.findall(r'class=.result-snippet.[^>]*>(.*?)</td>', t, re.S)
+
+for path, linkRe, snipRe in (
+        (sys.argv[1], r'<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>',
+            r'class=.result-snippet.[^>]*>(.*?)</td>'),
+        (sys.argv[2], r'<a[^>]+class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
+            r'class="result__snippet"[^>]*>(.*?)</a>')):
+    try:
+        t = open(path, encoding="utf-8", errors="replace").read()
+    except Exception:
+        continue
+    links = re.findall(linkRe, t)
+    snips = re.findall(snipRe, t, re.S)
     n = 0
     for u, title in links:
         u = decode(u)
         if not u:
             continue
-        title = html.unescape(re.sub("<[^>]+>", "", title)).strip()
+        title = strip(title)
         if not title:
             continue
         n += 1
-        sn = html.unescape(re.sub("<[^>]+>", "", snips[n - 1])).strip() if n <= len(snips) else ""
-        out.append(str(n) + ". " + title + "\n" + u + (("\n" + sn[:300]) if sn else ""))
+        sn = strip(snips[n - 1])[:300] if n <= len(snips) else ""
+        out.append(str(n) + ". " + title + "\n" + u
+            + (("\n" + sn) if sn else ""))
         if n >= 6:
             break
-except Exception as e:
-    out.append("lite-лента недоступна: " + str(e))
+    if out:
+        break
 
-if len([o for o in out if o[0].isdigit()]) == 0:
-    try:
-        t = fetch("https://html.duckduckgo.com/html/?q=" + urllib.parse.quote(q))
-        links = re.findall(r'<a[^>]+class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', t)
-        snips = re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', t, re.S)
-        n = 0
-        for u, title in links:
-            u = decode(u)
-            if not u:
-                continue
-            title = html.unescape(re.sub("<[^>]+>", "", title)).strip()
-            if not title:
-                continue
-            n += 1
-            sn = html.unescape(re.sub("<[^>]+>", "", snips[n - 1])).strip() if n <= len(snips) else ""
-            out.append(str(n) + ". " + title + "\n" + u + (("\n" + sn[:300]) if sn else ""))
-            if n >= 6:
-                break
-    except Exception as e:
-        out.append("html-лента недоступна: " + str(e))
-
-results = [o for o in out if o[0].isdigit()]
-print("\n\n".join(results) if results else ("\n\n".join(out) if out else "ничего не найдено"))
+print("\n\n".join(out) if out else "ничего не найдено")
 `
 
+    // разовая установка парсера в state
+    Process {
+        id: searchParserSetup
+
+        stdinEnabled: true
+
+        command: ["sh", "-c",
+            'mkdir -p "$1" && printf "%s" "$2" > "$1/ddg_parse.py"',
+            "sh", termDir]
+        stdout: StdioCollector { }
+
+        onStarted: write(cat.ddgParseCode)
+    }
 
     property string searchErr: ""
 
@@ -1175,7 +1193,20 @@ print("\n\n".join(results) if results else ("\n\n".join(out) if out else "нич
 
         searchErr = ""
         searchProc.runId = toolRunId
-        searchProc.command = ["python3", "-c", ddgCode, q]
+        searchProc.command = ["sh", "-c",
+            'curl -sS -m 15 -A "$1" "$2" -o "$4"; '
+            + 'curl -sS -m 15 -A "$1" "$3" -o "$5"; '
+            + 'python3 "$6" "$4" "$5" "$7"',
+            "sh",
+            "Mozilla/5.0 (X11; Linux x86_64)",
+            "https://lite.duckduckgo.com/lite/?q="
+                + encodeURIComponent(q),
+            "https://html.duckduckgo.com/html/?q="
+                + encodeURIComponent(q),
+            termDir + "/search1.html",
+            termDir + "/search2.html",
+            termDir + "/ddg_parse.py",
+            q]
         searchProc.running = true
     }
 
@@ -1875,7 +1906,10 @@ print("\n\n".join(results) if results else ("\n\n".join(out) if out else "нич
             role: "error",
             mtext: "⚠ " + msg,
             partsJson: "",
-            attJson: ""
+            attJson: "",
+            reasoning: "",
+            toolCalls: "",
+            hidden: false
         })
         persistCurrentChat()
     }
@@ -1978,7 +2012,10 @@ print("\n\n".join(results) if results else ("\n\n".join(out) if out else "нич
             role: "user",
             mtext: query,
             partsJson: "",
-            attJson: atts.length > 0 ? JSON.stringify(atts) : ""
+            attJson: atts.length > 0 ? JSON.stringify(atts) : "",
+            reasoning: "",
+            toolCalls: "",
+            hidden: false
         })
         // название чата — по первому сообщению
         renameCurrentChat(query)
@@ -2740,18 +2777,43 @@ print("\n\n".join(results) if results else ("\n\n".join(out) if out else "нич
                     if (r !== undefined && r !== null && r !== "")
                         cat.streamReasoning += r
 
-                    // вызовы инструментов копим по index дельты
+                    // вызовы инструментов копим. Параллельные вызовы
+                    // приходят последовательно, и некоторые серверы шлют
+                    // их с ОДНИМ index — новый вызов опознаём по id/имени,
+                    // продолжение аргументов всегда идёт в последнюю
+                    // ячейку (иначе два JSON склеивались в один вызов)
                     if (delta.tool_calls) {
                         for (let t = 0; t < delta.tool_calls.length; t++) {
                             const tc = delta.tool_calls[t]
 
-                            while (cat.streamToolCalls.length <= tc.index)
+                            // слот строго по index дельты: параллельные
+                            // вызовы несут разные index, у продолжений он
+                            // повторяется; сервер без index — слот последний
+                            // каждый под-ход сервер нумерует заново
+                            // (0,1,...) — глобальный слот = cursor + локальный
+                            const local = tc.index !== undefined
+                                ? tc.index
+                                : Math.max(0, cat.streamToolCalls.length
+                                    - cat.toolsCursor - 1)
+                            const idx = cat.toolsCursor + local
+
+                            while (cat.streamToolCalls.length <= idx)
                                 cat.streamToolCalls.push(
-                                    { id: "", name: "", args: "" })
+                                    { id: "", name: "", args: "",
+                                      reasoning: "" })
 
-                            const slot = cat.streamToolCalls[tc.index]
+                            const slot = cat.streamToolCalls[idx]
 
-                            if (tc.id)
+                            // reasoning, натекший до вызова, — его:
+                            // у каждого вызова своя зона, а не одна на
+                            // всё сообщение
+                            if (slot.reasoning === ""
+                                    && cat.streamReasoning !== "") {
+                                slot.reasoning = cat.streamReasoning
+                                cat.streamReasoning = ""
+                            }
+
+                            if (tc.id && tc.id !== "")
                                 slot.id = tc.id
 
                             if (tc.function) {
@@ -3230,7 +3292,8 @@ print("\n\n".join(results) if results else ("\n\n".join(out) if out else "нич
                             readonly property bool hasReasoning:
                                 reasoning !== ""
 
-                            // раскрытые секции: reasoning и вызовы
+                            // раскрытые секции: reasoning и вызовы,
+                            // обе свернуты по умолчанию
                             property bool reasonOpen: false
                             property var openCalls: ({})
 
@@ -3405,8 +3468,7 @@ print("\n\n".join(results) if results else ("\n\n".join(out) if out else "нич
                                         }
                                     }
 
-                                    // === секция reasoning: рамка с ярлыком,
-                                    // тело раскрывается внутри рамки ===
+                                    // === секция вызовов: рамка с ярлыком ===
                                     Column {
                                         id: reasonBlock
 
@@ -3518,10 +3580,9 @@ print("\n\n".join(results) if results else ("\n\n".join(out) if out else "нич
                                         }
                                     }
 
-                                    // === секция вызовов инструментов: у каждого
-                                    // вызова — иконка, имя, статус; по клику —
-                                    // аргументы и результат; незавершённый ask_user
-                                    // раскрывается в карточку опроса ===
+                                    // === секция reasoning: ПОСЛЕ вызовов —
+                                    // хронология стрима (reasoning финального
+                                    // текста идёт после инструментов) ===
                                     Column {
                                         id: toolsBlock
 
@@ -3589,6 +3650,9 @@ print("\n\n".join(results) if results else ("\n\n".join(out) if out else "нич
                                                     readonly property bool pending:
                                                         modelData.result
                                                             === undefined
+                                                    // reasoning вызова — своя
+                                                    // свёрнутая зона
+                                                    property bool reasonOpen: false
 
                                                     Item {
                                                         width: parent.width
@@ -3627,15 +3691,16 @@ print("\n\n".join(results) if results else ("\n\n".join(out) if out else "нич
                                                             elide: Text.ElideRight
                                                         }
 
-                                                        // статус: точка исполнения
+                                                        // статус: ромбик
+                                                        // (как в WorkspaceBar)
                                                         SRectangle {
                                                             id: callStatus
 
                                                             anchors.verticalCenter: parent.verticalCenter
-                                                            x: parent.width - 10
-                                                            width: 7
-                                                            height: 7
-                                                            radius: 3.5
+                                                            x: parent.width - 12
+                                                            width: 6
+                                                            height: 6
+                                                            rotation: 45
 
                                                             color: callBlock.pending
                                                                 ? Settings.c2
@@ -3652,6 +3717,70 @@ print("\n\n".join(results) if results else ("\n\n".join(out) if out else "нич
                                                             onClicked:
                                                                 msgRoot.toggleCall(
                                                                     callBlock.index)
+                                                        }
+                                                    }
+
+                                                    // зона reasoning вызова:
+                                                    // свёрнута по умолчанию,
+                                                    // живёт в хронологии —
+                                                    // под своей строкой
+                                                    Column {
+                                                        visible: (callBlock.modelData.reasoning
+                                                            || "") !== ""
+                                                        x: 18
+                                                        width: parent.width - 18
+                                                        spacing: 3
+
+                                                        Item {
+                                                            width: parent.width
+                                                            height: 16
+
+                                                            Row {
+                                                                spacing: 5
+
+                                                                SText {
+                                                                    height: 16
+                                                                    verticalAlignment: Text.AlignVCenter
+                                                                    text: "reasoning"
+                                                                    color: Settings.c1
+                                                                    font.pixelSize: Settings.textXs
+                                                                    font.bold: true
+                                                                }
+
+                                                                VIcon {
+                                                                    anchors.verticalCenter: parent.verticalCenter
+                                                                    width: 10
+                                                                    height: 10
+                                                                    strokePath: Glyphs.iconChevronDown
+                                                                    lineColor: Settings.c1
+
+                                                                    rotation: callBlock.reasonOpen
+                                                                        ? 0 : -90
+                                                                }
+                                                            }
+
+                                                            MouseArea {
+                                                                anchors.fill: parent
+                                                                cursorShape:
+                                                                    Qt.PointingHandCursor
+
+                                                                onClicked:
+                                                                    callBlock.reasonOpen =
+                                                                        !callBlock.reasonOpen
+                                                            }
+                                                        }
+
+                                                        TextEdit {
+                                                            visible: callBlock.reasonOpen
+                                                            width: parent.width
+                                                            height: implicitHeight
+                                                            text: callBlock.modelData.reasoning
+                                                            color: Settings.c1
+                                                            font.pixelSize: Settings.textXs
+                                                            wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
+                                                            readOnly: true
+                                                            selectByMouse: true
+                                                            textFormat: TextEdit.PlainText
                                                         }
                                                     }
 
@@ -3954,16 +4083,20 @@ print("\n\n".join(results) if results else ("\n\n".join(out) if out else "нич
                                     - Settings.line)
                                 clip: true
 
-                                // живой reasoning: копится по мере стрима,
-                                // та же рамка, что у сообщений
+                                // живой reasoning: та же рамка, что у
+                                // сообщений; по умолчанию свёрнут, живёт
+                                // ПОСЛЕ вызовов — хронология стрима
                                 Item {
                                     id: streamReason
+
+                                    property bool streamReasonOpen: false
 
                                     readonly property bool present:
                                         cat.streamReasoning !== ""
 
                                     x: 13 - Settings.line / 2
                                     y: 4 - Settings.line / 2
+                                        + streamTools.height
                                     width: catBubble.width - 26
                                     visible: present
                                     height: present
@@ -3973,8 +4106,18 @@ print("\n\n".join(results) if results else ("\n\n".join(out) if out else "нич
                                         id: streamReasonFrame
 
                                         width: parent.width
-                                        height: streamReasonContent.height
-                                            + Settings.line * 3
+                                        height: streamReasonOpen
+                                            ? streamReasonBody.height
+                                                + 18 + Settings.line * 3
+                                            : 18 + Settings.line * 3
+                                        clip: true
+
+                                        Behavior on height {
+                                            NumberAnimation {
+                                                duration: 180
+                                                easing.type: Easing.OutCubic
+                                            }
+                                        }
 
                                         Panel {
                                             x: Settings.line / 2
@@ -3998,19 +4141,44 @@ print("\n\n".join(results) if results else ("\n\n".join(out) if out else "нич
                                                 - Settings.line * 3
                                             spacing: 3
 
-                                            SText {
-                                                width: 90
-                                                height: 18
-                                                verticalAlignment: Text.AlignVCenter
-                                                text: "reasoning"
-                                                color: Settings.c1
-                                                font.pixelSize: Settings.textXs
-                                                font.bold: true
+                                            Row {
+                                                spacing: 5
+
+                                                SText {
+                                                    height: 18
+                                                    verticalAlignment: Text.AlignVCenter
+                                                    text: "reasoning"
+                                                    color: Settings.c1
+                                                    font.pixelSize: Settings.textXs
+                                                    font.bold: true
+                                                }
+
+                                                VIcon {
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    width: 12
+                                                    height: 12
+                                                    strokePath: Glyphs.iconChevronDown
+                                                    lineColor: Settings.c1
+
+                                                    rotation: streamReasonOpen
+                                                        ? 0 : -90
+                                                }
+
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape:
+                                                        Qt.PointingHandCursor
+
+                                                    onClicked:
+                                                        streamReasonOpen =
+                                                            !streamReasonOpen
+                                                }
                                             }
 
                                             TextEdit {
                                                 id: streamReasonBody
 
+                                                visible: streamReasonOpen
                                                 width: parent.width
                                                 height: implicitHeight
                                                 text: cat.streamReasoning
@@ -4035,7 +4203,6 @@ print("\n\n".join(results) if results else ("\n\n".join(out) if out else "нич
 
                                     x: 13 - Settings.line / 2
                                     y: 4 - Settings.line / 2
-                                        + streamReason.height
                                     width: catBubble.width - 26
                                     visible: present
                                     height: present
@@ -4085,6 +4252,9 @@ print("\n\n".join(results) if results else ("\n\n".join(out) if out else "нич
                                                 isAsk && cat.askOpen
                                                 && cat.toolsCursor === index
 
+                                            property bool open: false
+                                            property bool reasonOpen: false
+
                                             width: streamToolsCol.width
                                             spacing: 3
 
@@ -4127,10 +4297,10 @@ print("\n\n".join(results) if results else ("\n\n".join(out) if out else "нич
 
                                                 SRectangle {
                                                     anchors.verticalCenter: parent.verticalCenter
-                                                    x: parent.width - 10
-                                                    width: 7
-                                                    height: 7
-                                                    radius: 3.5
+                                                    x: parent.width - 12
+                                                    width: 6
+                                                    height: 6
+                                                    rotation: 45
 
                                                     color: streamCall.modelData.result
                                                         !== undefined
@@ -4138,6 +4308,123 @@ print("\n\n".join(results) if results else ("\n\n".join(out) if out else "нич
                                                         : Settings.c2
                                                     border.color: Settings.c1
                                                     border.width: 1
+                                                }
+
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape:
+                                                        Qt.PointingHandCursor
+
+                                                    onClicked:
+                                                        streamCall.open =
+                                                            !streamCall.open
+                                                }
+                                            }
+
+                                            // reasoning вызова: свёрнутая
+                                            // зона в хронологии
+                                            Column {
+                                                visible: (streamCall.modelData.reasoning
+                                                    || "") !== ""
+                                                x: 18
+                                                width: parent.width - 18
+                                                spacing: 3
+
+                                                Item {
+                                                    width: parent.width
+                                                    height: 16
+
+                                                    Row {
+                                                        spacing: 5
+
+                                                        SText {
+                                                            height: 16
+                                                            verticalAlignment: Text.AlignVCenter
+                                                            text: "reasoning"
+                                                            color: Settings.c1
+                                                            font.pixelSize: Settings.textXs
+                                                            font.bold: true
+                                                        }
+
+                                                        VIcon {
+                                                            anchors.verticalCenter: parent.verticalCenter
+                                                            width: 10
+                                                            height: 10
+                                                            strokePath: Glyphs.iconChevronDown
+                                                            lineColor: Settings.c1
+
+                                                            rotation: streamCall.reasonOpen
+                                                                ? 0 : -90
+                                                        }
+                                                    }
+
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        cursorShape:
+                                                            Qt.PointingHandCursor
+
+                                                        onClicked:
+                                                            streamCall.reasonOpen =
+                                                                !streamCall.reasonOpen
+                                                    }
+                                                }
+
+                                                TextEdit {
+                                                    visible: streamCall.reasonOpen
+                                                    width: parent.width
+                                                    height: implicitHeight
+                                                    text: streamCall.modelData.reasoning
+                                                    color: Settings.c1
+                                                    font.pixelSize: Settings.textXs
+                                                    wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
+                                                    readOnly: true
+                                                    selectByMouse: true
+                                                    textFormat: TextEdit.PlainText
+                                                }
+                                            }
+
+                                            // живые аргументы и результат:
+                                            // раскрываются по клику на строку
+                                            Column {
+                                                visible: streamCall.open
+                                                x: 8
+                                                width: parent.width - 16
+                                                spacing: 3
+
+                                                TextEdit {
+                                                    width: parent.width
+                                                    height: implicitHeight
+                                                    text: {
+                                                        try {
+                                                            return JSON.stringify(
+                                                                JSON.parse(
+                                                                    streamCall.modelData.args || "{}"),
+                                                                null, 1)
+                                                        } catch (e) {
+                                                            return streamCall.modelData.args
+                                                        }
+                                                    }
+                                                    color: Settings.c1
+                                                    font.pixelSize: Settings.textXs
+                                                    wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
+                                                    readOnly: true
+                                                    selectByMouse: true
+                                                    textFormat: TextEdit.PlainText
+                                                }
+
+                                                TextEdit {
+                                                    width: parent.width
+                                                    height: implicitHeight
+                                                    text: streamCall.modelData.result
+                                                        !== undefined
+                                                        ? String(streamCall.modelData.result)
+                                                        : "(исполняется...)"
+                                                    color: Settings.c1
+                                                    font.pixelSize: Settings.textXs
+                                                    wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
+                                                    readOnly: true
+                                                    selectByMouse: true
+                                                    textFormat: TextEdit.PlainText
                                                 }
                                             }
 
