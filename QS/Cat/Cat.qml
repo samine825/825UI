@@ -279,15 +279,16 @@ PanelWindow {
     // интерактивны только кот и открытый чат
     mask: Region {
         Region {
-            x: cat.catOffsetX
+            x: catStage.x + cat.catOffsetX
             y: cat.catOffsetY
             width: cat.shown ? cat.catHeight : 0
             height: cat.shown ? cat.catHeight : 0
         }
 
-        // пока чат открыт — всё окно, чтобы клик мимо панелей
+        // пока чат открыт — всё окно кота, чтобы клик мимо панелей
         // закрывал его
         Region {
+            x: catStage.x
             width: cat.chatState !== "none" ? cat.winW : 0
             height: cat.chatState !== "none" ? cat.winH : 0
         }
@@ -295,10 +296,19 @@ PanelWindow {
         // кнопка меню в физическом углу экрана: видна и кликабельна
         // только вместе с открытым интерфейсом чата
         Region {
-            x: cat.winW - cat.menuBtnZone
+            x: catStage.x + cat.winW - cat.menuBtnZone
             y: 0
             width: cat.chatState !== "none" ? cat.menuBtnZone : 0
             height: cat.chatState !== "none" ? cat.menuBtnZone : 0
+        }
+
+        // панель чатов: только наезжающая на экран часть
+        Region {
+            x: Math.max(cat.winW, chatsPanel.x + panelBox.x)
+            y: panelBox.y
+            width: Math.max(0, Math.min(panelBox.width,
+                cat.winW + cat.menuW - chatsPanel.x - panelBox.x))
+            height: panelBox.height
         }
     }
 
@@ -306,10 +316,10 @@ PanelWindow {
         bottom: true
         right: true
     }
-    // панель чатов отодвигает всё окно влево
-    margins.right: Math.round(menuShift)
 
-    implicitWidth: winW
+    // окно всегда несёт место под панель чатов: кот и чат живут в
+    // правых winW, панель выезжает в левые menuW из-под правой кромки
+    implicitWidth: winW + menuW
     implicitHeight: winH
 
     // === КУРСОР ===
@@ -323,7 +333,8 @@ PanelWindow {
 
     // курсор в координатах SVG
     readonly property real curSvgX: (cursorX - Screen.virtualX
-        - (Screen.width - winW - menuShift) - catOffsetX) / svgScale
+        - (Screen.width - winW - menuW) - catStage.x
+        - catOffsetX) / svgScale
     readonly property real curSvgY: (cursorY - Screen.virtualY
         - (Screen.height - winH) - catOffsetY) / svgScale
 
@@ -378,16 +389,29 @@ PanelWindow {
     // ровно те байты, под которые посчитана длина в команде head -c
     property string chatsWritePayload: ""
     property bool chatsPendingSave: false
-    // сдвиг окна кота под открытую панель чатов
-    property real menuShift: 0
+    // === панель чатов ===
+    // Панель — часть кота, а не шелла: место у окон не резервируется
+    // (бар и окна на месте), поверх экрана панель выезжает из-под
+    // правой кромки, кот отъезжает влево на ширину панели
+    readonly property int menuW: 340
     property bool menuOpen: false
+    // плавный выезд панели из-под правой кромки
+    property real menuSlide: menuOpen ? menuW : 0
+
+    Behavior on menuSlide {
+        NumberAnimation {
+            duration: 450
+            easing.type: Easing.OutCubic
+        }
+    }
+
+    function toggleMenu() {
+        menuOpen = !menuOpen
+    }
+
     readonly property real menuBtnSize: 40
-    // кнопка с запасом под обе обводки: кромка чёрной ложится
-    // ровно на край экрана и ничего не обрезается
+    // зона кнопки в углу: плитка с запасом под клик
     readonly property real menuBtnZone: menuBtnSize + Settings.line * 3
-    signal menuToggled()
-    // скрыли кота или его интерфейс — панель чатов тоже закрываем
-    signal menuCloseRequested()
     readonly property string chatsDir: Quickshell.env("HOME")
         + "/.local/share/825UI"
     readonly property string chatsPath: chatsDir + "/chats.json"
@@ -915,7 +939,8 @@ PanelWindow {
         // генерация продолжается в фоне: ответ допишется в историю
         chatState = "none"
         closeOverlays()
-        menuCloseRequested()
+        // скрыли чат — панель тоже закрываем
+        menuOpen = false
     }
 
     function stopGeneration() {
@@ -1912,242 +1937,388 @@ PanelWindow {
         cat.loadChats(chatsFile.text())
     }
 
-    // === ЧАТ: диалог (мои справа, кота слева) + ввод снизу ===
-    // Диалог открывается кликом по коту и живёт, пока не кликнули мимо.
-    ListModel {
-        id: chatModel
-    }
-
-    ListModel {
-        id: attachModel
-    }
-
+    // === сцена кота: вся начинка окна ===
+    // при открытой панели чатов уезжает влево на menuSlide,
+    // освобождая правую кромку экрана под панель
     Item {
-        id: chatArea
+        id: catStage
 
-        z: 10
-        anchors.fill: parent
+        width: cat.winW
+        height: parent.height
+        x: cat.menuW - cat.menuSlide
 
-        // клик мимо панелей — закрыть чат
-        MouseArea {
-            id: awayArea
-
-            anchors.fill: parent
-            visible: cat.chatState !== "none"
-            hoverEnabled: true
-
-            onClicked: cat.closeChat()
+        // === ЧАТ: диалог (мои справа, кота слева) + ввод снизу ===
+        // Диалог открывается кликом по коту и живёт, пока не кликнули мимо.
+        ListModel {
+            id: chatModel
         }
 
-        // файлы, перетащенные из файлового менеджера
-        DropArea {
+        ListModel {
+            id: attachModel
+        }
+
+        Item {
+            id: chatArea
+
+            z: 10
             anchors.fill: parent
-            enabled: cat.chatState !== "none"
 
-            onDropped: (drop) => {
-                const urls = drop.urls
+            // клик мимо панелей — закрыть чат
+            MouseArea {
+                id: awayArea
 
-                for (let i = 0; i < urls.length; i++)
-                    cat.addAttachment(cat.urlToPath(String(urls[i])))
+                anchors.fill: parent
+                visible: cat.chatState !== "none"
+                hoverEnabled: true
 
-                drop.acceptProposedAction()
+                onClicked: cat.closeChat()
             }
-        }
 
-        // === диалог: только сообщения, без подложки ===
-        Flickable {
-            id: dialogFlick
+            // файлы, перетащенные из файлового менеджера
+            DropArea {
+                anchors.fill: parent
+                enabled: cat.chatState !== "none"
 
-            // низ списка — чуть выше ушей кота, верх упирается
-            // в кромку экрана
-            readonly property real availHeight: cat.catOffsetY + 30
-            readonly property bool atBottom: contentY
-                >= contentHeight - height - 1
+                onDropped: (drop) => {
+                    const urls = drop.urls
 
-            // проявляются только сообщения; ввод не участвует в фейде
-            visible: cat.chatOpacity > 0.01
-            opacity: cat.chatOpacity
-            x: cat.chatLeft
-            width: cat.winW - cat.chatLeft
-            y: availHeight - height
-            // короткий диалог прижат к коту, длинный дорастает
-            // до верхней кромки экрана
-            height: Math.min(availHeight, animContentHeight)
-            contentHeight: chatColumn.height
+                    for (let i = 0; i < urls.length; i++)
+                        cat.addAttachment(cat.urlToPath(String(urls[i])))
 
-            // анимируем только рост от контента. Длинный чат упирается
-            // в availHeight и обязан следовать за ней без задержки:
-            // иначе при открытии кота/ввода низ окна проседает вниз
-            // и возвращается обратно
-            property real animContentHeight: chatColumn.height
+                    drop.acceptProposedAction()
+                }
+            }
 
-            Behavior on animContentHeight {
+            // === диалог: только сообщения, без подложки ===
+            Flickable {
+                id: dialogFlick
+
+                // низ списка — чуть выше ушей кота, верх упирается
+                // в кромку экрана
+                readonly property real availHeight: cat.catOffsetY + 30
+                readonly property bool atBottom: contentY
+                    >= contentHeight - height - 1
+
+                // проявляются только сообщения; ввод не участвует в фейде
+                visible: cat.chatOpacity > 0.01
+                opacity: cat.chatOpacity
+                x: cat.chatLeft
+                width: cat.winW - cat.chatLeft
+                y: availHeight - height
+                // короткий диалог прижат к коту, длинный дорастает
+                // до верхней кромки экрана
+                height: Math.min(availHeight, animContentHeight)
+                contentHeight: chatColumn.height
+
+                // анимируем только рост от контента. Длинный чат упирается
+                // в availHeight и обязан следовать за ней без задержки:
+                // иначе при открытии кота/ввода низ окна проседает вниз
+                // и возвращается обратно
+                property real animContentHeight: chatColumn.height
+
+                Behavior on animContentHeight {
+                    NumberAnimation {
+                        duration: 150
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                contentWidth: width
+                boundsBehavior: Flickable.StopAtBounds
+                clip: true
+
+                // прилипаем к низу, пока юзер не отскроллил вверх
+                property bool stick: true
+
+                function targetY() {
+                    // пока окно не доросло до полной высоты, контент
+                    // прижат к верху и не скроллится
+                    if (height < availHeight - 0.5)
+                        return 0
+
+                    return Math.max(0, contentHeight - height)
+                }
+
+                function scrollToBottom(animate) {
+                    const target = targetY()
+
+                    scrollAnim.stop()
+
+                    if (!animate) {
+                        contentY = target
+                        return
+                    }
+
+                    if (Math.abs(target - contentY) < 0.5)
+                        return
+
+                    scrollAnim.from = contentY
+                    scrollAnim.to = target
+                    scrollAnim.start()
+                }
+
+                // ручной скролл перебивает автопрокрут
+                onMovementStarted: scrollAnim.stop()
+                // во время автопрокрута не снимаем прилипание
+                onContentYChanged: if (!scrollAnim.running)
+                    stick = atBottom
+                onContentHeightChanged: if (stick)
+                    scrollToBottom(true)
+                onHeightChanged: if (stick)
+                    scrollToBottom(true)
+
+                // интерфейс открылся — сразу показываем последние сообщения
+                onVisibleChanged: {
+                    if (visible) {
+                        stick = true
+                        scrollToBottom(false)
+                    } else {
+                        scrollAnim.stop()
+                    }
+                }
+
                 NumberAnimation {
+                    id: scrollAnim
+
+                    target: dialogFlick
+                    property: "contentY"
                     duration: 150
                     easing.type: Easing.OutCubic
                 }
-            }
 
-            contentWidth: width
-            boundsBehavior: Flickable.StopAtBounds
-            clip: true
+                Column {
+                    id: chatColumn
 
-            // прилипаем к низу, пока юзер не отскроллил вверх
-            property bool stick: true
+                    width: dialogFlick.width
 
-            function targetY() {
-                // пока окно не доросло до полной высоты, контент
-                // прижат к верху и не скроллится
-                if (height < availHeight - 0.5)
-                    return 0
+                    // запас под внешнюю обводку: её кромка должна
+                    // совпадать с кромкой экрана, а не срезаться клипом;
+                    // сверху место под кнопку меню
+                    Item {
+                        width: chatColumn.width
+                        height: Settings.line * 1.5 + menuBtn.height + 12
+                    }
 
-                return Math.max(0, contentHeight - height)
-            }
+                    Repeater {
+                        model: chatModel
 
-            function scrollToBottom(animate) {
-                const target = targetY()
+                        delegate: Item {
+                            id: msgRoot
 
-                scrollAnim.stop()
+                            required property int index
+                            required property string role
+                            required property string mtext
+                            required property string partsJson
+                            // снимок вложений на момент отправки
+                            required property string attJson
 
-                if (!animate) {
-                    contentY = target
-                    return
-                }
+                            readonly property bool isUser: role === "user"
+                            readonly property int maxBubbleW: 272
+                            // до предела — ни одного переноса; шире — переносим
+                            readonly property bool overflow:
+                                msgMetrics.width + 28 > maxBubbleW
 
-                if (Math.abs(target - contentY) < 0.5)
-                    return
+                            // плашки вложений — те же, что были в поле ввода
+                            readonly property var atts: {
+                                if (!attJson)
+                                    return []
 
-                scrollAnim.from = contentY
-                scrollAnim.to = target
-                scrollAnim.start()
-            }
+                                try {
+                                    const list = JSON.parse(attJson)
 
-            // ручной скролл перебивает автопрокрут
-            onMovementStarted: scrollAnim.stop()
-            // во время автопрокрута не снимаем прилипание
-            onContentYChanged: if (!scrollAnim.running)
-                stick = atBottom
-            onContentHeightChanged: if (stick)
-                scrollToBottom(true)
-            onHeightChanged: if (stick)
-                scrollToBottom(true)
+                                    return Array.isArray(list) ? list : []
+                                } catch (e) {
+                                    return []
+                                }
+                            }
+                            readonly property int attCount: atts.length
+                            readonly property real attGap:
+                                attCount > 0 && mtext !== "" ? 6 : 0
 
-            // интерфейс открылся — сразу показываем последние сообщения
-            onVisibleChanged: {
-                if (visible) {
-                    stick = true
-                    scrollToBottom(false)
-                } else {
-                    scrollAnim.stop()
-                }
-            }
+                            width: chatColumn.width
+                            // 10 — зазор между пузырями + запас под
+                            // внешнюю обводку, чтобы она не сливалась
+                            height: bubble.height + 10 + Settings.line * 2
 
-            NumberAnimation {
-                id: scrollAnim
+                            readonly property real edgeInset:
+                                Settings.line * 1.5
+                            readonly property real targetX: isUser
+                                ? width - bubble.width - edgeInset
+                                : edgeInset
+                            property real slideOff: 0
 
-                target: dialogFlick
-                property: "contentY"
-                duration: 150
-                easing.type: Easing.OutCubic
-            }
+                            // моё сообщение выезжает из-за правой границы экрана
+                            Component.onCompleted: if (isUser) {
+                                slideOff = cat.winW
+                                slideIn.start()
+                            }
 
-            Column {
-                id: chatColumn
+                            NumberAnimation {
+                                id: slideIn
 
-                width: dialogFlick.width
+                                target: msgRoot
+                                property: "slideOff"
+                                to: 0
+                                duration: 380
+                                easing.type: Easing.OutCubic
+                            }
 
-                // запас под внешнюю обводку: её кромка должна
-                // совпадать с кромкой экрана, а не срезаться клипом;
-                // сверху место под кнопку меню
-                Item {
-                    width: chatColumn.width
-                    height: Settings.line * 1.5 + menuBtn.height + 12
-                }
+                            TextMetrics {
+                                id: msgMetrics
 
-                Repeater {
-                    model: chatModel
+                                font: msgLabel.font
+                                text: msgRoot.mtext
+                            }
 
-                    delegate: Item {
-                        id: msgRoot
+                            Item {
+                                id: bubble
 
-                        required property int index
-                        required property string role
-                        required property string mtext
-                        required property string partsJson
-                        // снимок вложений на момент отправки
-                        required property string attJson
+                                x: msgRoot.targetX + msgRoot.slideOff
+                                width: msgRoot.attCount > 0
+                                    ? Math.min(chatColumn.width
+                                        - msgRoot.edgeInset * 2,
+                                        msgRoot.attCount === 1
+                                            ? msgRoot.maxBubbleW : 378)
+                                    : Math.min(msgRoot.maxBubbleW,
+                                        Math.ceil(msgMetrics.width) + 28)
+                                height: msgLabel.implicitHeight + 12
+                                    + attFlow.height + msgRoot.attGap
 
-                        readonly property bool isUser: role === "user"
-                        readonly property int maxBubbleW: 272
-                        // до предела — ни одного переноса; шире — переносим
-                        readonly property bool overflow:
-                            msgMetrics.width + 28 > maxBubbleW
+                                // вторая обводка — как в ControlPanel
+                                Panel {
+                                    x: -Settings.line
+                                    y: -Settings.line
+                                    width: parent.width + Settings.line * 2
+                                    height: parent.height + Settings.line * 2
+                                    cornerCut: Settings.line
+                                        * (2 + Math.sqrt(2) / 2)
+                                    strokeColor: Settings.c2
+                                    fillColor: Settings.c2
+                                    strokeWidth: Settings.line
+                                }
 
-                        // плашки вложений — те же, что были в поле ввода
-                        readonly property var atts: {
-                            if (!attJson)
-                                return []
+                                // размеры явными привязками, а не anchors.fill:
+                                // Behavior на анкорах не срабатывает и обводка
+                                // меняет размер рывком, как вторая
+                                Panel {
+                                    id: msgPanel
 
-                            try {
-                                const list = JSON.parse(attJson)
+                                    x: 0
+                                    y: 0
+                                    width: parent.width
+                                    height: parent.height
+                                    cornerCut: Settings.line * 2
+                                    strokeColor: Settings.c1
+                                    fillColor: Settings.c2
+                                    strokeWidth: Settings.line
+                                }
 
-                                return Array.isArray(list) ? list : []
-                            } catch (e) {
-                                return []
+                                // обводка растёт анимацией, а текст появляется
+                                // сразу — клипуем его по внутренней кромке
+                                // обводки, чтобы буквы не вылезали наружу
+                                Item {
+                                    id: msgClip
+
+                                    x: Settings.line / 2
+                                    y: Settings.line / 2
+                                    width: Math.max(0, msgPanel.width
+                                        - Settings.line)
+                                    height: Math.max(0, msgPanel.height
+                                        - Settings.line)
+                                    clip: true
+
+                                    // вложения, отправленные с сообщением:
+                                    // те же плашки, что были в поле ввода
+                                    Flow {
+                                        id: attFlow
+
+                                        visible: msgRoot.attCount > 0
+                                        x: 13 - Settings.line / 2
+                                        y: 4 - Settings.line / 2
+                                        width: bubble.width - 26
+                                        spacing: 8
+
+                                        Repeater {
+                                            model: msgRoot.atts
+
+                                            delegate: AttachChip {
+                                                required property var modelData
+
+                                                path: modelData.path
+                                                name: modelData.name
+                                                isImage: modelData.isImage
+                                                iconPath: cat.iconFile
+                                            }
+                                        }
+                                    }
+
+                                    // текст можно выделять и копировать
+                                    TextEdit {
+                                        id: msgLabel
+
+                                        // вёрстка по полному пузырю — клип
+                                        // только отсекает, без перевёрстки
+                                        x: 13 - Settings.line / 2
+                                        y: 4 - Settings.line / 2
+                                            + attFlow.height + msgRoot.attGap
+                                        width: bubble.width - 26
+                                        height: bubble.height - 8
+                                            - attFlow.height - msgRoot.attGap
+                                        verticalAlignment: TextEdit.AlignVCenter
+
+                                        text: msgRoot.mtext
+                                        color: Settings.c1
+                                        font.pixelSize: Settings.textSm
+                                        wrapMode: msgRoot.attCount > 0
+                                            || msgRoot.overflow
+                                            ? TextEdit.WrapAtWordBoundaryOrAnywhere
+                                            : TextEdit.NoWrap
+
+                                        readOnly: true
+                                        selectByMouse: true
+                                        selectByKeyboard: true
+                                        cursorVisible: false
+                                        textFormat: TextEdit.PlainText
+                                        selectionColor: Settings.c1
+                                        selectedTextColor: Settings.c2
+                                    }
+                                }
                             }
                         }
-                        readonly property int attCount: atts.length
-                        readonly property real attGap:
-                            attCount > 0 && mtext !== "" ? 6 : 0
+                    }
 
+                    // пузырь стрима — под последним сообщением
+                    Item {
+                        id: streamFooter
+
+                        readonly property bool active:
+                            cat.chatState === "response"
+                            && (cat.thinking || cat.streamText !== "")
+                        readonly property string shownText: cat.thinking
+                            ? ".".repeat(1
+                                + (Math.floor(cat.zzzPhase * 3) % 3))
+                            : cat.streamText
+
+                        visible: active
                         width: chatColumn.width
-                        // 10 — зазор между пузырями + запас под
-                        // внешнюю обводку, чтобы она не сливалась
-                        height: bubble.height + 10 + Settings.line * 2
-
-                        readonly property real edgeInset:
-                            Settings.line * 1.5
-                        readonly property real targetX: isUser
-                            ? width - bubble.width - edgeInset
-                            : edgeInset
-                        property real slideOff: 0
-
-                        // моё сообщение выезжает из-за правой границы экрана
-                        Component.onCompleted: if (isUser) {
-                            slideOff = cat.winW
-                            slideIn.start()
-                        }
-
-                        NumberAnimation {
-                            id: slideIn
-
-                            target: msgRoot
-                            property: "slideOff"
-                            to: 0
-                            duration: 380
-                            easing.type: Easing.OutCubic
-                        }
+                        height: active
+                            ? catBubble.height + 10 + Settings.line * 2
+                            : 0
 
                         TextMetrics {
-                            id: msgMetrics
+                            id: streamMetrics
 
-                            font: msgLabel.font
-                            text: msgRoot.mtext
+                            font: streamLabel.font
+                            text: streamFooter.shownText
                         }
 
                         Item {
-                            id: bubble
+                            id: catBubble
 
-                            x: msgRoot.targetX + msgRoot.slideOff
-                            width: msgRoot.attCount > 0
-                                ? Math.min(chatColumn.width
-                                    - msgRoot.edgeInset * 2,
-                                    msgRoot.attCount === 1
-                                        ? msgRoot.maxBubbleW : 378)
-                                : Math.min(msgRoot.maxBubbleW,
-                                    Math.ceil(msgMetrics.width) + 28)
-                            height: msgLabel.implicitHeight + 12
-                                + attFlow.height + msgRoot.attGap
+                            x: Settings.line * 1.5
+                            width: Math.min(272,
+                                Math.ceil(streamMetrics.width) + 28)
+                            height: streamLabel.implicitHeight + 12
 
                             // вторая обводка — как в ControlPanel
                             Panel {
@@ -2162,11 +2333,9 @@ PanelWindow {
                                 strokeWidth: Settings.line
                             }
 
-                            // размеры явными привязками, а не anchors.fill:
-                            // Behavior на анкорах не срабатывает и обводка
-                            // меняет размер рывком, как вторая
+                            // явные привязки — иначе Behavior не анимирует
                             Panel {
-                                id: msgPanel
+                                id: streamPanel
 
                                 x: 0
                                 y: 0
@@ -2178,1028 +2347,880 @@ PanelWindow {
                                 strokeWidth: Settings.line
                             }
 
-                            // обводка растёт анимацией, а текст появляется
-                            // сразу — клипуем его по внутренней кромке
-                            // обводки, чтобы буквы не вылезали наружу
+                            // стрим растёт токен за токеном, панель догоняет
+                            // анимацией — текст клипуем по её кромке
                             Item {
-                                id: msgClip
+                                id: streamClip
 
                                 x: Settings.line / 2
                                 y: Settings.line / 2
-                                width: Math.max(0, msgPanel.width
+                                width: Math.max(0, streamPanel.width
                                     - Settings.line)
-                                height: Math.max(0, msgPanel.height
+                                height: Math.max(0, streamPanel.height
                                     - Settings.line)
                                 clip: true
 
-                                // вложения, отправленные с сообщением:
-                                // те же плашки, что были в поле ввода
-                                Flow {
-                                    id: attFlow
+                                SText {
+                                    id: streamLabel
 
-                                    visible: msgRoot.attCount > 0
                                     x: 13 - Settings.line / 2
                                     y: 4 - Settings.line / 2
-                                    width: bubble.width - 26
-                                    spacing: 8
+                                    width: catBubble.width - 26
+                                    height: catBubble.height - 8
+                                    verticalAlignment: Text.AlignVCenter
 
-                                    Repeater {
-                                        model: msgRoot.atts
-
-                                        delegate: AttachChip {
-                                            required property var modelData
-
-                                            path: modelData.path
-                                            name: modelData.name
-                                            isImage: modelData.isImage
-                                            iconPath: cat.iconFile
-                                        }
-                                    }
-                                }
-
-                                // текст можно выделять и копировать
-                                TextEdit {
-                                    id: msgLabel
-
-                                    // вёрстка по полному пузырю — клип
-                                    // только отсекает, без перевёрстки
-                                    x: 13 - Settings.line / 2
-                                    y: 4 - Settings.line / 2
-                                        + attFlow.height + msgRoot.attGap
-                                    width: bubble.width - 26
-                                    height: bubble.height - 8
-                                        - attFlow.height - msgRoot.attGap
-                                    verticalAlignment: TextEdit.AlignVCenter
-
-                                    text: msgRoot.mtext
+                                    text: streamFooter.shownText
                                     color: Settings.c1
                                     font.pixelSize: Settings.textSm
-                                    wrapMode: msgRoot.attCount > 0
-                                        || msgRoot.overflow
-                                        ? TextEdit.WrapAtWordBoundaryOrAnywhere
-                                        : TextEdit.NoWrap
-
-                                    readOnly: true
-                                    selectByMouse: true
-                                    selectByKeyboard: true
-                                    cursorVisible: false
-                                    textFormat: TextEdit.PlainText
-                                    selectionColor: Settings.c1
-                                    selectedTextColor: Settings.c2
+                                    wrapMode: streamMetrics.width + 28 > 272
+                                        ? Text.WrapAtWordBoundaryOrAnywhere
+                                        : Text.NoWrap
                                 }
                             }
                         }
                     }
-                }
 
-                // пузырь стрима — под последним сообщением
-                Item {
-                    id: streamFooter
-
-                    readonly property bool active:
-                        cat.chatState === "response"
-                        && (cat.thinking || cat.streamText !== "")
-                    readonly property string shownText: cat.thinking
-                        ? ".".repeat(1
-                            + (Math.floor(cat.zzzPhase * 3) % 3))
-                        : cat.streamText
-
-                    visible: active
-                    width: chatColumn.width
-                    height: active
-                        ? catBubble.height + 10 + Settings.line * 2
-                        : 0
-
-                    TextMetrics {
-                        id: streamMetrics
-
-                        font: streamLabel.font
-                        text: streamFooter.shownText
-                    }
-
+                    // нижний запас под внешнюю обводку последнего сообщения
                     Item {
-                        id: catBubble
-
-                        x: Settings.line * 1.5
-                        width: Math.min(272,
-                            Math.ceil(streamMetrics.width) + 28)
-                        height: streamLabel.implicitHeight + 12
-
-                        // вторая обводка — как в ControlPanel
-                        Panel {
-                            x: -Settings.line
-                            y: -Settings.line
-                            width: parent.width + Settings.line * 2
-                            height: parent.height + Settings.line * 2
-                            cornerCut: Settings.line
-                                * (2 + Math.sqrt(2) / 2)
-                            strokeColor: Settings.c2
-                            fillColor: Settings.c2
-                            strokeWidth: Settings.line
-                        }
-
-                        // явные привязки — иначе Behavior не анимирует
-                        Panel {
-                            id: streamPanel
-
-                            x: 0
-                            y: 0
-                            width: parent.width
-                            height: parent.height
-                            cornerCut: Settings.line * 2
-                            strokeColor: Settings.c1
-                            fillColor: Settings.c2
-                            strokeWidth: Settings.line
-                        }
-
-                        // стрим растёт токен за токеном, панель догоняет
-                        // анимацией — текст клипуем по её кромке
-                        Item {
-                            id: streamClip
-
-                            x: Settings.line / 2
-                            y: Settings.line / 2
-                            width: Math.max(0, streamPanel.width
-                                - Settings.line)
-                            height: Math.max(0, streamPanel.height
-                                - Settings.line)
-                            clip: true
-
-                            SText {
-                                id: streamLabel
-
-                                x: 13 - Settings.line / 2
-                                y: 4 - Settings.line / 2
-                                width: catBubble.width - 26
-                                height: catBubble.height - 8
-                                verticalAlignment: Text.AlignVCenter
-
-                                text: streamFooter.shownText
-                                color: Settings.c1
-                                font.pixelSize: Settings.textSm
-                                wrapMode: streamMetrics.width + 28 > 272
-                                    ? Text.WrapAtWordBoundaryOrAnywhere
-                                    : Text.NoWrap
-                            }
-                        }
+                        width: chatColumn.width
+                        height: Settings.line * 1.5
                     }
                 }
-
-                // нижний запас под внешнюю обводку последнего сообщения
-                Item {
-                    width: chatColumn.width
-                    height: Settings.line * 1.5
-                }
-            }
-        }
-
-        // перехватчик клика мимо: закрывает списки,
-        // чат при этом остаётся открытым
-        MouseArea {
-            anchors.fill: parent
-            z: 15
-            visible: cat.activeSelect !== ""
-
-            onClicked: cat.closeOverlays()
-        }
-
-        // задняя обводка ввода
-        Panel {
-            id: inputBack
-
-            z: 19
-            visible: inputPanel.height > 0.5
-            x: inputPanel.x - Settings.line
-            y: inputPanel.y - Settings.line
-            width: inputPanel.width + Settings.line * 2
-            height: inputPanel.height + Settings.line * 2
-
-            // поле ввода уже анимирует свою высоту — вторая обводка
-            // должна следовать за ней без собственной анимации,
-            // иначе обводки расходятся
-            Behavior on width { enabled: false }
-            Behavior on height { enabled: false }
-
-            // скос наружной обводки — как у панелей ControlPanel
-            cornerCut: Settings.line * (2 + Math.sqrt(2) / 2)
-            strokeColor: Settings.c2
-            fillColor: Settings.c2
-            strokeWidth: Settings.line
-        }
-
-        // === ввод: поле, вложения и панель функций, прижат к низу ===
-        Panel {
-            id: inputPanel
-
-            z: 20
-            visible: height > 0.5
-            x: cat.inputX
-            // на line*1.5 уже правой кромки: внешняя кромка второй
-            // обводки ложится ровно на край экрана и не режется
-            width: cat.inputW - Settings.line * 1.5
-            // вторая обводка ложится внешней кромкой ровно на край экрана
-            y: cat.winH - cat.inputGap - height
-            height: cat.chatState !== "none" ? panelH : 0
-
-            readonly property real padTop: 4
-            readonly property real padBottom: 6
-            readonly property real toolbarH: 24
-            readonly property real sepGap: 4
-            readonly property real sepH: Settings.line
-            readonly property real textGap: 4
-            readonly property real chipW: 168
-            readonly property real chipH: 48
-            // высота полосы: плитка + обводка + отступ от верха панели
-            readonly property real stripH: attachModel.count > 0
-                ? chipH + Settings.line * 2 : 0
-            readonly property real stripGap: attachModel.count > 0 ? 6 : 0
-            readonly property real textH: Math.min(cat.inputMaxTextH,
-                Math.max(28, inputField.contentHeight + 2))
-            readonly property real panelH: padTop + stripH + stripGap
-                + textH + textGap + sepH + sepGap + toolbarH + padBottom
-
-            cornerCut: Settings.line * 2
-            strokeColor: Settings.c1
-            fillColor: Settings.c2
-            strokeWidth: Settings.line
-
-            Behavior on height {
-                NumberAnimation { duration: 150 }
             }
 
-            // клик по полю (не только по строке текста) — фокус ввода
+            // перехватчик клика мимо: закрывает списки,
+            // чат при этом остаётся открытым
             MouseArea {
                 anchors.fill: parent
+                z: 15
+                visible: cat.activeSelect !== ""
 
-                onClicked: {
-                    cat.closeOverlays()
-                    inputField.forceActiveFocus()
-                }
+                onClicked: cat.closeOverlays()
             }
 
-            // контент режется растущей панелью: элементы не висят
-            // снаружи на анимации открытия
-            Item {
-                id: inputContent
-
-                x: 0
-                y: 0
-                width: parent.width
-                height: parent.height
-                clip: true
-
-                readonly property real innerW: width - 24
-                // верх поля ввода (всё ниже считается от низа панели)
-                readonly property real textTop: inputPanel.height
-                    - inputPanel.padBottom - inputPanel.toolbarH
-                    - inputPanel.sepGap - inputPanel.sepH
-                    - inputPanel.textGap - inputPanel.textH
-
-                // === вложения: одна полоса с горизонтальным скроллом ===
-                Item {
-                    id: attachViewport
-
-                    x: 12
-                    y: inputContent.textTop - inputPanel.stripGap
-                        - inputPanel.stripH
-                    width: inputContent.innerW
-                    height: inputPanel.stripH
-                    visible: height > 0.5
-
-                    // плавный скролл колесом: ведём contentX анимацией
-                    property real targetX: 0
-
-                    function scrollBy(delta) {
-                        const max = Math.max(0,
-                            attachStrip.contentWidth - attachStrip.width)
-
-                        if (max <= 0 || delta === 0)
-                            return false
-
-                        const base = stripAnim.running
-                            ? targetX : attachStrip.contentX
-                        const next = cat.clamp(base - delta * 0.8, 0, max)
-
-                        if (Math.abs(next - base) < 0.5)
-                            return false
-
-                        targetX = next
-                        stripAnim.from = attachStrip.contentX
-                        stripAnim.to = targetX
-                        stripAnim.restart()
-                        return true
-                    }
-
-                    Flickable {
-                        id: attachStrip
-
-                        anchors.fill: parent
-                        contentWidth: attachRow.width
-                        contentHeight: height
-                        boundsBehavior: Flickable.StopAtBounds
-                        flickableDirection: Flickable.HorizontalFlick
-                        clip: true
-
-                        // ручной скролл перебивает анимацию колеса
-                        onMovementStarted: stripAnim.stop()
-
-                        Row {
-                            id: attachRow
-
-                            height: attachStrip.height
-                            spacing: 8
-
-                            Repeater {
-                                model: attachModel
-
-                                delegate: AttachChip {
-                                    required property int index
-                                    required property string path
-                                    required property string name
-                                    required property bool isImage
-
-                                    iconPath: cat.iconFile
-                                    removable: true
-
-                                    onRemoveRequested: attachModel.remove(
-                                        index)
-                                }
-                            }
-                        }
-                    }
-
-                    // колесо перехватываем поверх Flickable: сам он
-                    // прыгает на весь шаг, а нам нужен плавный доезд.
-                    // Кнопки не принимаем — клики по чипам проходят ниже
-                    MouseArea {
-                        anchors.fill: parent
-                        acceptedButtons: Qt.NoButton
-
-                        onWheel: (wheel) => {
-                            const d = wheel.angleDelta.y !== 0
-                                ? wheel.angleDelta.y : wheel.angleDelta.x
-
-                            if (attachViewport.scrollBy(d))
-                                wheel.accepted = true
-                        }
-                    }
-
-                    NumberAnimation {
-                        id: stripAnim
-
-                        target: attachStrip
-                        property: "contentX"
-                        duration: 240
-                        easing.type: Easing.OutCubic
-                    }
-                }
-
-                // === поле ввода: текст по центру, при переполнении
-                // последняя строка остаётся видимой ===
-                Item {
-                    id: inputClip
-
-                    x: 12
-                    y: inputContent.textTop
-                    width: inputContent.innerW
-                    height: inputPanel.textH
-                    clip: true
-
-                    readonly property real maxScroll: Math.max(0,
-                        inputField.contentHeight + 2 - height)
-
-                    // пока текст влезает — держим его по центру поля,
-                    // чтобы зазоры сверху и снизу были равными;
-                    // при переполнении последняя строка прижата к низу
-                    function bottomY() {
-                        const over = inputField.contentHeight + 2 - height
-
-                        return over > 0
-                            ? -over
-                            : (height - inputField.contentHeight) / 2
-                    }
-
-                    function clampScroll() {
-                        if (cat.inputScroll > maxScroll)
-                            cat.inputScroll = maxScroll
-                        else if (cat.inputScroll < 0)
-                            cat.inputScroll = 0
-                    }
-
-                    // колесо листает многострочный текст ввода
-                    function scrollBy(delta) {
-                        if (maxScroll <= 0 || delta === 0)
-                            return false
-
-                        const next = Math.max(0, Math.min(maxScroll,
-                            cat.inputScroll - delta * 0.5))
-
-                        if (Math.abs(next - cat.inputScroll) < 0.5)
-                            return false
-
-                        inputScrollAnim.stop()
-                        inputScrollAnim.from = cat.inputScroll
-                        inputScrollAnim.to = next
-                        inputScrollAnim.start()
-                        return true
-                    }
-
-                    NumberAnimation {
-                        id: inputScrollAnim
-
-                        target: cat
-                        property: "inputScroll"
-                        duration: 160
-                        easing.type: Easing.OutCubic
-                    }
-
-                    WheelHandler {
-                        acceptedDevices: PointerDevice.Mouse
-                            | PointerDevice.TouchPad
-
-                        onWheel: (event) => {
-                            if (inputClip.scrollBy(event.angleDelta.y))
-                                event.accepted = true
-                        }
-                    }
-
-                    TextInput {
-                        id: inputField
-
-                        width: parent.width
-                        y: inputClip.bottomY() - cat.inputScroll
-                        color: Settings.c1
-                        font.pixelSize: Settings.textSm
-                        wrapMode: TextInput.WrapAtWordBoundaryOrAnywhere
-                        selectByMouse: true
-                        selectionColor: Settings.c1
-                        selectedTextColor: Settings.c2
-
-                        // курсор всегда в зоне видимости; скролл
-                        // ограничен контентом, чтобы не оставалась
-                        // пустота снизу
-                        onCursorRectangleChanged: {
-                            if (inputPanel.height <= 0.5
-                                    || inputClip.height <= 0)
-                                return
-
-                            inputScrollAnim.stop()
-
-                            const cr = cursorRectangle
-                            const yOff = inputClip.bottomY()
-                                - cat.inputScroll
-                            const top = cr.y + yOff
-                            const bottom = top + cr.height
-                            let next = cat.inputScroll
-
-                            if (top < 0)
-                                next = cat.inputScroll + top
-                            else if (bottom > inputClip.height)
-                                next = cat.inputScroll + bottom
-                                    - inputClip.height
-
-                            next = Math.max(0, Math.min(
-                                inputClip.maxScroll, next))
-
-                            if (next !== cat.inputScroll)
-                                cat.inputScroll = next
-                        }
-
-                        onContentHeightChanged: inputClip.clampScroll()
-
-                        onAccepted: cat.submit(text)
-                        Keys.onEscapePressed: cat.closeChat()
-                    }
-
-                    SText {
-                        visible: cat.chatState !== "none"
-                            && inputField.text === ""
-                        x: 0
-                        y: inputClip.bottomY()
-                        text: "hmm..."
-                        color: Settings.c2
-                        font.pixelSize: Settings.textSm
-                    }
-                }
-
-                // === линия-разделитель под полем ===
-                // штрих как у разделителей ControlPanel: линия
-                // толщиной Settings.line, без прозрачности
-                Shape {
-                    id: inputDivider
-
-                    x: 0
-                    y: inputPanel.height - inputPanel.padBottom
-                        - inputPanel.toolbarH - inputPanel.sepGap
-                        - inputPanel.sepH
-                    width: inputContent.width
-                    height: inputPanel.sepH
-                    preferredRendererType: Shape.CurveRenderer
-
-                    SShapePath {
-                        joinStyle: ShapePath.MiterJoin
-                        capStyle: ShapePath.FlatCap
-                        strokeColor: Settings.c1
-                        strokeWidth: Settings.line
-                        startX: 0
-                        startY: inputDivider.height / 2
-                        PathLine {
-                            x: inputDivider.width
-                            y: inputDivider.height / 2
-                        }
-                    }
-                }
-
-                // === панель функций ===
-                Item {
-                    id: toolbar
-
-                    x: 0
-                    y: inputPanel.height - inputPanel.padBottom
-                        - inputPanel.toolbarH
-                    width: inputContent.width
-                    height: inputPanel.toolbarH
-
-                    // прикрепить файл
-                    Item {
-                        id: attachBtn
-
-                        x: 12
-                        y: 0
-                        width: 24
-                        height: 24
-
-                        CatIcon {
-                            anchors.fill: parent
-                            lineColor: Settings.c1
-                            strokePath: cat.iconAttach
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-
-                            onClicked: cat.openPicker()
-                        }
-                    }
-
-                    // выбор модели
-                    Item {
-                        id: modelBtn
-
-                        x: (toolbar.width - width) / 2
-                        y: 0
-                        width: 140
-                        height: 24
-
-                        readonly property bool hovered:
-                            modelHover.containsMouse
-
-                        SText {
-                            x: 0
-                            y: 0
-                            width: parent.width
-                            height: parent.height
-                            verticalAlignment: Text.AlignVCenter
-                            horizontalAlignment: Text.AlignHCenter
-                            text: cat.modelShort(cat.aiModel)
-                            color: Settings.c1
-                            font.pixelSize: Settings.textXs
-                            elide: Text.ElideMiddle
-                        }
-
-                        MouseArea {
-                            id: modelHover
-
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-
-                            onClicked: {
-                                const p = modelBtn.mapToItem(
-                                    inputPanel, 0, 0)
-                                cat.toggleSelect("model", p.x,
-                                    modelBtn.width)
-                            }
-                        }
-                    }
-
-                    // уровень ризонинга — только если модель его умеет
-                    Item {
-                        id: reasonBtn
-
-                        visible: cat.reasoningAllowed.length > 0
-                        x: toolbar.width - 12 - 24 - 8 - width
-                        y: 0
-                        // зона кнопки — ровно по надписи
-                        width: Math.ceil(reasonMetrics.width)
-                        height: 24
-
-                        readonly property bool hovered:
-                            reasonHover.containsMouse
-
-                        TextMetrics {
-                            id: reasonMetrics
-                            font: reasonText.font
-                            text: cat.reasoningLabel()
-                        }
-
-                        SText {
-                            id: reasonText
-
-                            x: 0
-                            y: 0
-                            width: parent.width
-                            height: parent.height
-                            verticalAlignment: Text.AlignVCenter
-                            text: cat.reasoningLabel()
-                            color: Settings.c1
-                            font.pixelSize: Settings.textXs
-                        }
-
-                        MouseArea {
-                            id: reasonHover
-
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-
-                            onClicked: {
-                                const p = reasonBtn.mapToItem(
-                                    inputPanel, 0, 0)
-                                cat.toggleSelect("reason", p.x,
-                                    reasonBtn.width)
-                            }
-                        }
-                    }
-
-                    // отправить / остановить генерацию
-                    Item {
-                        id: sendBtn
-
-                        x: toolbar.width - 12 - 24
-                        y: 0
-                        width: 24
-                        height: 24
-
-                        readonly property bool idle: !aiProc.running
-                        readonly property bool canSend: idle
-                            && (inputField.text.trim() !== ""
-                                || attachModel.count > 0)
-
-                        CatIcon {
-                            anchors.fill: parent
-                            lineColor: Settings.c1
-                            fillPath: sendBtn.idle ? "" : cat.iconStop
-                            strokePath: sendBtn.idle ? cat.iconSend : ""
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            enabled: sendBtn.idle ? sendBtn.canSend : true
-
-                            onClicked: sendBtn.idle
-                                ? cat.submit(inputField.text)
-                                : cat.stopGeneration()
-                        }
-                    }
-                }
-            }
-
-            // === выпадающий список (модель / ризонинг) ===
-            Item {
-                id: selectPopup
-
-                readonly property bool opened: cat.activeSelect !== ""
-                readonly property real fullH: Math.min(240,
-                    popupRows.height + 8)
-
-                // живёт и во время сворачивания, чтобы 250 мс было видно
-                visible: opened || height > 0.5
-                x: Math.max(6, Math.min(inputPanel.width - width - 6,
-                    cat.selectAnchorX + (cat.selectAnchorW - width) / 2))
-                y: inputPanel.height - inputPanel.padBottom
-                    - inputPanel.toolbarH - height - 6
-                width: cat.selectKind === "model" ? 220 : 130
-                // раскрывается из нулевого размера, как чат из-под кота
-                height: opened ? fullH : 0
-
-                Behavior on height {
-                    NumberAnimation {
-                        duration: 250
-                        easing.type: Easing.OutCubic
-                    }
-                }
-
-                readonly property var options:
-                    cat.selectKind === "model"
-                    ? cat.modelOptions.map(function (id) {
-                        return { label: cat.modelShort(id), value: id }
-                    })
-                    : cat.reasoningOptions
-
-                Panel {
-                    x: -Settings.line
-                    y: -Settings.line
-                    width: parent.width + Settings.line * 2
-                    height: parent.height + Settings.line * 2
-                    cornerCut: Settings.line * (2 + Math.sqrt(2) / 2)
-                    strokeColor: Settings.c2
-                    fillColor: Settings.c2
-                    strokeWidth: Settings.line
-
-                    // рост задаёт сам попап, своя анимация Panel
-                    // рассинхронизировала бы обводку с телом
-                    Behavior on width { enabled: false }
-                    Behavior on height { enabled: false }
-                }
-
-                Panel {
-                    anchors.fill: parent
-                    cornerCut: Settings.line * 2
-                    strokeColor: Settings.c1
-                    fillColor: Settings.c2
-                    strokeWidth: Settings.line
-
-                    Behavior on width { enabled: false }
-                    Behavior on height { enabled: false }
-                }
-
-                Flickable {
-                    x: 0
-                    y: 4
-                    width: parent.width
-                    height: Math.max(0, parent.height - 8)
-                    contentWidth: width
-                    contentHeight: popupRows.height
-                    boundsBehavior: Flickable.StopAtBounds
-                    clip: true
-
-                    Column {
-                        id: popupRows
-
-                        width: parent.width
-
-                        Repeater {
-                            model: selectPopup.options
-
-                            delegate: Item {
-                                id: popupRow
-
-                                required property var modelData
-
-                                width: popupRows.width
-                                height: 26
-
-                                readonly property string val:
-                                    modelData.value
-                                readonly property bool current:
-                                    cat.selectKind === "model"
-                                    ? cat.aiModel === val
-                                    : cat.reasoningValue === val
-
-                                SText {
-                                    x: 10
-                                    y: 0
-                                    width: parent.width - 20
-                                    height: parent.height
-                                    verticalAlignment: Text.AlignVCenter
-                                    text: popupRow.modelData.label
-                                    color: Settings.c1
-                                    font.pixelSize: Settings.textXs
-                                    font.bold: popupRow.current
-                                    elide: Text.ElideMiddle
-                                }
-
-                                MouseArea {
-                                    id: rowHover
-
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-
-                                    onClicked: {
-                                        if (cat.activeSelect === "model")
-                                            cat.aiModel = popupRow.val
-                                        else
-                                            cat.reasoningValue =
-                                                popupRow.val
-
-                                        cat.activeSelect = ""
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-    }
-
-    // === кнопка меню: физический верхний правый угол экрана ===
-    Item {
-        id: menuBtn
-
-        z: 30
-        x: cat.winW - width
-        y: 0
-        width: cat.menuBtnZone
-        height: cat.menuBtnZone
-        // режем по кромке окна: спрятанная кнопка уходит за экран
-        clip: true
-
-        // без открытого интерфейса открывать нечего: кнопка
-        // уезжает за верхнюю кромку и выезжает из-под неё
-        Item {
-            id: menuBtnBox
-
-            width: parent.width
-            height: parent.height
-            y: cat.chatState !== "none" ? 0 : -height
-
-            Behavior on y {
-                NumberAnimation {
-                    duration: 300
-                    easing.type: Easing.OutCubic
-                }
-            }
-
-            // вторая, тёмная обводка — как у панелей ControlPanel;
-            // её внешняя кромка лежит ровно на краю экрана
+            // задняя обводка ввода
             Panel {
-                x: Settings.line / 2
-                y: Settings.line / 2
-                width: parent.width - Settings.line
-                height: parent.height - Settings.line
+                id: inputBack
+
+                z: 19
+                visible: inputPanel.height > 0.5
+                x: inputPanel.x - Settings.line
+                y: inputPanel.y - Settings.line
+                width: inputPanel.width + Settings.line * 2
+                height: inputPanel.height + Settings.line * 2
+
+                // поле ввода уже анимирует свою высоту — вторая обводка
+                // должна следовать за ней без собственной анимации,
+                // иначе обводки расходятся
+                Behavior on width { enabled: false }
+                Behavior on height { enabled: false }
+
+                // скос наружной обводки — как у панелей ControlPanel
                 cornerCut: Settings.line * (2 + Math.sqrt(2) / 2)
                 strokeColor: Settings.c2
                 fillColor: Settings.c2
                 strokeWidth: Settings.line
             }
 
+            // === ввод: поле, вложения и панель функций, прижат к низу ===
             Panel {
-                x: Settings.line * 1.5
-                y: Settings.line * 1.5
-                width: parent.width - Settings.line * 3
-                height: parent.height - Settings.line * 3
+                id: inputPanel
+
+                z: 20
+                visible: height > 0.5
+                x: cat.inputX
+                // на line*1.5 уже правой кромки: внешняя кромка второй
+                // обводки ложится ровно на край экрана и не режется
+                width: cat.inputW - Settings.line * 1.5
+                // вторая обводка ложится внешней кромкой ровно на край экрана
+                y: cat.winH - cat.inputGap - height
+                height: cat.chatState !== "none" ? panelH : 0
+
+                readonly property real padTop: 4
+                readonly property real padBottom: 6
+                readonly property real toolbarH: 24
+                readonly property real sepGap: 4
+                readonly property real sepH: Settings.line
+                readonly property real textGap: 4
+                readonly property real chipW: 168
+                readonly property real chipH: 48
+                // высота полосы: плитка + обводка + отступ от верха панели
+                readonly property real stripH: attachModel.count > 0
+                    ? chipH + Settings.line * 2 : 0
+                readonly property real stripGap: attachModel.count > 0 ? 6 : 0
+                readonly property real textH: Math.min(cat.inputMaxTextH,
+                    Math.max(28, inputField.contentHeight + 2))
+                readonly property real panelH: padTop + stripH + stripGap
+                    + textH + textGap + sepH + sepGap + toolbarH + padBottom
+
                 cornerCut: Settings.line * 2
                 strokeColor: Settings.c1
-                fillColor: cat.menuOpen ? Settings.c1 : Settings.c2
+                fillColor: Settings.c2
                 strokeWidth: Settings.line
-            }
 
-            CatIcon {
-                anchors.centerIn: parent
-                width: 20
-                height: 20
-                lineColor: cat.menuOpen ? Settings.c2 : Settings.c1
-                strokePath: cat.iconMenu
-            }
+                Behavior on height {
+                    NumberAnimation { duration: 150 }
+                }
 
-            MouseArea {
-                id: menuHover
-
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-
-                onClicked: cat.menuToggled()
-            }
-        }
-    }
-
-    Item {
-        id: root
-
-        anchors.fill: parent
-
-        // слайд показа/прятания: кот выезжает из-под нижней кромки.
-        // Без anchors.fill: иначе привязка y игнорируется якорями
-        Item {
-            id: catBox
-
-            width: parent.width
-            height: parent.height
-            y: cat.slideY
-
-        // единая белая обводка вокруг всего непрозрачного содержимого:
-        // 16 белых копий силуэта, сдвинутых по кругу, под самим котом
-        Repeater {
-            model: 16
-
-            delegate: Item {
-                required property int index
-
-                readonly property real ang: index / 16 * Math.PI * 2
-
-                x: catRender.x + Settings.line*2 * Math.cos(ang)
-                y: catRender.y + Settings.line*2 * Math.sin(ang)
-                width: catRender.width
-                height: catRender.height
-
-                ColorOverlay {
+                // клик по полю (не только по строке текста) — фокус ввода
+                MouseArea {
                     anchors.fill: parent
-                    source: catRender
-                    color: Settings.c2
+
+                    onClicked: {
+                        cat.closeOverlays()
+                        inputField.forceActiveFocus()
+                    }
+                }
+
+                // контент режется растущей панелью: элементы не висят
+                // снаружи на анимации открытия
+                Item {
+                    id: inputContent
+
+                    x: 0
+                    y: 0
+                    width: parent.width
+                    height: parent.height
+                    clip: true
+
+                    readonly property real innerW: width - 24
+                    // верх поля ввода (всё ниже считается от низа панели)
+                    readonly property real textTop: inputPanel.height
+                        - inputPanel.padBottom - inputPanel.toolbarH
+                        - inputPanel.sepGap - inputPanel.sepH
+                        - inputPanel.textGap - inputPanel.textH
+
+                    // === вложения: одна полоса с горизонтальным скроллом ===
+                    Item {
+                        id: attachViewport
+
+                        x: 12
+                        y: inputContent.textTop - inputPanel.stripGap
+                            - inputPanel.stripH
+                        width: inputContent.innerW
+                        height: inputPanel.stripH
+                        visible: height > 0.5
+
+                        // плавный скролл колесом: ведём contentX анимацией
+                        property real targetX: 0
+
+                        function scrollBy(delta) {
+                            const max = Math.max(0,
+                                attachStrip.contentWidth - attachStrip.width)
+
+                            if (max <= 0 || delta === 0)
+                                return false
+
+                            const base = stripAnim.running
+                                ? targetX : attachStrip.contentX
+                            const next = cat.clamp(base - delta * 0.8, 0, max)
+
+                            if (Math.abs(next - base) < 0.5)
+                                return false
+
+                            targetX = next
+                            stripAnim.from = attachStrip.contentX
+                            stripAnim.to = targetX
+                            stripAnim.restart()
+                            return true
+                        }
+
+                        Flickable {
+                            id: attachStrip
+
+                            anchors.fill: parent
+                            contentWidth: attachRow.width
+                            contentHeight: height
+                            boundsBehavior: Flickable.StopAtBounds
+                            flickableDirection: Flickable.HorizontalFlick
+                            clip: true
+
+                            // ручной скролл перебивает анимацию колеса
+                            onMovementStarted: stripAnim.stop()
+
+                            Row {
+                                id: attachRow
+
+                                height: attachStrip.height
+                                spacing: 8
+
+                                Repeater {
+                                    model: attachModel
+
+                                    delegate: AttachChip {
+                                        required property int index
+                                        required property string path
+                                        required property string name
+                                        required property bool isImage
+
+                                        iconPath: cat.iconFile
+                                        removable: true
+
+                                        onRemoveRequested: attachModel.remove(
+                                            index)
+                                    }
+                                }
+                            }
+                        }
+
+                        // колесо перехватываем поверх Flickable: сам он
+                        // прыгает на весь шаг, а нам нужен плавный доезд.
+                        // Кнопки не принимаем — клики по чипам проходят ниже
+                        MouseArea {
+                            anchors.fill: parent
+                            acceptedButtons: Qt.NoButton
+
+                            onWheel: (wheel) => {
+                                const d = wheel.angleDelta.y !== 0
+                                    ? wheel.angleDelta.y : wheel.angleDelta.x
+
+                                if (attachViewport.scrollBy(d))
+                                    wheel.accepted = true
+                            }
+                        }
+
+                        NumberAnimation {
+                            id: stripAnim
+
+                            target: attachStrip
+                            property: "contentX"
+                            duration: 240
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+
+                    // === поле ввода: текст по центру, при переполнении
+                    // последняя строка остаётся видимой ===
+                    Item {
+                        id: inputClip
+
+                        x: 12
+                        y: inputContent.textTop
+                        width: inputContent.innerW
+                        height: inputPanel.textH
+                        clip: true
+
+                        readonly property real maxScroll: Math.max(0,
+                            inputField.contentHeight + 2 - height)
+
+                        // пока текст влезает — держим его по центру поля,
+                        // чтобы зазоры сверху и снизу были равными;
+                        // при переполнении последняя строка прижата к низу
+                        function bottomY() {
+                            const over = inputField.contentHeight + 2 - height
+
+                            return over > 0
+                                ? -over
+                                : (height - inputField.contentHeight) / 2
+                        }
+
+                        function clampScroll() {
+                            if (cat.inputScroll > maxScroll)
+                                cat.inputScroll = maxScroll
+                            else if (cat.inputScroll < 0)
+                                cat.inputScroll = 0
+                        }
+
+                        // колесо листает многострочный текст ввода
+                        function scrollBy(delta) {
+                            if (maxScroll <= 0 || delta === 0)
+                                return false
+
+                            const next = Math.max(0, Math.min(maxScroll,
+                                cat.inputScroll - delta * 0.5))
+
+                            if (Math.abs(next - cat.inputScroll) < 0.5)
+                                return false
+
+                            inputScrollAnim.stop()
+                            inputScrollAnim.from = cat.inputScroll
+                            inputScrollAnim.to = next
+                            inputScrollAnim.start()
+                            return true
+                        }
+
+                        NumberAnimation {
+                            id: inputScrollAnim
+
+                            target: cat
+                            property: "inputScroll"
+                            duration: 160
+                            easing.type: Easing.OutCubic
+                        }
+
+                        WheelHandler {
+                            acceptedDevices: PointerDevice.Mouse
+                                | PointerDevice.TouchPad
+
+                            onWheel: (event) => {
+                                if (inputClip.scrollBy(event.angleDelta.y))
+                                    event.accepted = true
+                            }
+                        }
+
+                        TextInput {
+                            id: inputField
+
+                            width: parent.width
+                            y: inputClip.bottomY() - cat.inputScroll
+                            color: Settings.c1
+                            font.pixelSize: Settings.textSm
+                            wrapMode: TextInput.WrapAtWordBoundaryOrAnywhere
+                            selectByMouse: true
+                            selectionColor: Settings.c1
+                            selectedTextColor: Settings.c2
+
+                            // курсор всегда в зоне видимости; скролл
+                            // ограничен контентом, чтобы не оставалась
+                            // пустота снизу
+                            onCursorRectangleChanged: {
+                                if (inputPanel.height <= 0.5
+                                        || inputClip.height <= 0)
+                                    return
+
+                                inputScrollAnim.stop()
+
+                                const cr = cursorRectangle
+                                const yOff = inputClip.bottomY()
+                                    - cat.inputScroll
+                                const top = cr.y + yOff
+                                const bottom = top + cr.height
+                                let next = cat.inputScroll
+
+                                if (top < 0)
+                                    next = cat.inputScroll + top
+                                else if (bottom > inputClip.height)
+                                    next = cat.inputScroll + bottom
+                                        - inputClip.height
+
+                                next = Math.max(0, Math.min(
+                                    inputClip.maxScroll, next))
+
+                                if (next !== cat.inputScroll)
+                                    cat.inputScroll = next
+                            }
+
+                            onContentHeightChanged: inputClip.clampScroll()
+
+                            onAccepted: cat.submit(text)
+                            Keys.onEscapePressed: cat.closeChat()
+                        }
+
+                        SText {
+                            visible: cat.chatState !== "none"
+                                && inputField.text === ""
+                            x: 0
+                            y: inputClip.bottomY()
+                            text: "hmm..."
+                            color: Settings.c2
+                            font.pixelSize: Settings.textSm
+                        }
+                    }
+
+                    // === линия-разделитель под полем ===
+                    // штрих как у разделителей ControlPanel: линия
+                    // толщиной Settings.line, без прозрачности
+                    Shape {
+                        id: inputDivider
+
+                        x: 0
+                        y: inputPanel.height - inputPanel.padBottom
+                            - inputPanel.toolbarH - inputPanel.sepGap
+                            - inputPanel.sepH
+                        width: inputContent.width
+                        height: inputPanel.sepH
+                        preferredRendererType: Shape.CurveRenderer
+
+                        SShapePath {
+                            joinStyle: ShapePath.MiterJoin
+                            capStyle: ShapePath.FlatCap
+                            strokeColor: Settings.c1
+                            strokeWidth: Settings.line
+                            startX: 0
+                            startY: inputDivider.height / 2
+                            PathLine {
+                                x: inputDivider.width
+                                y: inputDivider.height / 2
+                            }
+                        }
+                    }
+
+                    // === панель функций ===
+                    Item {
+                        id: toolbar
+
+                        x: 0
+                        y: inputPanel.height - inputPanel.padBottom
+                            - inputPanel.toolbarH
+                        width: inputContent.width
+                        height: inputPanel.toolbarH
+
+                        // прикрепить файл
+                        Item {
+                            id: attachBtn
+
+                            x: 12
+                            y: 0
+                            width: 24
+                            height: 24
+
+                            CatIcon {
+                                anchors.fill: parent
+                                lineColor: Settings.c1
+                                strokePath: cat.iconAttach
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+
+                                onClicked: cat.openPicker()
+                            }
+                        }
+
+                        // выбор модели
+                        Item {
+                            id: modelBtn
+
+                            x: (toolbar.width - width) / 2
+                            y: 0
+                            width: 140
+                            height: 24
+
+                            readonly property bool hovered:
+                                modelHover.containsMouse
+
+                            SText {
+                                x: 0
+                                y: 0
+                                width: parent.width
+                                height: parent.height
+                                verticalAlignment: Text.AlignVCenter
+                                horizontalAlignment: Text.AlignHCenter
+                                text: cat.modelShort(cat.aiModel)
+                                color: Settings.c1
+                                font.pixelSize: Settings.textXs
+                                elide: Text.ElideMiddle
+                            }
+
+                            MouseArea {
+                                id: modelHover
+
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+
+                                onClicked: {
+                                    const p = modelBtn.mapToItem(
+                                        inputPanel, 0, 0)
+                                    cat.toggleSelect("model", p.x,
+                                        modelBtn.width)
+                                }
+                            }
+                        }
+
+                        // уровень ризонинга — только если модель его умеет
+                        Item {
+                            id: reasonBtn
+
+                            visible: cat.reasoningAllowed.length > 0
+                            x: toolbar.width - 12 - 24 - 8 - width
+                            y: 0
+                            // зона кнопки — ровно по надписи
+                            width: Math.ceil(reasonMetrics.width)
+                            height: 24
+
+                            readonly property bool hovered:
+                                reasonHover.containsMouse
+
+                            TextMetrics {
+                                id: reasonMetrics
+                                font: reasonText.font
+                                text: cat.reasoningLabel()
+                            }
+
+                            SText {
+                                id: reasonText
+
+                                x: 0
+                                y: 0
+                                width: parent.width
+                                height: parent.height
+                                verticalAlignment: Text.AlignVCenter
+                                text: cat.reasoningLabel()
+                                color: Settings.c1
+                                font.pixelSize: Settings.textXs
+                            }
+
+                            MouseArea {
+                                id: reasonHover
+
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+
+                                onClicked: {
+                                    const p = reasonBtn.mapToItem(
+                                        inputPanel, 0, 0)
+                                    cat.toggleSelect("reason", p.x,
+                                        reasonBtn.width)
+                                }
+                            }
+                        }
+
+                        // отправить / остановить генерацию
+                        Item {
+                            id: sendBtn
+
+                            x: toolbar.width - 12 - 24
+                            y: 0
+                            width: 24
+                            height: 24
+
+                            readonly property bool idle: !aiProc.running
+                            readonly property bool canSend: idle
+                                && (inputField.text.trim() !== ""
+                                    || attachModel.count > 0)
+
+                            CatIcon {
+                                anchors.fill: parent
+                                lineColor: Settings.c1
+                                fillPath: sendBtn.idle ? "" : cat.iconStop
+                                strokePath: sendBtn.idle ? cat.iconSend : ""
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                enabled: sendBtn.idle ? sendBtn.canSend : true
+
+                                onClicked: sendBtn.idle
+                                    ? cat.submit(inputField.text)
+                                    : cat.stopGeneration()
+                            }
+                        }
+                    }
+                }
+
+                // === выпадающий список (модель / ризонинг) ===
+                Item {
+                    id: selectPopup
+
+                    readonly property bool opened: cat.activeSelect !== ""
+                    readonly property real fullH: Math.min(240,
+                        popupRows.height + 8)
+
+                    // живёт и во время сворачивания, чтобы 250 мс было видно
+                    visible: opened || height > 0.5
+                    x: Math.max(6, Math.min(inputPanel.width - width - 6,
+                        cat.selectAnchorX + (cat.selectAnchorW - width) / 2))
+                    y: inputPanel.height - inputPanel.padBottom
+                        - inputPanel.toolbarH - height - 6
+                    width: cat.selectKind === "model" ? 220 : 130
+                    // раскрывается из нулевого размера, как чат из-под кота
+                    height: opened ? fullH : 0
+
+                    Behavior on height {
+                        NumberAnimation {
+                            duration: 250
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+
+                    readonly property var options:
+                        cat.selectKind === "model"
+                        ? cat.modelOptions.map(function (id) {
+                            return { label: cat.modelShort(id), value: id }
+                        })
+                        : cat.reasoningOptions
+
+                    Panel {
+                        x: -Settings.line
+                        y: -Settings.line
+                        width: parent.width + Settings.line * 2
+                        height: parent.height + Settings.line * 2
+                        cornerCut: Settings.line * (2 + Math.sqrt(2) / 2)
+                        strokeColor: Settings.c2
+                        fillColor: Settings.c2
+                        strokeWidth: Settings.line
+
+                        // рост задаёт сам попап, своя анимация Panel
+                        // рассинхронизировала бы обводку с телом
+                        Behavior on width { enabled: false }
+                        Behavior on height { enabled: false }
+                    }
+
+                    Panel {
+                        anchors.fill: parent
+                        cornerCut: Settings.line * 2
+                        strokeColor: Settings.c1
+                        fillColor: Settings.c2
+                        strokeWidth: Settings.line
+
+                        Behavior on width { enabled: false }
+                        Behavior on height { enabled: false }
+                    }
+
+                    Flickable {
+                        x: 0
+                        y: 4
+                        width: parent.width
+                        height: Math.max(0, parent.height - 8)
+                        contentWidth: width
+                        contentHeight: popupRows.height
+                        boundsBehavior: Flickable.StopAtBounds
+                        clip: true
+
+                        Column {
+                            id: popupRows
+
+                            width: parent.width
+
+                            Repeater {
+                                model: selectPopup.options
+
+                                delegate: Item {
+                                    id: popupRow
+
+                                    required property var modelData
+
+                                    width: popupRows.width
+                                    height: 26
+
+                                    readonly property string val:
+                                        modelData.value
+                                    readonly property bool current:
+                                        cat.selectKind === "model"
+                                        ? cat.aiModel === val
+                                        : cat.reasoningValue === val
+
+                                    SText {
+                                        x: 10
+                                        y: 0
+                                        width: parent.width - 20
+                                        height: parent.height
+                                        verticalAlignment: Text.AlignVCenter
+                                        text: popupRow.modelData.label
+                                        color: Settings.c1
+                                        font.pixelSize: Settings.textXs
+                                        font.bold: popupRow.current
+                                        elide: Text.ElideMiddle
+                                    }
+
+                                    MouseArea {
+                                        id: rowHover
+
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+
+                                        onClicked: {
+                                            if (cat.activeSelect === "model")
+                                                cat.aiModel = popupRow.val
+                                            else
+                                                cat.reasoningValue =
+                                                    popupRow.val
+
+                                            cat.activeSelect = ""
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+        }
+
+        // === кнопка меню: физический верхний правый угол экрана ===
+        Item {
+            id: menuBtn
+
+            z: 30
+            x: cat.winW - width
+            y: 0
+            width: cat.menuBtnZone
+            height: cat.menuBtnZone
+            // режем по кромке окна: спрятанная кнопка уходит за экран
+            clip: true
+
+            // без открытого интерфейса открывать нечего: кнопка
+            // уезжает за верхнюю кромку и выезжает из-под неё
+            Item {
+                id: menuBtnBox
+
+                width: parent.width
+                height: parent.height
+                y: cat.chatState !== "none" ? 0 : -height
+
+                Behavior on y {
+                    NumberAnimation {
+                        duration: 300
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                // каноничная плитка-октагон — как тайлы ControlPanel:
+                // контур c1, срезы углов; открытая панель или наведение —
+                // заливка c1 с инверсией иконки
+                InfexBox {
+                    id: menuTile
+
+                    x: (parent.width - width) / 2
+                    y: (parent.height - height) / 2
+                    width: cat.menuBtnSize
+                    height: cat.menuBtnSize
+
+                    edgeLeft: "Flat"
+                    edgeRight: "Flat"
+                    cornerCut: Settings.line * 2
+                    sideInset: 0
+
+                    fillFraction: cat.menuOpen || menuHover.containsMouse
+                        ? 1 : 0
+
+                    Behavior on fillFraction {
+                        NumberAnimation { duration: Settings.animBase }
+                    }
+
+                    content: Component {
+                        Item {
+                            id: menuTileContent
+
+                            property bool inverted: false
+
+                            width: menuTile.innerWidth - Settings.line
+                            height: menuTile.height - Settings.line
+
+                            VIcon {
+                                anchors.centerIn: parent
+                                width: parent.height * 0.55
+                                height: width
+                                strokePath: cat.iconMenu
+                                lineColor: menuTileContent.inverted
+                                    ? Settings.c2 : Settings.c1
+                            }
+                        }
+                    }
+                }
+
+                MouseArea {
+                    id: menuHover
+
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+
+                    onClicked: cat.toggleMenu()
                 }
             }
         }
-        Repeater {
-            model: 16
-
-            delegate: Item {
-                required property int index
-
-                readonly property real ang: index / 16 * Math.PI * 2
-
-                x: catRender.x + Settings.line * Math.cos(ang)
-                y: catRender.y + Settings.line * Math.sin(ang)
-                width: catRender.width
-                height: catRender.height
-
-                ColorOverlay {
-                    anchors.fill: parent
-                    source: catRender
-                    color: Settings.c1
-                }
-            }
-        }
 
         Item {
-            id: catRender
+            id: root
 
             anchors.fill: parent
-            layer.enabled: true
-            layer.smooth: true
+
+            // слайд показа/прятания: кот выезжает из-под нижней кромки.
+            // Без anchors.fill: иначе привязка y игнорируется якорями
+            Item {
+                id: catBox
+
+                width: parent.width
+                height: parent.height
+                y: cat.slideY
+
+            // единая белая обводка вокруг всего непрозрачного содержимого:
+            // 16 белых копий силуэта, сдвинутых по кругу, под самим котом
+            Repeater {
+                model: 16
+
+                delegate: Item {
+                    required property int index
+
+                    readonly property real ang: index / 16 * Math.PI * 2
+
+                    x: catRender.x + Settings.line*2 * Math.cos(ang)
+                    y: catRender.y + Settings.line*2 * Math.sin(ang)
+                    width: catRender.width
+                    height: catRender.height
+
+                    ColorOverlay {
+                        anchors.fill: parent
+                        source: catRender
+                        color: Settings.c2
+                    }
+                }
+            }
+            Repeater {
+                model: 16
+
+                delegate: Item {
+                    required property int index
+
+                    readonly property real ang: index / 16 * Math.PI * 2
+
+                    x: catRender.x + Settings.line * Math.cos(ang)
+                    y: catRender.y + Settings.line * Math.sin(ang)
+                    width: catRender.width
+                    height: catRender.height
+
+                    ColorOverlay {
+                        anchors.fill: parent
+                        source: catRender
+                        color: Settings.c1
+                    }
+                }
+            }
 
             Item {
-            id: catSpace
+                id: catRender
 
-            x: cat.catOffsetX
-            y: cat.catOffsetY
-            width: 1000
-            height: 1000
+                anchors.fill: parent
+                layer.enabled: true
+                layer.smooth: true
 
-            transform: Scale {
-                xScale: cat.svgScale
-                yScale: cat.svgScale
-            }
+                Item {
+                id: catSpace
 
-            // === хвост (за телом) ===
-            Shape {
-                z: 0
-                preferredRendererType: Shape.CurveRenderer
-
-                SShapePath {
-                    strokeColor: "transparent"
-                    fillColor: Settings.c2
-                    fillRule: ShapePath.WindingFill
-
-                    PathSvg { path: cat.tailPath }
-                }
-            }
-
-            // === тело (дыхание вокруг нижней кромки экрана) ===
-            Shape {
-                z: 1
-                preferredRendererType: Shape.CurveRenderer
-
-                transform: Scale {
-                    origin.x: CatData.pivots.bodyBreath.x
-                    origin.y: CatData.pivots.bodyBreath.y
-
-                    xScale: 1 + (cat.bodyCrouch - 1) * 0.5
-                    yScale: cat.bodyCrouch * (1
-                        + 0.01 * Math.sin(cat.breathPhase))
-                }
-
-                SShapePath {
-                    joinStyle: ShapePath.MiterJoin
-                    capStyle: ShapePath.FlatCap
-                    strokeColor: "transparent"
-                    fillColor: Settings.c2
-
-                    PathSvg { path: CatData.parts[0].d }
-                }
-            }
-
-            // === голова (наклон) + уши + глаза + нос ===
-            Item {
-                z: 2
+                x: cat.catOffsetX
+                y: cat.catOffsetY
                 width: 1000
                 height: 1000
 
-                transform: Rotation {
-                    origin.x: CatData.pivots.neck.x
-                    origin.y: CatData.pivots.neck.y
-                    angle: cat.headTilt
+                transform: Scale {
+                    xScale: cat.svgScale
+                    yScale: cat.svgScale
                 }
 
+                // === хвост (за телом) ===
                 Shape {
-                    anchors.fill: parent
+                    z: 0
                     preferredRendererType: Shape.CurveRenderer
+
+                    SShapePath {
+                        strokeColor: "transparent"
+                        fillColor: Settings.c2
+                        fillRule: ShapePath.WindingFill
+
+                        PathSvg { path: cat.tailPath }
+                    }
+                }
+
+                // === тело (дыхание вокруг нижней кромки экрана) ===
+                Shape {
+                    z: 1
+                    preferredRendererType: Shape.CurveRenderer
+
+                    transform: Scale {
+                        origin.x: CatData.pivots.bodyBreath.x
+                        origin.y: CatData.pivots.bodyBreath.y
+
+                        xScale: 1 + (cat.bodyCrouch - 1) * 0.5
+                        yScale: cat.bodyCrouch * (1
+                            + 0.01 * Math.sin(cat.breathPhase))
+                    }
 
                     SShapePath {
                         joinStyle: ShapePath.MiterJoin
@@ -3207,19 +3228,20 @@ PanelWindow {
                         strokeColor: "transparent"
                         fillColor: Settings.c2
 
-                        PathSvg { path: CatData.parts[1].d }
+                        PathSvg { path: CatData.parts[0].d }
                     }
                 }
 
-                // уши: пружинный сгиб вокруг основания
+                // === голова (наклон) + уши + глаза + нос ===
                 Item {
+                    z: 2
                     width: 1000
                     height: 1000
 
                     transform: Rotation {
-                        origin.x: CatData.pivots.earBaseL.x
-                        origin.y: CatData.pivots.earBaseL.y
-                        angle: cat.earLAngle
+                        origin.x: CatData.pivots.neck.x
+                        origin.y: CatData.pivots.neck.y
+                        angle: cat.headTilt
                     }
 
                     Shape {
@@ -3232,47 +3254,161 @@ PanelWindow {
                             strokeColor: "transparent"
                             fillColor: Settings.c2
 
-                            PathSvg { path: CatData.parts[2].d }
+                            PathSvg { path: CatData.parts[1].d }
                         }
                     }
-                }
 
-                Item {
-                    anchors.fill: parent
+                    // уши: пружинный сгиб вокруг основания
+                    Item {
+                        width: 1000
+                        height: 1000
 
-                    transform: Rotation {
-                        origin.x: CatData.pivots.earBaseR.x
-                        origin.y: CatData.pivots.earBaseR.y
-                        angle: cat.earRAngle
+                        transform: Rotation {
+                            origin.x: CatData.pivots.earBaseL.x
+                            origin.y: CatData.pivots.earBaseL.y
+                            angle: cat.earLAngle
+                        }
+
+                        Shape {
+                            anchors.fill: parent
+                            preferredRendererType: Shape.CurveRenderer
+
+                            SShapePath {
+                                joinStyle: ShapePath.MiterJoin
+                                capStyle: ShapePath.FlatCap
+                                strokeColor: "transparent"
+                                fillColor: Settings.c2
+
+                                PathSvg { path: CatData.parts[2].d }
+                            }
+                        }
                     }
 
-                    Shape {
+                    Item {
                         anchors.fill: parent
-                        preferredRendererType: Shape.CurveRenderer
 
-                        SShapePath {
-                            joinStyle: ShapePath.MiterJoin
-                            capStyle: ShapePath.FlatCap
-                            strokeColor: "transparent"
-                            fillColor: Settings.c2
+                        transform: Rotation {
+                            origin.x: CatData.pivots.earBaseR.x
+                            origin.y: CatData.pivots.earBaseR.y
+                            angle: cat.earRAngle
+                        }
 
-                            PathSvg { path: CatData.parts[3].d }
+                        Shape {
+                            anchors.fill: parent
+                            preferredRendererType: Shape.CurveRenderer
+
+                            SShapePath {
+                                joinStyle: ShapePath.MiterJoin
+                                capStyle: ShapePath.FlatCap
+                                strokeColor: "transparent"
+                                fillColor: Settings.c2
+
+                                PathSvg { path: CatData.parts[3].d }
+                            }
                         }
                     }
-                }
 
-                // глаза: моргание (масштаб по Y) + бегающий зрачок
-                Item {
-                    width: 1000
-                    height: 1000
-                    opacity: cat.eyeOpacity
+                    // глаза: моргание (масштаб по Y) + бегающий зрачок
+                    Item {
+                        width: 1000
+                        height: 1000
+                        opacity: cat.eyeOpacity
 
-                    transform: Scale {
-                        origin.x: CatData.pivots.eyeCenterL.x
-                        origin.y: CatData.pivots.eyeCenterL.y
-                        yScale: cat.blinkY
+                        transform: Scale {
+                            origin.x: CatData.pivots.eyeCenterL.x
+                            origin.y: CatData.pivots.eyeCenterL.y
+                            yScale: cat.blinkY
+                        }
+
+                        Shape {
+                            anchors.fill: parent
+                            preferredRendererType: Shape.CurveRenderer
+
+                            SShapePath {
+                                fillColor: Settings.c1
+                                strokeColor: "transparent"
+
+                                PathSvg { path: CatData.parts[4].d }
+                            }
+                        }
+
+                        Shape {
+                            anchors.fill: parent
+                            preferredRendererType: Shape.CurveRenderer
+
+                            transform: [
+                                Translate {
+                                    // смещение от базы, ограниченное толстой
+                                    // частью белка — зрачок всегда виден
+                                    x: Math.max(-78, Math.min(9, cat.lookX))
+                                    y: cat.lookY
+                                },
+                                Scale {
+                                    origin.x: CatData.pivots.pupilBaseL.x
+                                    origin.y: CatData.pivots.pupilBaseL.y
+                                    xScale: cat.pupilScale
+                                    yScale: cat.pupilScale
+                                }
+                            ]
+
+                            SShapePath {
+                                fillColor: Settings.c2
+                                strokeColor: "transparent"
+
+                                PathSvg { path: CatData.parts[5].d }
+                            }
+                        }
                     }
 
+                    Item {
+                        anchors.fill: parent
+                        opacity: cat.eyeOpacity
+
+                        transform: Scale {
+                            origin.x: CatData.pivots.eyeCenterR.x
+                            origin.y: CatData.pivots.eyeCenterR.y
+                            yScale: cat.blinkY
+                        }
+
+                        Shape {
+                            anchors.fill: parent
+                            preferredRendererType: Shape.CurveRenderer
+
+                            SShapePath {
+                                fillColor: Settings.c1
+                                strokeColor: "transparent"
+
+                                PathSvg { path: CatData.parts[6].d }
+                            }
+                        }
+
+                        Shape {
+                            anchors.fill: parent
+                            preferredRendererType: Shape.CurveRenderer
+
+                            transform: [
+                                Translate {
+                                    x: Math.max(-9, Math.min(105, cat.lookX))
+                                    y: cat.lookY
+                                },
+                                Scale {
+                                    origin.x: CatData.pivots.pupilBaseR.x
+                                    origin.y: CatData.pivots.pupilBaseR.y
+                                    xScale: cat.pupilScale
+                                    yScale: cat.pupilScale
+                                }
+                            ]
+
+                            SShapePath {
+                                fillColor: Settings.c2
+                                strokeColor: "transparent"
+
+                                PathSvg { path: CatData.parts[7].d }
+                            }
+                        }
+                    }
+
+                    // нос
                     Shape {
                         anchors.fill: parent
                         preferredRendererType: Shape.CurveRenderer
@@ -3281,155 +3417,485 @@ PanelWindow {
                             fillColor: Settings.c1
                             strokeColor: "transparent"
 
-                            PathSvg { path: CatData.parts[4].d }
-                        }
-                    }
-
-                    Shape {
-                        anchors.fill: parent
-                        preferredRendererType: Shape.CurveRenderer
-
-                        transform: [
-                            Translate {
-                                // смещение от базы, ограниченное толстой
-                                // частью белка — зрачок всегда виден
-                                x: Math.max(-78, Math.min(9, cat.lookX))
-                                y: cat.lookY
-                            },
-                            Scale {
-                                origin.x: CatData.pivots.pupilBaseL.x
-                                origin.y: CatData.pivots.pupilBaseL.y
-                                xScale: cat.pupilScale
-                                yScale: cat.pupilScale
-                            }
-                        ]
-
-                        SShapePath {
-                            fillColor: Settings.c2
-                            strokeColor: "transparent"
-
-                            PathSvg { path: CatData.parts[5].d }
+                            PathSvg { path: CatData.parts[8].d }
                         }
                     }
                 }
 
-                Item {
-                    anchors.fill: parent
-                    opacity: cat.eyeOpacity
+                // === Zzz во сне: чёрные Z летят вправо-вверх, вырастая
+                // из нуля и снова уменьшаясь в никуда; две штуки меняют
+                // друг друга циклично ===
+                SText {
+                    visible: cat.asleep
+                    text: "z"
+                    color: Settings.c2
+                    font.bold: true
 
-                    transform: Scale {
-                        origin.x: CatData.pivots.eyeCenterR.x
-                        origin.y: CatData.pivots.eyeCenterR.y
-                        yScale: cat.blinkY
-                    }
+                    readonly property real p: (cat.zzzPhase / 2.4) % 1
 
-                    Shape {
-                        anchors.fill: parent
-                        preferredRendererType: Shape.CurveRenderer
-
-                        SShapePath {
-                            fillColor: Settings.c1
-                            strokeColor: "transparent"
-
-                            PathSvg { path: CatData.parts[6].d }
-                        }
-                    }
-
-                    Shape {
-                        anchors.fill: parent
-                        preferredRendererType: Shape.CurveRenderer
-
-                        transform: [
-                            Translate {
-                                x: Math.max(-9, Math.min(105, cat.lookX))
-                                y: cat.lookY
-                            },
-                            Scale {
-                                origin.x: CatData.pivots.pupilBaseR.x
-                                origin.y: CatData.pivots.pupilBaseR.y
-                                xScale: cat.pupilScale
-                                yScale: cat.pupilScale
-                            }
-                        ]
-
-                        SShapePath {
-                            fillColor: Settings.c2
-                            strokeColor: "transparent"
-
-                            PathSvg { path: CatData.parts[7].d }
-                        }
-                    }
+                    font.pixelSize: Math.max(2, 162 * Math.sin(p * Math.PI))
+                    x: 730 + 190 * p
+                    y: 520 - 190 * p
+                    opacity: Math.min(1, 2.5 * Math.sin(p * Math.PI))
+                    rotation: 14
                 }
 
-                // нос
-                Shape {
-                    anchors.fill: parent
-                    preferredRendererType: Shape.CurveRenderer
+                SText {
+                    visible: cat.asleep
+                    text: "z"
+                    color: Settings.c2
+                    font.bold: true
 
-                    SShapePath {
-                        fillColor: Settings.c1
-                        strokeColor: "transparent"
+                    readonly property real p: (cat.zzzPhase / 2.4 + 0.5) % 1
 
-                        PathSvg { path: CatData.parts[8].d }
-                    }
+                    font.pixelSize: Math.max(2, 126 * Math.sin(p * Math.PI))
+                    x: 730 + 190 * p
+                    y: 520 - 190 * p
+                    opacity: Math.min(1, 2.5 * Math.sin(p * Math.PI))
+                    rotation: 14
+                }
                 }
             }
 
-            // === Zzz во сне: чёрные Z летят вправо-вверх, вырастая
-            // из нуля и снова уменьшаясь в никуда; две штуки меняют
-            // друг друга циклично ===
-            SText {
-                visible: cat.asleep
-                text: "z"
-                color: Settings.c2
-                font.bold: true
+            MouseArea {
+                id: pokeArea
 
-                readonly property real p: (cat.zzzPhase / 2.4) % 1
+                anchors.fill: parent
+                enabled: cat.shown
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
 
-                font.pixelSize: Math.max(2, 162 * Math.sin(p * Math.PI))
-                x: 730 + 190 * p
-                y: 520 - 190 * p
-                opacity: Math.min(1, 2.5 * Math.sin(p * Math.PI))
-                rotation: 14
-            }
+                onPressed: (mouse) => {
+                    const sx = (mouse.x - cat.catOffsetX) / cat.svgScale
+                    const sy = (mouse.y - cat.catOffsetY) / cat.svgScale
 
-            SText {
-                visible: cat.asleep
-                text: "z"
-                color: Settings.c2
-                font.bold: true
-
-                readonly property real p: (cat.zzzPhase / 2.4 + 0.5) % 1
-
-                font.pixelSize: Math.max(2, 126 * Math.sin(p * Math.PI))
-                x: 730 + 190 * p
-                y: 520 - 190 * p
-                opacity: Math.min(1, 2.5 * Math.sin(p * Math.PI))
-                rotation: 14
-            }
-            }
-        }
-
-        MouseArea {
-            id: pokeArea
-
-            anchors.fill: parent
-            enabled: cat.shown
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-
-            onPressed: (mouse) => {
-                const sx = (mouse.x - cat.catOffsetX) / cat.svgScale
-                const sy = (mouse.y - cat.catOffsetY) / cat.svgScale
-
-                if (cat.silhouetteHit(sx, sy)) {
-                    cat.poke()
-                    cat.openInput()
-                } else {
-                    mouse.accepted = false
+                    if (cat.silhouetteHit(sx, sy)) {
+                        cat.poke()
+                        cat.openInput()
+                    } else {
+                        mouse.accepted = false
+                    }
                 }
             }
         }
     }
-}
+    }
+
+    // === панель чатов ===
+    // принадлежит коту: живёт в его окне, поверх экрана — место у
+    // окон не резервируется, бар и окна не двигаются. По умолчанию
+    // панель за правой кромкой экрана, по кнопке выезжает из-под
+    // неё, кот отъезжает влево. Корпус — октагон InfexBox, прижатый
+    // правой стороной к кромке (справа без среза), шапка —
+    // бар-заголовок с талией, как dateBar ControlPanel, новый чат —
+    // каноничная плитка-октагон, строки — гранёные фреймы, действия
+    // над чатом — SPanel
+    Item {
+        id: chatsPanel
+
+        x: cat.winW + cat.menuW - cat.menuSlide
+        y: 0
+        width: cat.menuW
+        height: parent.height
+
+        // высота строки — как у таб-бара
+        readonly property real rowH: Settings.barHeight - Settings.line
+        readonly property real rowPoint: rowH * InfexGeometry.notchFrac
+
+        // всплывающие действия над чатом
+        property string actionId: ""
+        property real actionY: 0
+        property string renameId: ""
+        readonly property real actionsW: 176
+        readonly property real actionsH: 3 * 28 + 8
+
+        function openActions(id, y) {
+            renameId = ""
+            actionId = id
+            actionY = Math.max(panelBody.y + headerRow.height,
+                Math.min(y - actionsH / 2,
+                    panelBox.height - actionsH - Settings.line * 2))
+        }
+
+        function commitRename(id, text) {
+            if (renameId === "" || id !== renameId)
+                return
+
+            cat.setChatTitle(id, text)
+            renameId = ""
+        }
+
+        // корпус: октагон, прижатый к правой кромке экрана
+        InfexBox {
+            id: panelBox
+
+            x: Settings.line * 2
+            y: Settings.line
+            width: parent.width - Settings.line * 3
+            height: parent.height - Settings.line * 2
+
+            edgeLeft: "Flat"
+            edgeRight: "Flat"
+            cornerCut: Settings.line * 2
+            cornerCutRight: 0
+            sideInset: 0
+            shadowOuter: true
+            shadowOuterRight: false
+
+            Column {
+                id: panelBody
+
+                x: Settings.line * 2
+                y: Settings.line * 2
+                width: parent.width - Settings.line * 4
+                height: parent.height - Settings.line * 4
+                spacing: Settings.line * 2
+
+                // --- шапка: бар-заголовок + плитка нового чата ---
+                Item {
+                    id: headerRow
+
+                    width: parent.width
+                    height: Settings.barHeight
+
+                    InfexBox {
+                        id: headerBar
+
+                        width: parent.width - Settings.barHeight
+                            - Settings.line * 2
+                        height: parent.height
+
+                        edgeLeft: "Notch"
+                        edgeRight: "Notch"
+
+                        content: Component {
+                            Item {
+                                property bool inverted: false
+
+                                width: headerBar.innerWidth
+                                    - Settings.line - 2 * headerBar.notch
+                                height: headerBar.height - Settings.line
+
+                                SText {
+                                    anchors.centerIn: parent
+                                    text: "Chats"
+                                    color: Settings.c1
+                                    font.bold: true
+                                }
+                            }
+                        }
+                    }
+
+                    // новый чат: каноничная плитка-октагон
+                    InfexBox {
+                        id: newChatTile
+
+                        x: headerBar.width + Settings.line * 2
+                        width: Settings.barHeight
+                        height: Settings.barHeight
+
+                        edgeLeft: "Flat"
+                        edgeRight: "Flat"
+                        cornerCut: Settings.line * 2
+                        sideInset: 0
+
+                        fillFraction: newChatHot.containsMouse
+                            || newChatHot.pressed ? 1 : 0
+
+                        Behavior on fillFraction {
+                            NumberAnimation { duration: Settings.animBase }
+                        }
+
+                        content: Component {
+                            Item {
+                                property bool inverted: false
+
+                                width: newChatTile.innerWidth
+                                    - Settings.line
+                                height: newChatTile.height - Settings.line
+
+                                VIcon {
+                                    anchors.centerIn: parent
+                                    width: parent.height * 0.55
+                                    height: width
+                                    strokePath: Glyphs.iconPlus
+                                    lineColor: inverted
+                                        ? Settings.c2 : Settings.c1
+                                }
+                            }
+                        }
+                    }
+
+                    MouseArea {
+                        id: newChatHot
+
+                        anchors.fill: newChatTile
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+
+                        onClicked: cat.newChat()
+                    }
+                }
+
+                // --- список сохранённых чатов ---
+                Flickable {
+                    id: chatList
+
+                    width: parent.width
+                    height: parent.height - headerRow.height
+                        - Settings.line * 2
+                    contentWidth: width
+                    contentHeight: chatRows.height
+                    boundsBehavior: Flickable.StopAtBounds
+                    clip: true
+
+                    Column {
+                        id: chatRows
+
+                        width: chatList.width
+                        // строки выросли на line (рамка = видимым
+                        // границам): видимый зазор остаётся как был
+                        spacing: Settings.line / 2
+
+                        Repeater {
+                            model: cat.chats
+
+                            delegate: Item {
+                                id: chatRow
+
+                                required property var modelData
+                                required property int index
+
+                                readonly property bool active:
+                                    modelData.id === cat.currentChatKey
+                                readonly property bool renaming:
+                                    chatsPanel.renameId === modelData.id
+                                readonly property bool hot:
+                                    active || renaming
+                                    || listRowHover.containsMouse
+
+                                // рамка = старым видимым границам:
+                                // рост на line
+                                x: -Settings.line / 2
+                                width: chatRows.width + Settings.line
+                                height: chatsPanel.rowH + Settings.line
+
+                                // гранёный фрейм строки: активная
+                                // заливается
+                                SFrame {
+                                    anchors.fill: parent
+                                    z: -1
+                                    fillColor: chatRow.hot
+                                        ? Settings.c1 : Settings.c2
+                                }
+
+                                SText {
+                                    visible: !chatRow.renaming
+
+                                    x: chatsPanel.rowPoint + 10
+                                    y: 0
+                                    width: parent.width
+                                        - chatsPanel.rowPoint - 52
+                                    height: parent.height
+                                    verticalAlignment: Text.AlignVCenter
+                                    text: cat.chatTitle(chatRow.modelData)
+                                    color: chatRow.hot
+                                        ? Settings.c2 : Settings.c1
+                                    font.pixelSize: Settings.textXs
+                                    font.bold: true
+                                    elide: Text.ElideRight
+                                }
+
+                                TextInput {
+                                    id: renameInput
+
+                                    visible: chatRow.renaming
+                                    x: chatsPanel.rowPoint + 10
+                                    y: 0
+                                    width: parent.width
+                                        - chatsPanel.rowPoint - 52
+                                    height: parent.height
+                                    verticalAlignment: TextInput.AlignVCenter
+                                    color: Settings.c2
+                                    selectionColor: Settings.c1
+                                    selectedTextColor: Settings.c2
+                                    font.pixelSize: Settings.textXs
+                                    font.bold: true
+                                    clip: true
+
+                                    onVisibleChanged: {
+                                        if (!visible)
+                                            return
+
+                                        const chat = cat.findChat(
+                                            chatRow.modelData.id)
+
+                                        text = chat ? chat.title : ""
+                                        forceActiveFocus()
+                                        selectAll()
+                                    }
+                                    onAccepted: chatsPanel.commitRename(
+                                        chatRow.modelData.id, text)
+                                    onEditingFinished: chatsPanel.commitRename(
+                                        chatRow.modelData.id, text)
+
+                                    Keys.onEscapePressed:
+                                        chatsPanel.renameId = ""
+                                }
+
+                                MouseArea {
+                                    id: listRowHover
+
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+
+                                    onClicked: cat.showChat(
+                                        chatRow.modelData.id)
+                                }
+
+                                // троеточие: действия над чатом
+                                Item {
+                                    id: dotsBtn
+
+                                    visible: !chatRow.renaming
+                                    x: chatRow.width - 12 - width
+                                    y: (chatRow.height - height) / 2
+                                    width: 24
+                                    height: 24
+
+                                    Row {
+                                        anchors.centerIn: parent
+                                        spacing: 3
+
+                                        Repeater {
+                                            model: 3
+
+                                            delegate: SRectangle {
+                                                width: 3
+                                                height: 3
+                                                radius: 1.5
+                                                color: chatRow.hot
+                                                    ? Settings.c2
+                                                    : Settings.c1
+                                            }
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+
+                                        onClicked: chatsPanel.openActions(
+                                            chatRow.modelData.id,
+                                            panelBody.y + chatList.y
+                                                + chatRow.y
+                                                + chatRow.height / 2)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // закрытие меню действий кликом мимо
+            MouseArea {
+                visible: chatsPanel.actionId !== ""
+                z: 25
+                anchors.fill: parent
+                onClicked: chatsPanel.actionId = ""
+            }
+
+            // меню действий над чатом
+            SPanel {
+                id: actionsPanel
+
+                visible: chatsPanel.actionId !== ""
+                z: 30
+                x: parent.width - width - Settings.line * 2
+                y: chatsPanel.actionY
+                width: chatsPanel.actionsW
+                height: chatsPanel.actionsH
+                cornerCut: Settings.line * 2
+                strokeColor: Settings.c1
+                fillColor: Settings.c2
+
+                readonly property var target: cat.findChat(
+                    chatsPanel.actionId)
+
+                MouseArea {
+                    anchors.fill: parent
+                }
+
+                Column {
+                    x: 4
+                    y: 4
+                    width: parent.width - 8
+
+                    Repeater {
+                        model: [
+                            {
+                                action: "rename",
+                                label: "переименовать"
+                            },
+                            {
+                                action: "pin",
+                                label: actionsPanel.target
+                                    && actionsPanel.target.pinned
+                                    ? "открепить" : "закрепить"
+                            },
+                            {
+                                action: "delete",
+                                label: "удалить"
+                            }
+                        ]
+
+                        delegate: Item {
+                            id: actionRow
+
+                            required property var modelData
+
+                            width: parent.width
+                            height: 28
+
+                            SText {
+                                x: 8
+                                y: 0
+                                width: parent.width - 16
+                                height: parent.height
+                                verticalAlignment: Text.AlignVCenter
+                                text: actionRow.modelData.label
+                                color: Settings.c1
+                                font.pixelSize: Settings.textXs
+                                elide: Text.ElideRight
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+
+                                onClicked: {
+                                    const id = chatsPanel.actionId
+
+                                    if (actionRow.modelData.action
+                                            === "rename") {
+                                        chatsPanel.actionId = ""
+                                        chatsPanel.renameId = id
+                                    } else if (actionRow.modelData.action
+                                            === "pin") {
+                                        cat.togglePin(id)
+                                        chatsPanel.actionId = ""
+                                    } else {
+                                        cat.deleteChat(id)
+                                        chatsPanel.actionId = ""
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
