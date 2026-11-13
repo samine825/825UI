@@ -92,13 +92,13 @@ PanelWindow {
 
         signal activated()
 
-        width: 18
-        height: 16
+        width: 24
+        height: 22
 
         VIcon {
             anchors.centerIn: parent
-            width: 12
-            height: 12
+            width: 16
+            height: 16
             strokePath: actionBtn.glyph
             lineColor: actionBtn.hovered
                 ? Settings.c2 : Settings.c1
@@ -501,12 +501,14 @@ PanelWindow {
     // reasoning текущего стрима (delta.reasoning / <think>)
     property string streamReasoning: ""
 
-    // конвейер инструментов после ответа с tool_calls: идём по вызовам
-    // сообщения toolsMsgIndex, результат каждого пишем в toolCalls,
-    // после последнего — повторный запрос с результатами
-    property int toolsMsgIndex: -1
+    // конвейер инструментов: вызовы копятся в streamToolCalls через всю
+    // цепочку ходов, результаты пишутся на месте; после последнего —
+    // повторный запрос, а завершившаяся цепочка уходит одним сообщением
     property int toolsCursor: 0
     property bool toolsBusy: false
+    // поколение запуска: поздние ответы отстранившихся инструментов
+    // игнорируются
+    property int toolRunId: 0
     // юзер ещё не ответил на ask_user — конвейер ждёт его
     property bool askPending: false
 
@@ -786,39 +788,38 @@ PanelWindow {
         }
     }
 
-    // конвейер: исполняем вызовы инструмента по очереди, результат
-    // каждого пишем в toolCalls сообщения; после последнего —
-    // продолжение диалога с результатами
+    // конвейер: исполняем вызовы инструмента по очереди (streamToolCalls
+    // копится через всю цепочку ходов), после последнего — запрос
+    // продолжения с результатами; завершившаяся цепочка уходит ОДНИМ
+    // сообщением — ответ не разваливается на части
+    Timer {
+        id: toolWatchdog
+
+        // ни один инструмент не может зависнуть навсегда
+        interval: 150000
+
+        onTriggered: cat.toolDone(
+            "инструмент не ответил за 150 с — прервано")
+    }
+
     function runTools() {
-        if (toolsMsgIndex < 0 || toolsMsgIndex >= chatModel.count) {
+        if (streamToolCalls.length <= toolsCursor) {
+            // все вызовы исполнены — модель видит результаты
             toolsBusy = false
-            chatState = "input"
-            return
-        }
-
-        const m = chatModel.get(toolsMsgIndex)
-        const calls = []
-
-        try {
-            const parsed = JSON.parse(m.toolCalls || "[]")
-            if (Array.isArray(parsed))
-                calls.push.apply(calls, parsed)
-        } catch (e) {}
-
-        if (toolsCursor >= calls.length) {
-            // все инструменты исполнены — модель видит результаты
-            toolsBusy = false
-            toolsMsgIndex = -1
-            persistCurrentChat()
+            toolWatchdog.stop()
             toolTurns++
 
             // защита от зацикливания модели на инструментах
             if (toolTurns > 12) {
                 showError("слишком много ходов инструментов подряд")
+                clearTurn()
                 chatState = "input"
                 toolTurns = 0
                 return
             }
+
+            if (aiProc.running)
+                return
 
             chatState = "response"
             thinking = true
@@ -828,7 +829,10 @@ PanelWindow {
 
         toolsBusy = true
         chatState = "response"
-        const call = calls[toolsCursor]
+        toolRunId++
+        toolWatchdog.restart()
+
+        const call = streamToolCalls[toolsCursor]
 
         if (call.name === "terminal") {
             const args = parseArgs(call.args)
@@ -852,28 +856,28 @@ PanelWindow {
         }
     }
 
+    // сброс накопленной цепочки (ошибка/лимит ходов)
+    function clearTurn() {
+        streamText = ""
+        streamReasoning = ""
+        streamToolCalls = []
+        toolsCursor = 0
+    }
+
     function toolDone(result) {
-        if (toolsMsgIndex < 0 || toolsMsgIndex >= chatModel.count) {
-            toolsBusy = false
+        // поздний/лишний вызов вне конвейера — игнорируем
+        if (!toolsBusy)
             return
-        }
 
-        const m = chatModel.get(toolsMsgIndex)
-        const calls = []
-        try {
-            const parsed = JSON.parse(m.toolCalls || "[]")
-            if (Array.isArray(parsed))
-                calls.push.apply(calls, parsed)
-        } catch (e) {}
+        toolWatchdog.stop()
 
-        if (toolsCursor < calls.length) {
-            calls[toolsCursor].result = String(result)
-            chatModel.setProperty(toolsMsgIndex, "toolCalls",
-                JSON.stringify(calls))
+        if (toolsCursor < streamToolCalls.length) {
+            streamToolCalls[toolsCursor].result = String(result)
+            streamToolCalls = streamToolCalls.slice()
         }
 
         toolsCursor++
-        persistCurrentChat()
+        toolsBusy = false
         runTools()
     }
 
@@ -936,6 +940,11 @@ PanelWindow {
             'import QtQuick
             Timer { interval: 120000; repeat: false; running: false }',
             cat, "AgentTermTimer_" + clean)
+
+        // таймаут команды: частичный вывод + пометка
+        timer.triggered.connect(function () {
+            cat.terminalTimeout(fifo)
+        })
 
         const sessions = Object.assign({}, termSessions)
         sessions[clean] = {
@@ -1041,7 +1050,12 @@ PanelWindow {
 
         const seq = s.seq
 
+        const run = toolRunId
+
         s.cb = function (result, code) {
+            if (run !== toolRunId)
+                return
+
             const tail = code === 0
                 ? "" : "\n[код выхода: " + code + "]"
 
@@ -1062,46 +1076,92 @@ PanelWindow {
     // парсер ленты результатов DuckDuckGo Lite — целиком в python,
     // чтобы не бороться с HTML-регэкспами в QML
     readonly property string ddgCode: `import sys, re, html, urllib.request, urllib.parse
+UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"}
 q = sys.argv[1]
-url = "https://lite.duckduckgo.com/lite/?q=" + urllib.parse.quote(q)
-req = urllib.request.Request(url, headers={
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"})
-try:
-    t = urllib.request.urlopen(req, timeout=12).read().decode("utf-8", "replace")
-except Exception as e:
-    print("поиск недоступен:", e)
-    sys.exit(0)
-links = re.findall(r'<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', t)
-snips = re.findall(r'class=.result-snippet.[^>]*>(.*?)</td>', t, re.S)
-out = []
-n = 0
-for u, title in links:
+
+def fetch(url):
+    req = urllib.request.Request(url, headers=UA)
+    return urllib.request.urlopen(req, timeout=20).read().decode("utf-8", "replace")
+
+def decode(u):
     if "duckduckgo.com/l/" in u and "uddg=" in u:
         m = re.search(r"uddg=([^&]+)", u)
         if m:
             u = urllib.parse.unquote(m.group(1))
-    if not u.startswith("http"):
-        continue
-    title = html.unescape(re.sub("<[^>]+>", "", title)).strip()
-    if not title:
-        continue
-    n += 1
-    sn = html.unescape(re.sub("<[^>]+>", "", snips[n - 1])).strip() if n <= len(snips) else ""
-    out.append(str(n) + ". " + title + "\n" + u + (("\n" + sn[:300]) if sn else ""))
-    if n >= 6:
-        break
-print("\n\n".join(out) if out else "ничего не найдено")
+    return u if u.startswith("http") else None
+
+out = []
+try:
+    t = fetch("https://lite.duckduckgo.com/lite/?q=" + urllib.parse.quote(q))
+    links = re.findall(r'<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', t)
+    snips = re.findall(r'class=.result-snippet.[^>]*>(.*?)</td>', t, re.S)
+    n = 0
+    for u, title in links:
+        u = decode(u)
+        if not u:
+            continue
+        title = html.unescape(re.sub("<[^>]+>", "", title)).strip()
+        if not title:
+            continue
+        n += 1
+        sn = html.unescape(re.sub("<[^>]+>", "", snips[n - 1])).strip() if n <= len(snips) else ""
+        out.append(str(n) + ". " + title + "\n" + u + (("\n" + sn[:300]) if sn else ""))
+        if n >= 6:
+            break
+except Exception as e:
+    out.append("lite-лента недоступна: " + str(e))
+
+if len([o for o in out if o[0].isdigit()]) == 0:
+    try:
+        t = fetch("https://html.duckduckgo.com/html/?q=" + urllib.parse.quote(q))
+        links = re.findall(r'<a[^>]+class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', t)
+        snips = re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', t, re.S)
+        n = 0
+        for u, title in links:
+            u = decode(u)
+            if not u:
+                continue
+            title = html.unescape(re.sub("<[^>]+>", "", title)).strip()
+            if not title:
+                continue
+            n += 1
+            sn = html.unescape(re.sub("<[^>]+>", "", snips[n - 1])).strip() if n <= len(snips) else ""
+            out.append(str(n) + ". " + title + "\n" + u + (("\n" + sn[:300]) if sn else ""))
+            if n >= 6:
+                break
+    except Exception as e:
+        out.append("html-лента недоступна: " + str(e))
+
+results = [o for o in out if o[0].isdigit()]
+print("\n\n".join(results) if results else ("\n\n".join(out) if out else "ничего не найдено"))
 `
+
+
+    property string searchErr: ""
 
     Process {
         id: searchProc
 
+        property int runId: 0
+
         stdout: StdioCollector {
             onStreamFinished: {
+                if (searchProc.runId !== cat.toolRunId)
+                    return
+
                 const text = this.text.trim()
 
-                cat.toolDone(text !== "" ? text : "ничего не найдено")
+                cat.toolDone(text !== ""
+                    ? text
+                    : "ничего не найдено"
+                        + (cat.searchErr !== ""
+                            ? " (" + cat.searchErr.slice(0, 200) + ")"
+                            : ""))
             }
+        }
+
+        stderr: StdioCollector {
+            onStreamFinished: searchErr = this.text.trim()
         }
     }
 
@@ -1113,6 +1173,8 @@ print("\n\n".join(out) if out else "ничего не найдено")
             return
         }
 
+        searchErr = ""
+        searchProc.runId = toolRunId
         searchProc.command = ["python3", "-c", ddgCode, q]
         searchProc.running = true
     }
@@ -1124,8 +1186,13 @@ print("\n\n".join(out) if out else "ничего не найдено")
     Process {
         id: agentImgProc
 
+        property int runId: 0
+
         stdout: StdioCollector {
             onStreamFinished: {
+                if (agentImgProc.runId !== cat.toolRunId)
+                    return
+
                 const b64 = this.text.trim()
                 const path = cat.agentImgPath
                 const lower = path.toLowerCase()
@@ -1169,6 +1236,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
         }
 
         agentImgPath = path
+        agentImgProc.runId = toolRunId
         agentImgProc.command = ["sh", "-c",
             'base64 -w0 -- "$1" | head -c 2000000', "sh", path]
         agentImgProc.running = true
@@ -1251,9 +1319,14 @@ print("\n\n".join(out) if out else "ничего не найдено")
                     for (let i = 0; i < list.length; i++) {
                         const m = list[i]
 
-                        if (m && m.id === cat.aiModel
-                                && m.max_context_length > 0) {
-                            cat.ctxMaxTokens = m.max_context_length
+                        if (m && m.id === cat.aiModel) {
+                            // знаменатель — реально загруженный контекст
+                            // (растёт по мере переполнения), иначе при
+                            // 262k потолке заполнение никогда не видно
+                            cat.ctxMaxTokens =
+                                m.loaded_context_length > 0
+                                    ? m.loaded_context_length
+                                    : (m.max_context_length || 0)
                             return
                         }
                     }
@@ -1647,9 +1720,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
             aiProc.running = false
         }
 
-        streamText = ""
-        streamReasoning = ""
-        streamToolCalls = []
+        clearTurn()
         thinking = false
         thinkSkip = false
         aiStopped = false
@@ -1658,7 +1729,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
         pendingImages = []
         pendingMsgIndex = -1
         toolsBusy = false
-        toolsMsgIndex = -1
+        toolWatchdog.stop()
         toolsCursor = 0
         askPending = false
         askOpen = false
@@ -1771,11 +1842,24 @@ print("\n\n".join(out) if out else "ничего не найдено")
     }
 
     function closeChat() {
-        // генерация продолжается в фоне: ответ допишется в историю
+        // генерация текста продолжается в фоне: ответ допишется в
+        // историю; конвейер инструментов и ожидание опроса — рвём
+        if (toolsBusy || askPending)
+            abortTurn()
+
         chatState = "none"
         closeOverlays()
         // скрыли чат — панель тоже закрываем
         menuOpen = false
+    }
+
+    function abortTurn() {
+        toolWatchdog.stop()
+        askOpen = false
+        askQuestions = []
+        askPending = false
+        toolsBusy = false
+        clearTurn()
     }
 
     function stopGeneration() {
@@ -1796,18 +1880,31 @@ print("\n\n".join(out) if out else "ничего не найдено")
         persistCurrentChat()
     }
 
-    function finishStream() {
+    function finishStream(runPending) {
         thinking = false
 
         // продолжение ответа: добивка дописывается в то же сообщение
         const cont = continueInto
         continueInto = -1
 
-        // ход с вызовами инструментов: текст и reasoning и вызовы —
-        // одним сообщением; после него конвейер исполняет инструменты
-        const calls = streamToolCalls
+        // новые вызовы в этом под-ходе — исполняем и продолжаем цепочку
+        if (runPending && streamToolCalls.length > toolsCursor) {
+            runTools()
+            return
+        }
 
-        if (cont >= 0 && cont < chatModel.count && calls.length === 0) {
+        if (!runPending && streamToolCalls.length > toolsCursor) {
+            // остановка/обрыв посреди цепочки: неисполненные вызовы
+            // помечаем отменёнными
+            for (let i = toolsCursor; i < streamToolCalls.length; i++)
+                streamToolCalls[i].result = "(отменено)"
+            toolsCursor = streamToolCalls.length
+        }
+
+        // цепочка завершена — текст + reasoning + вызовы с результатами
+        // уходят ОДНИМ сообщением
+        if (cont >= 0 && cont < chatModel.count
+                && streamToolCalls.length === 0) {
             const target = chatModel.get(cont)
 
             chatModel.setProperty(cont, "mtext",
@@ -1818,50 +1915,30 @@ print("\n\n".join(out) if out else "ничего не найдено")
                 + (streamReasoning !== ""
                     ? (target.reasoning ? "\n\n" : "") + streamReasoning
                     : ""))
-            streamText = ""
-            streamReasoning = ""
+            clearTurn()
             chatState = "input"
             toolTurns = 0
             persistCurrentChat()
             return
         }
 
-        if (calls.length > 0 || streamReasoning !== "") {
+        if (streamText !== "" || streamReasoning !== ""
+                || streamToolCalls.length > 0) {
             chatModel.append({
                 role: "cat",
                 mtext: streamText,
                 partsJson: "",
                 attJson: "",
                 reasoning: streamReasoning,
-                toolCalls: calls.length > 0 ? JSON.stringify(calls) : "",
+                toolCalls: streamToolCalls.length > 0
+                    ? JSON.stringify(streamToolCalls) : "",
                 hidden: false
             })
-            streamText = ""
-            streamReasoning = ""
-            streamToolCalls = []
-
-            if (calls.length > 0) {
-                toolsMsgIndex = chatModel.count - 1
-                toolsCursor = 0
-                runTools()
-                return
-            }
-
-            // обычный ответ с reasoning: ход завершён
+            clearTurn()
             chatState = "input"
             toolTurns = 0
-        } else if (streamText !== "") {
-            chatModel.append({
-                role: "cat",
-                mtext: streamText,
-                partsJson: "",
-                attJson: ""
-            })
-            streamText = ""
-
-            // чистый текст без reasoning — диалог в ожидании ввода
-            chatState = "input"
-            toolTurns = 0
+        } else {
+            clearTurn()
         }
 
         persistCurrentChat()
@@ -1910,9 +1987,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
         attachModel.clear()
         inputField.text = ""
         inputScroll = 0
-        streamText = ""
-        streamReasoning = ""
-        streamToolCalls = []
+        clearTurn()
         thinking = true
         thinkSkip = false
         aiSettled = false
@@ -2011,11 +2086,38 @@ print("\n\n".join(out) if out else "ничего не найдено")
             })
         }
 
+        // цепочка ходов с инструментами ещё не легла в историю:
+        // добавляем её как assistant + результаты
+        if (streamToolCalls.length > 0 && toolsCursor >= streamToolCalls.length) {
+            messages.push({
+                role: "assistant",
+                content: streamText !== "" ? streamText : null,
+                tool_calls: streamToolCalls.map(function (c) {
+                    return {
+                        id: c.id,
+                        type: "function",
+                        function: { name: c.name, arguments: c.args || "{}" }
+                    }
+                })
+            })
+
+            for (let t = 0; t < streamToolCalls.length; t++) {
+                messages.push({
+                    role: "tool",
+                    tool_call_id: streamToolCalls[t].id,
+                    content: streamToolCalls[t].result !== undefined
+                        ? String(streamToolCalls[t].result) : ""
+                })
+            }
+        }
+
         const body = {
             model: aiModel,
             messages: messages,
             stream: true,
-            max_tokens: 300
+            // 300 не хватало на JSON аргументов инструментов — вызовы
+            // обрывались на полуслове
+            max_tokens: toolsEnabled ? 2048 : 300
         }
 
         if (toolsEnabled) {
@@ -2601,7 +2703,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
                     const hadCalls = cat.streamToolCalls.length > 0
 
                     cat.aiSettled = true
-                    cat.finishStream()
+                    cat.finishStream(true)
 
                     if (!hadText && !hadCalls)
                         cat.showError("модель не вернула текст")
@@ -2720,7 +2822,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
 
             // остановили кнопкой — не ошибка, частичный ответ оставляем
             if (wasStopped) {
-                cat.finishStream()
+                cat.finishStream(false)
                 cat.aiErrText = ""
                 cat.aiRawText = ""
 
@@ -2737,7 +2839,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
 
             // поток оборвался, но часть ответа уже пришла — сохраняем
             if (cat.streamText !== "") {
-                cat.finishStream()
+                cat.finishStream(false)
                 cat.aiRawText = ""
                 return
             }
@@ -3325,6 +3427,16 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                             width: parent.width
                                             height: reasonContent.height
                                                 + Settings.line * 3
+                                            clip: true
+
+                                            // раскрытие/сворачивание без рывка:
+                                            // рамка едет, контент под клипом
+                                            Behavior on height {
+                                                NumberAnimation {
+                                                    duration: 180
+                                                    easing.type: Easing.OutCubic
+                                                }
+                                            }
 
                                             // рамка секции: контур c1 без
                                             // заливки, штрих центрирован на
@@ -3352,16 +3464,12 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                     - Settings.line * 3
                                                 spacing: 3
 
-                                                Item {
+                                                Row {
                                                     id: reasonHeader
 
-                                                    width: parent.width
-                                                    height: 18
+                                                    spacing: 5
 
                                                     SText {
-                                                        x: 0
-                                                        y: 0
-                                                        width: 90
                                                         height: 18
                                                         verticalAlignment: Text.AlignVCenter
                                                         text: "reasoning"
@@ -3371,10 +3479,9 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                     }
 
                                                     VIcon {
-                                                        x: 72
-                                                        y: 4
-                                                        width: 10
-                                                        height: 10
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        width: 12
+                                                        height: 12
                                                         strokePath: Glyphs.iconChevronDown
                                                         lineColor: Settings.c1
 
@@ -3434,6 +3541,14 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                             width: parent.width
                                             height: callsCol.height
                                                 + Settings.line * 3
+                                            clip: true
+
+                                            Behavior on height {
+                                                NumberAnimation {
+                                                    duration: 180
+                                                    easing.type: Easing.OutCubic
+                                                }
+                                            }
 
                                             // рамка секции инструментов —
                                             // одна на все вызовы хода
@@ -3471,26 +3586,9 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                     width: callsCol.width
                                                     spacing: 3
 
-                                                    // этот вызов сейчас исполняется
-                                                    readonly property bool running:
-                                                        cat.toolsBusy
-                                                        && cat.toolsMsgIndex
-                                                            === msgRoot.index
-                                                        && cat.toolsCursor
-                                                            === index
                                                     readonly property bool pending:
                                                         modelData.result
                                                             === undefined
-                                                    readonly property bool isAsk:
-                                                        modelData.name
-                                                            === "ask_user"
-                                                    readonly property bool showCard:
-                                                        isAsk && pending
-                                                        && cat.askOpen
-                                                        && cat.toolsMsgIndex
-                                                            === msgRoot.index
-                                                        && cat.toolsCursor
-                                                            === index
 
                                                     Item {
                                                         width: parent.width
@@ -3540,11 +3638,10 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                             radius: 3.5
 
                                                             color: callBlock.pending
-                                                                ? Settings.c1
-                                                                : Settings.c2
+                                                                ? Settings.c2
+                                                                : Settings.c1
                                                             border.color: Settings.c1
                                                             border.width: 1
-                                                            visible: !callBlock.showCard
                                                         }
 
                                                         MouseArea {
@@ -3552,9 +3649,8 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                             cursorShape:
                                                                 Qt.PointingHandCursor
 
-                                                            onClicked: showCard
-                                                                ? undefined
-                                                                : msgRoot.toggleCall(
+                                                            onClicked:
+                                                                msgRoot.toggleCall(
                                                                     callBlock.index)
                                                         }
                                                     }
@@ -3564,7 +3660,6 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                     Column {
                                                         visible: msgRoot.openCalls[callBlock.index]
                                                             === true
-                                                            && !callBlock.showCard
                                                         x: 8
                                                         width: parent.width - 16
                                                         spacing: 3
@@ -3605,255 +3700,6 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                         }
                                                     }
 
-                                                    // === карточка опроса ask_user ===
-                                                    Column {
-                                                        id: askCard
-
-                                                        visible: callBlock.showCard
-                                                        x: 8
-                                                        width: parent.width - 16
-                                                        spacing: 5
-
-                                                        // локальное состояние ответов:
-                                                        // на каждый вопрос — индекс(ы)
-                                                        // выбора или текст своего варианта
-                                                        property var picks: {
-                                                            const arr = []
-
-                                                            for (let i = 0; i < cat.askQuestions.length; i++) {
-                                                                const q = cat.askQuestions[i]
-
-                                                                arr.push({
-                                                                    sel: q.type === "multi"
-                                                                        ? [] : -1,
-                                                                    custom: ""
-                                                                })
-                                                            }
-
-                                                            return arr
-                                                        }
-
-                                                        function answerOf(qi) {
-                                                            const q = cat.askQuestions[qi]
-                                                            const p = picks[qi]
-
-                                                            if (q.type === "multi") {
-                                                                const list = []
-
-                                                                for (let i = 0; i < p.sel.length; i++)
-                                                                    list.push(q.options[p.sel[i]])
-
-                                                                if (p.custom !== "")
-                                                                    list.push(p.custom)
-
-                                                                return list
-                                                            }
-
-                                                            return p.sel === -1
-                                                                ? p.custom
-                                                                : q.options[p.sel]
-                                                        }
-
-                                                        Repeater {
-                                                            model: cat.askQuestions
-
-                                                            delegate: Column {
-                                                                id: askQ
-
-                                                                required property var modelData
-                                                                required property int index
-
-                                                                width: askCard.width
-                                                                spacing: 2
-
-                                                                SText {
-                                                                    width: parent.width
-                                                                    height: 16
-                                                                    verticalAlignment: Text.AlignVCenter
-                                                                    text: (index + 1) + ". "
-                                                                        + modelData.question
-                                                                    color: Settings.c1
-                                                                    font.pixelSize: Settings.textXs
-                                                                    font.bold: true
-                                                                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                                                                }
-
-                                                                Repeater {
-                                                                    model: askQ.modelData.options
-
-                                                                    delegate: Item {
-                                                                        id: askOpt
-
-                                                                        required property var modelData
-                                                                        required property int index
-
-                                                                        readonly property bool multi:
-                                                                            askQ.modelData.type === "multi"
-                                                                        readonly property bool picked:
-                                                                            multi
-                                                                            ? askCard.picks[askQ.index]
-                                                                                && askCard.picks[askQ.index].sel.indexOf(index) >= 0
-                                                                            : askCard.picks[askQ.index]
-                                                                                && askCard.picks[askQ.index].sel === index
-
-                                                                        width: askCard.width
-                                                                        height: 18
-
-                                                                        SRectangle {
-                                                                            x: 0
-                                                                            y: 3
-                                                                            width: 12
-                                                                            height: 12
-                                                                            radius: 2
-
-                                                                            color: askOpt.picked
-                                                                                ? Settings.c1 : Settings.c2
-                                                                            border.color: Settings.c1
-                                                                            border.width: 1
-                                                                        }
-
-                                                                        SText {
-                                                                            x: 18
-                                                                            y: 0
-                                                                            width: parent.width - 18
-                                                                            height: 18
-                                                                            verticalAlignment: Text.AlignVCenter
-                                                                            text: askOpt.modelData
-                                                                            color: askOpt.picked
-                                                                                ? Settings.c2 : Settings.c1
-                                                                            font.pixelSize: Settings.textXs
-                                                                            elide: Text.ElideRight
-                                                                        }
-
-                                                                        MouseArea {
-                                                                            anchors.fill: parent
-                                                                            cursorShape: Qt.PointingHandCursor
-
-                                                                            onClicked: {
-                                                                                const p = askCard.picks[askQ.index]
-
-                                                                                if (askOpt.multi) {
-                                                                                    const i = p.sel.indexOf(askOpt.index)
-
-                                                                                    if (i >= 0)
-                                                                                        p.sel.splice(i, 1)
-                                                                                    else
-                                                                                        p.sel.push(askOpt.index)
-                                                                                } else {
-                                                                                    p.sel = askOpt.picked
-                                                                                        ? -1 : askOpt.index
-                                                                                }
-
-                                                                                askCard.picks = askCard.picks.slice()
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-
-                                                                // свой вариант ответа
-                                                                Item {
-                                                                    visible: askQ.modelData.custom
-                                                                    width: askCard.width
-                                                                    height: visible ? 20 : 0
-
-                                                                    SRectangle {
-                                                                        x: 0
-                                                                        y: 4
-                                                                        width: 12
-                                                                        height: 12
-                                                                        radius: 2
-
-                                                                        color: askCard.picks[askQ.index]
-                                                                            && askCard.picks[askQ.index].sel === -1
-                                                                            && askCard.picks[askQ.index].custom !== ""
-                                                                            ? Settings.c1 : Settings.c2
-                                                                        border.color: Settings.c1
-                                                                        border.width: 1
-                                                                    }
-
-                                                                    TextInput {
-                                                                        id: customInput
-
-                                                                        x: 18
-                                                                        y: 0
-                                                                        width: parent.width - 18
-                                                                        height: 20
-                                                                        verticalAlignment: TextInput.AlignVCenter
-                                                                        color: Settings.c1
-                                                                        font.pixelSize: Settings.textXs
-
-                                                                        Text {
-                                                                            anchors.fill: parent
-                                                                            visible: text === ""
-                                                                            text: "свой вариант..."
-                                                                            color: Settings.c1
-                                                                            font.pixelSize: Settings.textXs
-                                                                            font.italic: true
-                                                                            verticalAlignment: Text.AlignVCenter
-                                                                        }
-
-                                                                        onTextEdited: {
-                                                                            const p = askCard.picks[askQ.index]
-
-                                                                            p.sel = -1
-                                                                            p.custom = text
-                                                                            askCard.picks = askCard.picks.slice()
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-
-                                                        Row {
-                                                            spacing: 8
-
-                                                            SButton {
-                                                                width: 72
-                                                                height: 20
-                                                                label: "ответить"
-                                                                textSize: Settings.textXs
-                                                                enabled: {
-                                                                    for (let i = 0; i < askCard.picks.length; i++) {
-                                                                        const p = askCard.picks[i]
-
-                                                                        if (cat.askQuestions[i]
-                                                                                && cat.askQuestions[i].type
-                                                                                    === "multi") {
-                                                                            if (p.sel.length === 0
-                                                                                    && p.custom === "")
-                                                                                return false
-                                                                        } else if (p.sel === -1
-                                                                                && p.custom === "") {
-                                                                            return false
-                                                                        }
-                                                                    }
-
-                                                                    return true
-                                                                }
-
-                                                                onActivated: {
-                                                                    const answers = []
-
-                                                                    for (let i = 0; i < cat.askQuestions.length; i++)
-                                                                        answers.push({
-                                                                            question: cat.askQuestions[i].question,
-                                                                            answer: askCard.answerOf(i)
-                                                                        })
-
-                                                                    cat.submitAskUser(answers)
-                                                                }
-                                                            }
-
-                                                            SButton {
-                                                                width: 64
-                                                                height: 20
-                                                                label: "закрыть"
-                                                                textSize: Settings.textXs
-
-                                                                onActivated: cat.cancelAskUser()
-                                                            }
-                                                        }
-                                                    }
                                                 }
                                             }
                                         }
@@ -3933,6 +3779,21 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                             cat.editMessage(msgRoot.index, text)
                                         }
 
+                                        // клик мимо редактора — правка
+                                        // сохраняется, редактор не зависает
+                                        onActiveFocusChanged: {
+                                            if (!activeFocus && visible
+                                                    && msgRoot.editing
+                                                    && text !== msgRoot.mtext) {
+                                                msgRoot.editing = false
+                                                cat.editMessage(msgRoot.index,
+                                                    text)
+                                            } else if (!activeFocus
+                                                    && msgRoot.editing) {
+                                                msgRoot.editing = false
+                                            }
+                                        }
+
                                         Keys.onEscapePressed: msgRoot.editing = false
                                     }
                                 }
@@ -3948,7 +3809,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                     : msgRoot.edgeInset - 2
                                 y: bubble.y + bubble.height
                                     + Settings.line + 1
-                                spacing: 2
+                                spacing: 3
                                 visible: !msgRoot.hidden
                                     && (msgRoot.isUser || !msgRoot.editing)
                                 HoverHandler {
@@ -4016,7 +3877,8 @@ print("\n\n".join(out) if out else "ничего не найдено")
                             cat.chatState === "response"
                             && (cat.thinking || cat.streamText !== ""
                                 || cat.streamReasoning !== ""
-                                || cat.streamToolCalls.length > 0)
+                                || cat.streamToolCalls.length > 0
+                                || cat.toolsBusy)
                         readonly property bool hasSections:
                             cat.streamReasoning !== ""
                             || cat.streamToolCalls.length > 0
@@ -4211,56 +4073,324 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                     Repeater {
                                         model: cat.streamToolCalls
 
-                                        delegate: Item {
+                                        delegate: Column {
+                                            id: streamCall
+
                                             required property var modelData
+                                            required property int index
+
+                                            readonly property bool isAsk:
+                                                modelData.name === "ask_user"
+                                            readonly property bool showCard:
+                                                isAsk && cat.askOpen
+                                                && cat.toolsCursor === index
 
                                             width: streamToolsCol.width
-                                            height: 18
+                                            spacing: 3
 
-                                            VIcon {
-                                                x: 0
-                                                y: 3
-                                                width: 12
-                                                height: 12
-                                                strokePath: modelData.name
-                                                    === "terminal"
-                                                        ? Glyphs.iconTerminal
-                                                        : modelData.name
-                                                            === "web_search"
-                                                            ? Glyphs.iconGlobe
-                                                            : modelData.name
-                                                                === "view_image"
-                                                                ? Glyphs.iconEye
-                                                                : Glyphs.iconAsk
-                                                lineColor: Settings.c1
-                                            }
-
-                                            SText {
-                                                x: 18
-                                                y: 0
-                                                width: parent.width - 18 - 18
+                                            Item {
+                                                width: parent.width
                                                 height: 18
-                                                verticalAlignment: Text.AlignVCenter
-                                                text: modelData.name
-                                                    + (modelData.args !== ""
-                                                        ? " …" : "")
-                                                color: Settings.c1
-                                                font.pixelSize: Settings.textXs
-                                                font.bold: true
-                                                elide: Text.ElideRight
+
+                                                VIcon {
+                                                    x: 0
+                                                    y: 3
+                                                    width: 12
+                                                    height: 12
+                                                    strokePath: streamCall.modelData.name
+                                                        === "terminal"
+                                                            ? Glyphs.iconTerminal
+                                                            : streamCall.modelData.name
+                                                                === "web_search"
+                                                                ? Glyphs.iconGlobe
+                                                                : streamCall.modelData.name
+                                                                    === "view_image"
+                                                                    ? Glyphs.iconEye
+                                                                    : Glyphs.iconAsk
+                                                    lineColor: Settings.c1
+                                                }
+
+                                                SText {
+                                                    x: 18
+                                                    y: 0
+                                                    width: parent.width - 18 - 18
+                                                    height: 18
+                                                    verticalAlignment: Text.AlignVCenter
+                                                    text: streamCall.modelData.name
+                                                        + (streamCall.modelData.args !== ""
+                                                            ? " …" : "")
+                                                    color: Settings.c1
+                                                    font.pixelSize: Settings.textXs
+                                                    font.bold: true
+                                                    elide: Text.ElideRight
+                                                }
+
+                                                SRectangle {
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    x: parent.width - 10
+                                                    width: 7
+                                                    height: 7
+                                                    radius: 3.5
+
+                                                    color: streamCall.modelData.result
+                                                        !== undefined
+                                                        ? Settings.c1
+                                                        : Settings.c2
+                                                    border.color: Settings.c1
+                                                    border.width: 1
+                                                }
                                             }
 
-                                            SRectangle {
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                x: parent.width - 10
-                                                width: 7
-                                                height: 7
-                                                radius: 3.5
+                                                // === карточка опроса ask_user ===
+                                                Column {
+                                                    id: askCard
 
-                                                color: Settings.c2
-                                                border.color: Settings.c1
-                                                border.width: 1
-                                            }
+                                                    visible: streamCall.showCard
+                                                    x: 8
+                                                    width: parent.width - 16
+                                                    spacing: 5
+
+                                                    // локальное состояние ответов:
+                                                    // на каждый вопрос — индекс(ы)
+                                                    // выбора или текст своего варианта
+                                                    property var picks: {
+                                                        const arr = []
+
+                                                        for (let i = 0; i < cat.askQuestions.length; i++) {
+                                                            const q = cat.askQuestions[i]
+
+                                                            arr.push({
+                                                                sel: q.type === "multi"
+                                                                    ? [] : -1,
+                                                                custom: ""
+                                                            })
+                                                        }
+
+                                                        return arr
+                                                    }
+
+                                                    function answerOf(qi) {
+                                                        const q = cat.askQuestions[qi]
+                                                        const p = picks[qi]
+
+                                                        if (q.type === "multi") {
+                                                            const list = []
+
+                                                            for (let i = 0; i < p.sel.length; i++)
+                                                                list.push(q.options[p.sel[i]])
+
+                                                            if (p.custom !== "")
+                                                                list.push(p.custom)
+
+                                                            return list
+                                                        }
+
+                                                        return p.sel === -1
+                                                            ? p.custom
+                                                            : q.options[p.sel]
+                                                    }
+
+                                                    Repeater {
+                                                        model: cat.askQuestions
+
+                                                        delegate: Column {
+                                                            id: askQ
+
+                                                            required property var modelData
+                                                            required property int index
+
+                                                            width: askCard.width
+                                                            spacing: 2
+
+                                                            SText {
+                                                                width: parent.width
+                                                                height: 16
+                                                                verticalAlignment: Text.AlignVCenter
+                                                                text: (index + 1) + ". "
+                                                                    + modelData.question
+                                                                color: Settings.c1
+                                                                font.pixelSize: Settings.textXs
+                                                                font.bold: true
+                                                                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                                                            }
+
+                                                            Repeater {
+                                                                model: askQ.modelData.options
+
+                                                                delegate: Item {
+                                                                    id: askOpt
+
+                                                                    required property var modelData
+                                                                    required property int index
+
+                                                                    readonly property bool multi:
+                                                                        askQ.modelData.type === "multi"
+                                                                    readonly property bool picked:
+                                                                        multi
+                                                                        ? askCard.picks[askQ.index]
+                                                                            && askCard.picks[askQ.index].sel.indexOf(index) >= 0
+                                                                        : askCard.picks[askQ.index]
+                                                                            && askCard.picks[askQ.index].sel === index
+
+                                                                    width: askCard.width
+                                                                    height: 18
+
+                                                                    SRectangle {
+                                                                        x: 0
+                                                                        y: 3
+                                                                        width: 12
+                                                                        height: 12
+                                                                        radius: 2
+
+                                                                        color: askOpt.picked
+                                                                            ? Settings.c1 : Settings.c2
+                                                                        border.color: Settings.c1
+                                                                        border.width: 1
+                                                                    }
+
+                                                                    SText {
+                                                                        x: 18
+                                                                        y: 0
+                                                                        width: parent.width - 18
+                                                                        height: 18
+                                                                        verticalAlignment: Text.AlignVCenter
+                                                                        text: askOpt.modelData
+                                                                        color: askOpt.picked
+                                                                            ? Settings.c2 : Settings.c1
+                                                                        font.pixelSize: Settings.textXs
+                                                                        elide: Text.ElideRight
+                                                                    }
+
+                                                                    MouseArea {
+                                                                        anchors.fill: parent
+                                                                        cursorShape: Qt.PointingHandCursor
+
+                                                                        onClicked: {
+                                                                            const p = askCard.picks[askQ.index]
+
+                                                                            if (askOpt.multi) {
+                                                                                const i = p.sel.indexOf(askOpt.index)
+
+                                                                                if (i >= 0)
+                                                                                    p.sel.splice(i, 1)
+                                                                                else
+                                                                                    p.sel.push(askOpt.index)
+                                                                            } else {
+                                                                                p.sel = askOpt.picked
+                                                                                    ? -1 : askOpt.index
+                                                                            }
+
+                                                                            askCard.picks = askCard.picks.slice()
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            // свой вариант ответа
+                                                            Item {
+                                                                visible: askQ.modelData.custom
+                                                                width: askCard.width
+                                                                height: visible ? 20 : 0
+
+                                                                SRectangle {
+                                                                    x: 0
+                                                                    y: 4
+                                                                    width: 12
+                                                                    height: 12
+                                                                    radius: 2
+
+                                                                    color: askCard.picks[askQ.index]
+                                                                        && askCard.picks[askQ.index].sel === -1
+                                                                        && askCard.picks[askQ.index].custom !== ""
+                                                                        ? Settings.c1 : Settings.c2
+                                                                    border.color: Settings.c1
+                                                                    border.width: 1
+                                                                }
+
+                                                                TextInput {
+                                                                    id: customInput
+
+                                                                    x: 18
+                                                                    y: 0
+                                                                    width: parent.width - 18
+                                                                    height: 20
+                                                                    verticalAlignment: TextInput.AlignVCenter
+                                                                    color: Settings.c1
+                                                                    font.pixelSize: Settings.textXs
+
+                                                                    Text {
+                                                                        anchors.fill: parent
+                                                                        visible: text === ""
+                                                                        text: "свой вариант..."
+                                                                        color: Settings.c1
+                                                                        font.pixelSize: Settings.textXs
+                                                                        font.italic: true
+                                                                        verticalAlignment: Text.AlignVCenter
+                                                                    }
+
+                                                                    onTextEdited: {
+                                                                        const p = askCard.picks[askQ.index]
+
+                                                                        p.sel = -1
+                                                                        p.custom = text
+                                                                        askCard.picks = askCard.picks.slice()
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+
+                                                    Row {
+                                                        spacing: 8
+
+                                                        SButton {
+                                                            width: 72
+                                                            height: 20
+                                                            label: "ответить"
+                                                            textSize: Settings.textXs
+                                                            enabled: {
+                                                                for (let i = 0; i < askCard.picks.length; i++) {
+                                                                    const p = askCard.picks[i]
+
+                                                                    if (cat.askQuestions[i]
+                                                                            && cat.askQuestions[i].type
+                                                                                === "multi") {
+                                                                        if (p.sel.length === 0
+                                                                                && p.custom === "")
+                                                                            return false
+                                                                    } else if (p.sel === -1
+                                                                            && p.custom === "") {
+                                                                        return false
+                                                                    }
+                                                                }
+
+                                                                return true
+                                                            }
+
+                                                            onActivated: {
+                                                                const answers = []
+
+                                                                for (let i = 0; i < cat.askQuestions.length; i++)
+                                                                    answers.push({
+                                                                        question: cat.askQuestions[i].question,
+                                                                        answer: askCard.answerOf(i)
+                                                                    })
+
+                                                                cat.submitAskUser(answers)
+                                                            }
+                                                        }
+
+                                                        SButton {
+                                                            width: 64
+                                                            height: 20
+                                                            label: "закрыть"
+                                                            textSize: Settings.textXs
+
+                                                            onActivated: cat.cancelAskUser()
+                                                        }
+                                                    }
+                                                }
+
                                         }
                                     }
                                         }
