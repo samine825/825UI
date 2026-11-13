@@ -111,4 +111,38 @@ Singleton {
         + " M 4,4 L 20,20"
     readonly property string iconChevronUp: "M 6,14.5 L 12,9 L 18,14.5"
     readonly property string iconChevronDown: "M 6,9.5 L 12,15 L 18,9.5"
+
+    // === иконки действий сообщений кота-агента ===
+    // перегенерировать: круговая стрелка
+    readonly property string iconRefresh:
+        "M 20,12 A 8,8 0 1,1 17.7,6.3 M 20,4 L 20,8.5 L 15.5,8.5"
+    // продолжить: двойная шевронная стрелка вправо
+    readonly property string iconContinue:
+        "M 6,6 L 12,12 L 6,18 M 13,6 L 19,12 L 13,18"
+    // форк чата: ветвление
+    readonly property string iconFork:
+        "M 7,8 A 2.5,2.5 0 1,1 6.99,8 M 7,10.5 L 7,19"
+        + " M 7,12 C 7,8 17,10 17,7.5 M 17,8 A 2.5,2.5 0 1,1 16.99,8"
+    // копировать: две карточки
+    readonly property string iconCopy:
+        "M 9,8 L 20,8 L 20,20 L 9,20 Z M 4,16 L 4,4 L 15,4"
+    // редактировать: карандаш
+    readonly property string iconEdit:
+        "M 4,20 L 5,16 L 15.5,5.5 L 18.5,8.5 L 8,19 L 4,20 Z M 13.5,7.5 L 16.5,10.5"
+    // поиск в интернете: глобус
+    readonly property string iconGlobe:
+        "M 12,3 A 9,9 0 1,0 12.01,3 M 3,12 L 21,12"
+        + " M 12,3 C 15,6.5 15,17.5 12,21 C 9,17.5 9,6.5 12,3"
+    // терминал: окно с промптом
+    readonly property string iconTerminal:
+        "M 3.5,5 L 20.5,5 L 20.5,19 L 3.5,19 Z M 7,9 L 10.5,12 L 7,15 M 12.5,15 L 16.5,15"
+    // вопрос юзеру: опрос с галочками
+    readonly property string iconAsk:
+        "M 4,6 L 9,6 M 4,12 L 9,12 M 4,18 L 9,18 M 12,6 L 20,6"
+        + " M 12,12 L 20,12 M 12,18 L 20,18"
+    // глаз — просмотр изображения
+    readonly property string iconEye:
+        "M 2.5,12 C 5,7.2 8.5,5.5 12,5.5 C 15.5,5.5 19,7.2 21.5,12"
+        + " C 19,16.8 15.5,18.5 12,18.5 C 8.5,18.5 5,16.8 2.5,12 Z"
+        + " M 12,9.5 A 2.5,2.5 0 1,0 12.01,9.5"
 }
