@@ -440,8 +440,13 @@ Item {
 
         // срез углов на текущем сдвиге: как у CutContour SPanel, фаска
         // 45° — параллельный перенос меняет срез на shift·(√2 − 2).
-        // Стороны — независимо (панели у края экрана). Статичные
-        // элементы (morph = 0) получают срез всегда
+        // Стороны — независимо (панели у края экрана глушат срез:
+        // cornerCut* = 0 — угол остаётся вершиной, дублирующихся точек
+        // нет — нулевые рёбра роняют штрих CurveRenderer'а целиком).
+        // Раскладка 12 точек сохраняется: [0] выход из TL, [1] верх,
+        // [2..3] вход/выход TR, [4] кончик, [5..6] вход/выход BR,
+        // [7] низ, [8..9] вход/выход BL, [10] кончик, [11] вход в TL.
+        // Статичные элементы (morph = 0) получают срез всегда
         const s45 = shift * (Math.sqrt(2) - 2)
         const cutL = Math.max(0, (isNaN(cornerCutLeft)
             ? cornerCut : cornerCutLeft) + s45)
@@ -450,20 +455,35 @@ Item {
         if (cutL <= 0 && cutR <= 0)
             return pts
 
-        return [
-            edgePoint(pts[0], pts[1], true, cutL),
-            pts[1],
-            edgePoint(pts[1], pts[2], false, cutR),
-            edgePoint(pts[2], pts[3], true, cutR),
-            pts[3],
-            edgePoint(pts[3], pts[4], false, cutR),
-            edgePoint(pts[4], pts[5], true, cutR),
-            pts[5],
-            edgePoint(pts[5], pts[6], false, cutL),
-            edgePoint(pts[6], pts[7], true, cutL),
-            pts[7],
-            edgePoint(pts[7], pts[0], false, cutL)
-        ]
+        const out = []
+
+        if (cutL > 0)
+            out.push(edgePoint(pts[0], pts[1], true, cutL))
+        else
+            out.push(pts[0])
+        out.push(pts[1])
+        if (cutR > 0) {
+            out.push(edgePoint(pts[1], pts[2], false, cutR))
+            out.push(edgePoint(pts[2], pts[3], true, cutR))
+        } else
+            out.push(pts[2])
+        out.push(pts[3])
+        if (cutR > 0) {
+            out.push(edgePoint(pts[3], pts[4], false, cutR))
+            out.push(edgePoint(pts[4], pts[5], true, cutR))
+        } else
+            out.push(pts[4])
+        out.push(pts[5])
+        if (cutL > 0) {
+            out.push(edgePoint(pts[5], pts[6], false, cutL))
+            out.push(edgePoint(pts[6], pts[7], true, cutL))
+        } else
+            out.push(pts[6])
+        out.push(pts[7])
+        if (cutL > 0)
+            out.push(edgePoint(pts[7], pts[0], false, cutL))
+
+        return out
     }
 
     function offsetContour(shift) {
