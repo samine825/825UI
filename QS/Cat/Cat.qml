@@ -829,8 +829,14 @@ PanelWindow {
         // ни один инструмент не может зависнуть навсегда
         interval: 150000
 
-        onTriggered: cat.toolDone(
-            "инструмент не ответил за 150 с — прервано")
+        onTriggered: {
+            // открытый опрос без таймаута: ждём юзера сколько нужно
+            if (cat.askPending)
+                return
+
+            cat.toolDone(
+                "инструмент не ответил за 150 с — прервано")
+        }
     }
 
     function runTools() {
@@ -898,6 +904,11 @@ PanelWindow {
         } else {
             toolDone("неизвестный инструмент: " + call.name)
         }
+
+        // опрос ждёт юзера без таймаута: конвейер встаёт, пока он не
+        // ответит; кнопка остановки и закрытие чата его рвут
+        if (cat.askPending)
+            toolWatchdog.stop()
     }
 
     // сброс накопленной цепочки (ошибка/лимит ходов)
@@ -909,6 +920,220 @@ PanelWindow {
         // фото прошлого хода больше не нужно: уходит в payload только
         // пока живёт его цепочка ходов
         agentImgB64 = ""
+        // хронология хода тоже уходит — вместе с сообщением
+        turnSegsModel.clear()
+        segItems = []
+        turnCallCount = 0
+    }
+
+    // === хронология хода: сегменты ===
+    // обычный текст и секции (reasoning + вызовы) в порядке генерации.
+    // Секции не соседствуют друг с другом — их разделяет только текст:
+    // без текста между ходами всё продолжается в той же секции
+    // сколько вызовов уже разложено по секциям хода
+    property int turnCallCount: 0
+    // структурные изменения хронологии: Loader содержимого
+    // пересоздается по ним, иначе incubation Repeater не достраивает
+    // делегаты на переписанных моделях
+    property int turnStructureRev: 0
+
+    // вызывается ПОСЛЕ streamText += piece: сегмент хранит смещение в
+    // streamText и растет срезом — рост текста не трогает модель
+    function segTextAppend(piece) {
+        if (turnSegsModel.count > 0
+                && turnSegsModel.get(turnSegsModel.count - 1).type
+                    === "text")
+            return
+
+        turnSegsModel.append({ type: "text",
+            start: Math.max(0, streamText.length - piece.length),
+            items: 0 })
+    }
+
+    // сегменты хода — ListModel вместо JS-массива: Repeater на
+    // переприсваиваемом массиве недоставлял делегаты (incubation),
+    // а модель растет построчно. Элементы секций (reasoning/вызовы)
+    // хранятся параллельным массивом: setProperty массива в роли
+    // ListModel молча теряется
+    ListModel {
+        id: turnSegsModel
+
+        dynamicRoles: false
+    }
+
+    // элементы секций по индексу сегмента
+    property var segItems: []
+
+    // сегменты для истории: живые смещения -> собственный текст
+    function materializeSegs() {
+        const out = []
+
+        for (let i = 0; i < turnSegsModel.count; i++) {
+            const s = turnSegsModel.get(i)
+
+            if (s.type === "text")
+                out.push({ type: "text",
+                    start: s.start || 0,
+                    text: streamText.slice(s.start || 0) })
+            else {
+                const items = []
+
+                const secIt = segItems[i] || []
+
+                for (let j = 0; j < secIt.length; j++) {
+                    const it = secIt[j]
+
+                    items.push(it.kind === "call"
+                        ? { kind: "call", idx: it.idx }
+                        : { kind: "reason", text: it.text })
+                }
+
+                out.push({ type: "sec", items: items })
+            }
+        }
+
+        return out
+    }
+
+    // раскрытость секций стрима: ключ "сегмент_элемент" (+"r" —
+    // reasoning вызова); список сегментов пересобирается на структурных
+    // изменениях, состояния живут снаружи
+    property var streamOpens: ({})
+
+    function toggleStreamOpen(key) {
+        const next = Object.assign({}, streamOpens)
+
+        next[key] = !(next[key] === true)
+        streamOpens = next
+    }
+
+    // reasoning, назревший перед следующим контентом: секция в
+    // хронологии — продолжается текущая, если текста не было
+    function segFlushReason() {
+        if (streamReasoning === "")
+            return
+
+        segAddReason(streamReasoning)
+        streamReasoning = ""
+    }
+
+    function segAddReason(text) {
+        segEnsureSec()
+
+        const i = turnSegsModel.count - 1
+
+        segItems = segItems.slice()
+        segItems[i] = (segItems[i] || []).concat([
+            { kind: "reason", text: text } ])
+        turnStructureRev++
+    }
+
+    function segEnsureSec() {
+        if (turnSegsModel.count === 0
+                || turnSegsModel.get(turnSegsModel.count - 1).type !== "sec")
+            turnSegsModel.append({ type: "sec", start: 0, items: 0 })
+    }
+
+    function segAddCall(globalIdx) {
+        segEnsureSec()
+
+        const i = turnSegsModel.count - 1
+
+        segItems = segItems.slice()
+        segItems[i] = (segItems[i] || []).concat([
+            { kind: "call", idx: globalIdx } ])
+        turnStructureRev++
+    }
+
+    // === markdown-подготовка ===
+    // Qt рисует markdown-таблицы дефолтным HTML-стилем, чужим для
+    // шелла: превращаем их в моноблоки с выровненными колонками
+    function flatTables(md) {
+        const lines = String(md).split("\n")
+        const out = []
+        let tbl = []
+
+        function flush() {
+            if (tbl.length === 0)
+                return
+
+            const rows = []
+
+            for (let r = 0; r < tbl.length; r++) {
+                const cells = tbl[r].replace(/^\s*\|/, "")
+                    .replace(/\|\s*$/, "").split("|")
+
+                let isSep = cells.length > 0
+
+                for (let c = 0; c < cells.length; c++)
+                    if (!/^\s*:?-+:?\s*$/.test(cells[c]))
+                        isSep = false
+
+                if (!isSep)
+                    rows.push(cells.map(function (c) {
+                        return c.trim()
+                    }))
+            }
+
+            if (rows.length > 0) {
+                const n = rows[0].length
+                const w = []
+
+                for (let c = 0; c < n; c++) {
+                    w[c] = 0
+
+                    for (let r = 0; r < rows.length; r++)
+                        if (rows[r][c] && rows[r][c].length > w[c])
+                            w[c] = rows[r][c].length
+                }
+
+                out.push("```\n" + rows.map(function (row) {
+                    let line = ""
+
+                    for (let c = 0; c < n; c++) {
+                        const cell = row[c] || ""
+
+                        line += (c > 0 ? "   " : "")
+                            + cell
+                            + " ".repeat(w[c] - cell.length)
+                    }
+
+                    return line
+                }).join("\n") + "\n```")
+            }
+
+            tbl = []
+        }
+
+        for (let i = 0; i < lines.length; i++) {
+            if (/^\s*\|.*\|\s*$/.test(lines[i])) {
+                tbl.push(lines[i])
+                continue
+            }
+
+            flush()
+            out.push(lines[i])
+        }
+
+        flush()
+        return out.join("\n")
+    }
+
+    // ![](src) — Qt не грузит картинки из markdown: вытаскиваем их
+    // отдельными плитками, в тексте остаётся alt
+    function mdImages(md) {
+        const out = []
+        const re = /!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g
+        let m
+
+        while ((m = re.exec(String(md))) !== null)
+            out.push({ alt: m[1], url: m[2] })
+
+        return out
+    }
+
+    function mdStripImages(md) {
+        return String(md).replace(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g, "$1")
     }
 
     function toolDone(result) {
@@ -1491,6 +1716,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
             attJson: "",
             reasoning: "",
             toolCalls: "",
+            segments: "",
             hidden: true
         })
         chatState = "response"
@@ -1656,6 +1882,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
                 // сообщения-инструкции (старые чаты без них совместимы)
                 reasoning: m.reasoning || "",
                 toolCalls: m.toolCalls || "",
+                segments: m.segments || "",
                 hidden: !!m.hidden
             })
         }
@@ -1853,6 +2080,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
                 attJson: m.attJson || "",
                 reasoning: m.reasoning || "",
                 toolCalls: m.toolCalls || "",
+                segments: m.segments || "",
                 hidden: !!m.hidden
             })
         }
@@ -1971,8 +2199,10 @@ print("\n\n".join(out) if out else "ничего не найдено")
         // ход с содержимым не пропадает бесследно: частичный текст и
         // вызовы (незавершённые помечены «(отменено)») ложатся в
         // историю — видны и после перезахода в чат
-        if (streamText !== "" || streamToolCalls.length > 0)
+        if (streamText !== "" || streamToolCalls.length > 0) {
+            chatState = "input"
             finishStream(false)
+        }
 
         askOpen = false
         askQuestions = []
@@ -2005,6 +2235,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
             attJson: "",
             reasoning: "",
             toolCalls: "",
+            segments: "",
             hidden: false
         })
         persistCurrentChat()
@@ -2032,7 +2263,11 @@ print("\n\n".join(out) if out else "ничего не найдено")
         }
 
         // цепочка завершена — текст + reasoning + вызовы с результатами
-        // уходят ОДНИМ сообщением
+        // уходят ОДНИМ сообщением. Футер прячется ДО append: его Loader
+        // активируется в этот же тик и синхронное создание компонента
+        // ломает инкубацию нового делегата сообщения
+        chatState = "input"
+
         if (cont >= 0 && cont < chatModel.count
                 && streamToolCalls.length === 0) {
             const target = chatModel.get(cont)
@@ -2046,11 +2281,13 @@ print("\n\n".join(out) if out else "ничего не найдено")
                     ? (target.reasoning ? "\n\n" : "") + streamReasoning
                     : ""))
             clearTurn()
-            chatState = "input"
             toolTurns = 0
             persistCurrentChat()
             return
         }
+
+        // хвостовой reasoning (без текста и вызовов после) — в хронологию
+        segFlushReason()
 
         if (streamText !== "" || streamReasoning !== ""
                 || streamToolCalls.length > 0) {
@@ -2062,10 +2299,11 @@ print("\n\n".join(out) if out else "ничего не найдено")
                 reasoning: streamReasoning,
                 toolCalls: streamToolCalls.length > 0
                     ? JSON.stringify(streamToolCalls) : "",
+                segments: turnSegsModel.count > 0
+                    ? JSON.stringify(materializeSegs()) : "",
                 hidden: false
             })
             clearTurn()
-            chatState = "input"
             toolTurns = 0
         } else {
             clearTurn()
@@ -2111,6 +2349,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
             attJson: atts.length > 0 ? JSON.stringify(atts) : "",
             reasoning: "",
             toolCalls: "",
+            segments: "",
             hidden: false
         })
         // название чата — по первому сообщению
@@ -2913,6 +3152,13 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                     { id: "", name: "", args: "",
                                       reasoning: "" })
 
+                            // новый вызов — его место в хронологии:
+                            // секция хода (текущая или новая)
+                            if (idx === cat.turnCallCount) {
+                                cat.turnCallCount = idx + 1
+                                cat.segAddCall(idx)
+                            }
+
                             const slot = cat.streamToolCalls[idx]
 
                             // reasoning, натекший до вызова, — его:
@@ -2967,7 +3213,11 @@ print("\n\n".join(out) if out else "ничего не найдено")
                     }
 
                     if (piece !== "") {
+                        // reasoning, натёкший до текста, встаёт в
+                        // хронологию ПЕРЕД ним
+                        cat.segFlushReason()
                         cat.streamText += piece
+                        cat.segTextAppend(piece)
                         cat.thinking = false
                     }
                 } catch (e) {}
@@ -3378,6 +3628,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
                             // служебные поля агента
                             required property string reasoning
                             required property string toolCalls
+                            required property string segments
                             required property bool hidden
 
                             readonly property bool isUser: role === "user"
@@ -3406,14 +3657,65 @@ print("\n\n".join(out) if out else "ничего не найдено")
 
                             // раскрытые секции: reasoning и вызовы,
                             // обе свернуты по умолчанию
-                            property bool reasonOpen: false
+                            // раскрытые зоны: reasoning по ключу
+                            // "сегмент_элемент", аргументы по индексу вызова
+                            property var openReasons: ({})
                             property var openCalls: ({})
+
+                            function toggleReason(key) {
+                                const next = Object.assign({}, openReasons)
+
+                                next[key] = !(next[key] === true)
+                                openReasons = next
+                            }
 
                             function toggleCall(i) {
                                 const next = Object.assign({}, openCalls)
 
                                 next[i] = !next[i]
                                 openCalls = next
+                            }
+
+                            // хронология отображения: сегменты хода, а для
+                            // старых чатов — секция (reasoning + вызовы) и
+                            // текст следом
+                            readonly property var segs: {
+                                if (segments !== "") {
+                                    try {
+                                        const s = JSON.parse(segments)
+
+                                        if (Array.isArray(s) && s.length > 0)
+                                            return s
+                                    } catch (e) {}
+                                }
+
+                                const out = []
+
+                                if (hasReasoning || hasCalls) {
+                                    const items = []
+
+                                    if (hasReasoning)
+                                        items.push({ kind: "reason",
+                                            text: reasoning })
+
+                                    for (let i = 0; i < calls.length; i++)
+                                        items.push({ kind: "call", idx: i })
+
+                                    out.push({ type: "sec", items: items })
+                                }
+
+                                if (mtext !== "")
+                                    out.push({ type: "text", text: mtext })
+
+                                return out
+                            }
+
+                            readonly property bool hasSecs: {
+                                for (let i = 0; i < segs.length; i++)
+                                    if (segs[i].type === "sec")
+                                        return true
+
+                                return false
                             }
 
                             // последнее сообщение кота: только у него есть
@@ -3487,7 +3789,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
                             TextMetrics {
                                 id: msgMetrics
 
-                                font: msgLabel.font
+                                font.pixelSize: Settings.textSm
                                 text: msgRoot.mtext
                             }
 
@@ -3500,7 +3802,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                         - msgRoot.edgeInset * 2,
                                         msgRoot.attCount === 1
                                             ? msgRoot.maxBubbleW : 378)
-                                    : msgRoot.hasCalls || msgRoot.hasReasoning
+                                    : msgRoot.hasSecs
                                         ? Math.min(msgRoot.maxBubbleW,
                                             Math.max(
                                                 Math.ceil(msgMetrics.width)
@@ -3508,18 +3810,9 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                 240))
                                         : Math.min(msgRoot.maxBubbleW,
                                             Math.ceil(msgMetrics.width) + 28)
-                                // с текстом: текст + секции; без текста,
-                                // но с секциями: без пустой шахты под текст
-                                height: msgRoot.hasText
-                                    || (!msgRoot.hasCalls
-                                        && !msgRoot.hasReasoning)
-                                    ? msgLabel.implicitHeight + 12
-                                        + attFlow.height + msgRoot.attGap
-                                        + reasonBlock.height
-                                        + toolsBlock.height
-                                    : reasonBlock.height + toolsBlock.height
-                                        + attFlow.height + msgRoot.attGap
-                                        + 6
+                                // высоту несет Column содержимого:
+                                // текст, секции и отступы между ними
+                                height: msgCol.height + 12
 
                                 // вторая обводка — как в ControlPanel
                                 Panel {
@@ -3564,506 +3857,592 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                         - Settings.line)
                                     clip: true
 
-                                    // вложения, отправленные с сообщением:
-                                    // те же плашки, что были в поле ввода
-                                    Flow {
-                                        id: attFlow
-
-                                        visible: msgRoot.attCount > 0
-                                        x: 13 - Settings.line / 2
-                                        y: 4 - Settings.line / 2
-                                        width: bubble.width - 26
-                                        spacing: 8
-
-                                        Repeater {
-                                            model: msgRoot.atts
-
-                                            delegate: AttachChip {
-                                                required property var modelData
-
-                                                path: modelData.path
-                                                name: modelData.name
-                                                isImage: modelData.isImage
-                                                iconPath: cat.iconFile
-                                            }
-                                        }
-                                    }
-
-                                    // === секция reasoning финального текста:
-                                    // идёт ПОСЛЕ вызовов — модель думала
-                                    // над ответом уже после инструментов ===
                                     Column {
-                                        id: reasonBlock
+                                        id: msgCol
 
-                                        readonly property bool present:
-                                            msgRoot.hasReasoning
+                                        x: 0
+                                        y: 0
+                                        width: parent.width
+                                        spacing: 6
 
-                                        x: 13 - Settings.line / 2
-                                        y: toolsBlock.y
-                                            + toolsBlock.height
-                                        width: bubble.width - 26
-                                        visible: present
-                                        height: present
-                                            ? reasonFrame.height : 0
+                                        // вложения, отправленные с сообщением:
+                                        // те же плашки, что были в поле ввода
+                                        Flow {
+                                            id: attFlow
 
-                                        Item {
-                                            id: reasonFrame
-
+                                            visible: msgRoot.attCount > 0
                                             width: parent.width
-                                            height: reasonContent.height
-                                                + Settings.line * 3
-                                            clip: true
-
-                                            // раскрытие/сворачивание без рывка:
-                                            // рамка едет, контент под клипом
-                                            Behavior on height {
-                                                NumberAnimation {
-                                                    duration: 180
-                                                    easing.type: Easing.OutCubic
-                                                }
-                                            }
-
-                                            // рамка секции: контур c1 без
-                                            // заливки, штрих центрирован на
-                                            // кромке, внутренний прямоугольник
-                                            // с отступом полторы линии
-                                            Panel {
-                                                x: Settings.line / 2
-                                                y: Settings.line / 2
-                                                width: parent.width
-                                                    - Settings.line
-                                                height: parent.height
-                                                    - Settings.line
-                                                cornerCut: Settings.line * 2
-                                                strokeColor: Settings.c1
-                                                fillColor: "transparent"
-                                                strokeWidth: Settings.line
-                                            }
-
-                                            Column {
-                                                id: reasonContent
-
-                                                x: Settings.line * 1.5
-                                                y: Settings.line * 1.5
-                                                width: parent.width
-                                                    - Settings.line * 3
-                                                spacing: 3
-
-                                            // заголовок: Item с Row внутри —
-                                            // MouseArea с fill-анкорами
-                                            // нельзя класть в Row
-                                            Item {
-                                                id: reasonHeader
-
-                                                width: parent.width
-                                                height: 18
-
-                                                Row {
-                                                    spacing: 5
-
-                                                    SText {
-                                                        height: 18
-                                                        verticalAlignment: Text.AlignVCenter
-                                                        text: "reasoning"
-                                                        color: Settings.c1
-                                                        font.pixelSize: Settings.textXs
-                                                        font.bold: true
-                                                    }
-
-                                                    VIcon {
-                                                        anchors.verticalCenter: parent.verticalCenter
-                                                        width: 12
-                                                        height: 12
-                                                        strokePath: Glyphs.iconChevronDown
-                                                        lineColor: Settings.c1
-
-                                                        rotation: msgRoot.reasonOpen
-                                                            ? 0 : -90
-                                                    }
-                                                }
-
-                                                MouseArea {
-                                                    anchors.fill: parent
-                                                    cursorShape:
-                                                        Qt.PointingHandCursor
-
-                                                    onClicked:
-                                                        msgRoot.reasonOpen =
-                                                            !msgRoot.reasonOpen
-                                                    }
-                                                }
-
-                                                TextEdit {
-                                                    id: reasonBody
-
-                                                    visible: msgRoot.reasonOpen
-                                                    width: parent.width
-                                                    height: implicitHeight
-                                                    text: msgRoot.reasoning
-                                                    color: Settings.c1
-                                                    font.pixelSize: Settings.textXs
-                                                    wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
-                                                    readOnly: true
-                                                    selectByMouse: true
-                                                    textFormat: TextEdit.PlainText
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // === секция вызовов: рамка с ярлыком,
-                                    // идёт первой — вызовы случились до
-                                    // финального reasoning ===
-                                    Column {
-                                        id: toolsBlock
-
-                                        readonly property bool present:
-                                            msgRoot.hasCalls
-
-                                        x: 13 - Settings.line / 2
-                                        y: 4 - Settings.line / 2
-                                            + attFlow.height + msgRoot.attGap
-                                        width: bubble.width - 26
-                                        visible: present
-                                        height: present
-                                            ? toolsFrame.height : 0
-
-                                        Item {
-                                            id: toolsFrame
-
-                                            width: parent.width
-                                            height: callsCol.height
-                                                + Settings.line * 3
-                                            clip: true
-
-                                            Behavior on height {
-                                                NumberAnimation {
-                                                    duration: 180
-                                                    easing.type: Easing.OutCubic
-                                                }
-                                            }
-
-                                            // рамка секции инструментов —
-                                            // одна на все вызовы хода
-                                            Panel {
-                                                x: Settings.line / 2
-                                                y: Settings.line / 2
-                                                width: parent.width
-                                                    - Settings.line
-                                                height: parent.height
-                                                    - Settings.line
-                                                cornerCut: Settings.line * 2
-                                                strokeColor: Settings.c1
-                                                fillColor: "transparent"
-                                                strokeWidth: Settings.line
-                                            }
-
-                                            Column {
-                                                id: callsCol
-
-                                                x: Settings.line * 1.5
-                                                y: Settings.line * 1.5
-                                                width: parent.width
-                                                    - Settings.line * 3
-                                                spacing: 3
+                                            spacing: 8
 
                                             Repeater {
-                                                model: msgRoot.calls
+                                                model: msgRoot.atts
 
-                                                delegate: Column {
-                                                    id: callBlock
-
+                                                delegate: AttachChip {
                                                     required property var modelData
-                                                    required property int index
 
-                                                    width: callsCol.width
-                                                    spacing: 3
+                                                    path: modelData.path
+                                                    name: modelData.name
+                                                    isImage: modelData.isImage
+                                                    iconPath: cat.iconFile
+                                                }
+                                            }
+                                        }
 
-                                                    readonly property bool pending:
-                                                        modelData.result
-                                                            === undefined
-                                                    // reasoning вызова — своя
-                                                    // свёрнутая зона
-                                                    property bool reasonOpen: false
+                                        // хронология хода: обычный текст и
+                                        // секции (reasoning + вызовы) ровно в
+                                        // порядке генерации; секции не стоят
+                                        // друг под другом — их разделяет текст
+                                        Repeater {
+                                            model: msgRoot.segs
 
-                                                    // зона reasoning вызова:
-                                                    // свёрнута по умолчанию,
-                                                    // стоит ПЕРЕД строкой
-                                                    // вызова — модель думает,
-                                                    // потом зовёт инструмент;
-                                                    // раскрытие едет плавно
-                                                    Fold {
-                                                        visible: (callBlock.modelData.reasoning
-                                                            || "") !== ""
-                                                        x: 18
-                                                        width: parent.width - 18
-                                                        closedH: 16
-                                                        open: callBlock.reasonOpen
+                                            delegate: Column {
+                                                id: segCol
 
-                                                        Item {
-                                                            width: parent.width
-                                                            height: 16
+                                                required property var modelData
+                                                required property int index
 
-                                                            Row {
-                                                                spacing: 5
+                                                readonly property bool isText:
+                                                    modelData.type === "text"
+                                                readonly property var items:
+                                                    isText ? [] : (modelData.items || [])
+                                                readonly property string md: isText
+                                                    ? cat.mdStripImages(
+                                                        cat.flatTables(
+                                                            modelData.text))
+                                                    : ""
+                                                readonly property var imgs: isText
+                                                    ? cat.mdImages(modelData.text)
+                                                    : []
 
-                                                                SText {
-                                                                    height: 16
-                                                                    verticalAlignment: Text.AlignVCenter
-                                                                    text: "reasoning"
-                                                                    color: Settings.c1
-                                                                    font.pixelSize: Settings.textXs
-                                                                    font.bold: true
-                                                                }
+                                                width: msgCol.width
+                                                spacing: 6
 
-                                                                VIcon {
-                                                                    anchors.verticalCenter: parent.verticalCenter
-                                                                    width: 10
-                                                                    height: 10
-                                                                    strokePath: Glyphs.iconChevronDown
-                                                                    lineColor: Settings.c1
+                                                // обычный текст: markdown,
+                                                // картинки вынуты плитками
+                                                TextEdit {
+                                                    visible: segCol.isText
+                                                        && text.trim() !== ""
+                                                    width: parent.width
+                                                    height: implicitHeight
+                                                    text: segCol.md
+                                                    color: Settings.c1
+                                                    font.pixelSize:
+                                                        Settings.textSm
+                                                    wrapMode:
+                                                        TextEdit.WrapAtWordBoundaryOrAnywhere
+                                                    readOnly: true
+                                                    selectByMouse: true
+                                                    textFormat:
+                                                        TextEdit.MarkdownText
+                                                }
 
-                                                                    rotation: callBlock.reasonOpen
-                                                                        ? 0 : -90
-                                                                }
-                                                            }
+                                                // медиа из ![](src): плитки
+                                                Repeater {
+                                                    model: segCol.isText
+                                                        ? segCol.imgs : []
 
-                                                            MouseArea {
-                                                                anchors.fill: parent
-                                                                cursorShape:
-                                                                    Qt.PointingHandCursor
+                                                    delegate: Column {
+                                                        required property var modelData
 
-                                                                onClicked:
-                                                                    callBlock.reasonOpen =
-                                                                        !callBlock.reasonOpen
-                                                            }
-                                                        }
-
-                                                        TextEdit {
-                                                            width: parent.width
-                                                            height: implicitHeight
-                                                            text: callBlock.modelData.reasoning
-                                                            color: Settings.c1
-                                                            font.pixelSize: Settings.textXs
-                                                            wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
-                                                            readOnly: true
-                                                            selectByMouse: true
-                                                            textFormat: TextEdit.PlainText
-                                                        }
-                                                    }
-
-                                                    Item {
                                                         width: parent.width
-                                                        height: 18
+                                                        spacing: 2
 
-                                                        VIcon {
-                                                            x: 0
-                                                            y: 3
-                                                            width: 12
-                                                            height: 12
-                                                            strokePath:
-                                                                callBlock.modelData.name
-                                                                === "terminal"
-                                                                    ? Glyphs.iconTerminal
-                                                                    : callBlock.modelData.name
-                                                                        === "web_search"
-                                                                        ? Glyphs.iconGlobe
-                                                                        : callBlock.modelData.name
-                                                                            === "view_image"
-                                                                            ? Glyphs.iconEye
-                                                                            : Glyphs.iconAsk
-                                                            lineColor: Settings.c1
+                                                        Image {
+                                                            id: segImg
+
+                                                            width: parent.width
+                                                            height: status
+                                                                === Image.Ready
+                                                                ? Math.min(220,
+                                                                    width
+                                                                    * implicitHeight
+                                                                    / Math.max(1,
+                                                                        implicitWidth))
+                                                                : 24
+                                                            source: parent.modelData.url
+                                                            fillMode:
+                                                                Image.PreserveAspectFit
+                                                            asynchronous: true
                                                         }
 
                                                         SText {
-                                                            x: 18
-                                                            y: 0
+                                                            visible: parent.modelData.alt
+                                                                !== ""
                                                             width: parent.width
-                                                                - 18 - 18
-                                                            height: 18
-                                                            verticalAlignment: Text.AlignVCenter
-                                                            text: callBlock.modelData.name
+                                                            text: parent.modelData.alt
                                                             color: Settings.c1
-                                                            font.pixelSize: Settings.textXs
-                                                            font.bold: true
-                                                            elide: Text.ElideRight
-                                                        }
-
-                                                        // статус: ромбик
-                                                        // (как в WorkspaceBar)
-                                                        SRectangle {
-                                                            id: callStatus
-
-                                                            anchors.verticalCenter: parent.verticalCenter
-                                                            x: parent.width - 12
-                                                            width: 6
-                                                            height: 6
-                                                            rotation: 45
-
-                                                            color: callBlock.pending
-                                                                ? Settings.c2
-                                                                : Settings.c1
-                                                            border.color: Settings.c1
-                                                            border.width: 1
-                                                        }
-
-                                                        MouseArea {
-                                                            anchors.fill: parent
-                                                            cursorShape:
-                                                                Qt.PointingHandCursor
-
-                                                            onClicked:
-                                                                msgRoot.toggleCall(
-                                                                    callBlock.index)
+                                                            font.pixelSize:
+                                                                Settings.textXs
+                                                            wrapMode:
+                                                                Text.WrapAtWordBoundaryOrAnywhere
                                                         }
                                                     }
+                                                }
 
-                                                    // раскрытый вызов:
-                                                    // аргументы + результат,
-                                                    // высота едет плавно
-                                                    Fold {
-                                                        open: msgRoot.openCalls[callBlock.index]
-                                                            === true
-                                                        x: 8
-                                                        width: parent.width - 16
+                                                // секция: рамка, внутри —
+                                                // reasoning и вызовы в порядке
+                                                // генерации
+                                                Item {
+                                                    visible: !segCol.isText
+                                                    width: parent.width
+                                                    height: secFrame.height
 
-                                                        TextEdit {
+                                                    Item {
+                                                        id: secFrame
+
+                                                        width: parent.width
+                                                        height: secContent.height
+                                                            + Settings.line * 3
+                                                        clip: true
+
+                                                        Behavior on height {
+                                                            NumberAnimation {
+                                                                duration: 200
+                                                                easing.type:
+                                                                    Easing.OutCubic
+                                                            }
+                                                        }
+
+                                                        // рамка секции:
+                                                        // контур c1 без заливки
+                                                        Panel {
+                                                            x: Settings.line / 2
+                                                            y: Settings.line / 2
                                                             width: parent.width
-                                                            height: implicitHeight
-                                                            text: {
-                                                                try {
-                                                                    return JSON.stringify(
-                                                                        JSON.parse(
-                                                                            callBlock.modelData.args || "{}"),
-                                                                        null, 1)
-                                                                } catch (e) {
-                                                                    return callBlock.modelData.args
+                                                                - Settings.line
+                                                            height: parent.height
+                                                                - Settings.line
+                                                            cornerCut:
+                                                                Settings.line * 2
+                                                            strokeColor:
+                                                                Settings.c1
+                                                            fillColor:
+                                                                "transparent"
+                                                            strokeWidth:
+                                                                Settings.line
+                                                        }
+
+                                                        Column {
+                                                            id: secContent
+
+                                                            x: Settings.line
+                                                                * 1.5
+                                                            y: Settings.line
+                                                                * 1.5
+                                                            width: parent.width
+                                                                - Settings.line
+                                                                * 3
+                                                            spacing: 3
+
+                                                            Repeater {
+                                                                model: segCol.items
+
+                                                                delegate: Column {
+                                                                    id: secItem
+
+                                                                    required property var modelData
+                                                                    required property int index
+
+                                                                    readonly property bool isReason:
+                                                                        modelData.kind
+                                                                        === "reason"
+                                                                    readonly property var callData:
+                                                                        isReason
+                                                                        ? null
+                                                                        : msgRoot.calls[modelData.idx]
+                                                                    readonly property string key:
+                                                                        segCol.index
+                                                                        + "_" + index
+                                                                    readonly property bool reasonOpen:
+                                                                        msgRoot.openReasons[key]
+                                                                        === true
+                                                                    readonly property bool callOpen:
+                                                                        msgRoot.openCalls[modelData.idx]
+                                                                        === true
+
+                                                                    width: parent.width
+                                                                    spacing: 3
+
+                                                                    // === reasoning:
+                                                                    // свёрнутая
+                                                                    // зона с
+                                                                    // иконкой ===
+                                                                    Fold {
+                                                                        visible: secItem.isReason
+                                                                        x: 0
+                                                                        width: parent.width
+                                                                        closedH: 16
+                                                                        open: secItem.reasonOpen
+
+                                                                        Item {
+                                                                            width: parent.width
+                                                                            height: 16
+
+                                                                            Row {
+                                                                                spacing: 5
+
+                                                                                VIcon {
+                                                                                    y: 3
+                                                                                    width: 11
+                                                                                    height: 11
+                                                                                    strokePath:
+                                                                                        Glyphs.iconBulb
+                                                                                    lineColor:
+                                                                                        Settings.c1
+                                                                                }
+
+                                                                                SText {
+                                                                                    height: 16
+                                                                                    verticalAlignment:
+                                                                                        Text.AlignVCenter
+                                                                                    text: "reasoning"
+                                                                                    color:
+                                                                                        Settings.c1
+                                                                                    font.pixelSize:
+                                                                                        Settings.textXs
+                                                                                    font.bold: true
+                                                                                }
+
+                                                                                VIcon {
+                                                                                    y: 4
+                                                                                    width: 10
+                                                                                    height: 10
+                                                                                    strokePath:
+                                                                                        Glyphs.iconChevronDown
+                                                                                    lineColor:
+                                                                                        Settings.c1
+
+                                                                                    rotation:
+                                                                                        secItem.reasonOpen
+                                                                                        ? 0 : -90
+                                                                                }
+                                                                            }
+
+                                                                            MouseArea {
+                                                                                anchors.fill: parent
+                                                                                cursorShape:
+                                                                                    Qt.PointingHandCursor
+
+                                                                                onClicked:
+                                                                                    msgRoot.toggleReason(
+                                                                                        secItem.key)
+                                                                            }
+                                                                        }
+
+                                                                        TextEdit {
+                                                                            width: parent.width
+                                                                            height: implicitHeight
+                                                                            text: secItem.modelData.text
+                                                                                || ""
+                                                                            color:
+                                                                                Settings.c1
+                                                                            font.pixelSize:
+                                                                                Settings.textXs
+                                                                            wrapMode:
+                                                                                TextEdit.WrapAtWordBoundaryOrAnywhere
+                                                                            readOnly: true
+                                                                            selectByMouse: true
+                                                                            textFormat:
+                                                                                TextEdit.PlainText
+                                                                        }
+                                                                    }
+
+                                                                    // === вызов:
+                                                                    // reasoning
+                                                                    // перед
+                                                                    // строкой,
+                                                                    // потом
+                                                                    // аргументы ===
+                                                                    Fold {
+                                                                        visible: !secItem.isReason
+                                                                            && secItem.callData
+                                                                            && (secItem.callData.reasoning
+                                                                                || "") !== ""
+                                                                        x: 18
+                                                                        width: parent.width
+                                                                            - 18
+                                                                        closedH: 16
+                                                                        open: msgRoot.openReasons[secItem.key
+                                                                            + "r"] === true
+
+                                                                        Item {
+                                                                            width: parent.width
+                                                                            height: 16
+
+                                                                            Row {
+                                                                                spacing: 5
+
+                                                                                VIcon {
+                                                                                    y: 3
+                                                                                    width: 11
+                                                                                    height: 11
+                                                                                    strokePath:
+                                                                                        Glyphs.iconBulb
+                                                                                    lineColor:
+                                                                                        Settings.c1
+                                                                                }
+
+                                                                                SText {
+                                                                                    height: 16
+                                                                                    verticalAlignment:
+                                                                                        Text.AlignVCenter
+                                                                                    text: "reasoning"
+                                                                                    color:
+                                                                                        Settings.c1
+                                                                                    font.pixelSize:
+                                                                                        Settings.textXs
+                                                                                    font.bold: true
+                                                                                }
+
+                                                                                VIcon {
+                                                                                    y: 4
+                                                                                    width: 10
+                                                                                    height: 10
+                                                                                    strokePath:
+                                                                                        Glyphs.iconChevronDown
+                                                                                    lineColor:
+                                                                                        Settings.c1
+
+                                                                                    rotation:
+                                                                                        msgRoot.openReasons[secItem.key
+                                                                                        + "r"] === true
+                                                                                        ? 0 : -90
+                                                                                }
+                                                                            }
+
+                                                                            MouseArea {
+                                                                                anchors.fill: parent
+                                                                                cursorShape:
+                                                                                    Qt.PointingHandCursor
+
+                                                                                onClicked:
+                                                                                    msgRoot.toggleReason(
+                                                                                        secItem.key
+                                                                                        + "r")
+                                                                            }
+                                                                        }
+
+                                                                        TextEdit {
+                                                                            width: parent.width
+                                                                            height: implicitHeight
+                                                                            text: secItem.callData
+                                                                                ? (secItem.callData.reasoning
+                                                                                    || "")
+                                                                                : ""
+                                                                            color:
+                                                                                Settings.c1
+                                                                            font.pixelSize:
+                                                                                Settings.textXs
+                                                                            wrapMode:
+                                                                                TextEdit.WrapAtWordBoundaryOrAnywhere
+                                                                            readOnly: true
+                                                                            selectByMouse: true
+                                                                            textFormat:
+                                                                                TextEdit.PlainText
+                                                                        }
+                                                                    }
+
+                                                                    // строка
+                                                                    // вызова
+                                                                    Item {
+                                                                        visible: !secItem.isReason
+                                                                        width: parent.width
+                                                                        height: 18
+
+                                                                        VIcon {
+                                                                            x: 0
+                                                                            y: 3
+                                                                            width: 12
+                                                                            height: 12
+                                                                            strokePath:
+                                                                                secItem.callData
+                                                                                && secItem.callData.name
+                                                                                === "terminal"
+                                                                                    ? Glyphs.iconTerminal
+                                                                                    : secItem.callData
+                                                                                        && secItem.callData.name
+                                                                                        === "web_search"
+                                                                                        ? Glyphs.iconGlobe
+                                                                                        : secItem.callData
+                                                                                            && secItem.callData.name
+                                                                                            === "view_image"
+                                                                                            ? Glyphs.iconEye
+                                                                                            : Glyphs.iconAsk
+                                                                            lineColor:
+                                                                                Settings.c1
+                                                                        }
+
+                                                                        SText {
+                                                                            x: 18
+                                                                            y: 0
+                                                                            width: parent.width
+                                                                                - 18 - 18
+                                                                            height: 18
+                                                                            verticalAlignment:
+                                                                                Text.AlignVCenter
+                                                                            text: secItem.callData
+                                                                                ? secItem.callData.name
+                                                                                : ""
+                                                                            color:
+                                                                                Settings.c1
+                                                                            font.pixelSize:
+                                                                                Settings.textXs
+                                                                            font.bold: true
+                                                                            elide:
+                                                                                Text.ElideRight
+                                                                        }
+
+                                                                        // статус:
+                                                                        // ромбик
+                                                                        // (как в
+                                                                        // WorkspaceBar)
+                                                                        SRectangle {
+                                                                            anchors.verticalCenter: parent.verticalCenter
+                                                                            x: parent.width
+                                                                                - 12
+                                                                            width: 6
+                                                                            height: 6
+                                                                            rotation: 45
+
+                                                                            color: secItem.callData
+                                                                                && secItem.callData.result
+                                                                                !== undefined
+                                                                                ? Settings.c1
+                                                                                : Settings.c2
+                                                                            border.color:
+                                                                                Settings.c1
+                                                                            border.width: 1
+                                                                        }
+
+                                                                        MouseArea {
+                                                                            anchors.fill: parent
+                                                                            cursorShape:
+                                                                                Qt.PointingHandCursor
+
+                                                                            onClicked:
+                                                                                msgRoot.toggleCall(
+                                                                                    secItem.modelData.idx)
+                                                                        }
+                                                                    }
+
+                                                                    // раскрытый
+                                                                    // вызов:
+                                                                    // аргументы +
+                                                                    // результат
+                                                                    Fold {
+                                                                        visible: !secItem.isReason
+                                                                        open: secItem.callOpen
+                                                                        x: 8
+                                                                        width: parent.width
+                                                                            - 16
+
+                                                                        TextEdit {
+                                                                            width: parent.width
+                                                                            height: implicitHeight
+                                                                            text: secItem.callData
+                                                                                ? (function () {
+                                                                                    try {
+                                                                                        return JSON.stringify(
+                                                                                            JSON.parse(
+                                                                                                secItem.callData.args
+                                                                                                || "{}"),
+                                                                                            null, 1)
+                                                                                    } catch (e) {
+                                                                                        return secItem.callData.args
+                                                                                    }
+                                                                                })()
+                                                                                : ""
+                                                                            color:
+                                                                                Settings.c1
+                                                                            font.pixelSize:
+                                                                                Settings.textXs
+                                                                            wrapMode:
+                                                                                TextEdit.WrapAtWordBoundaryOrAnywhere
+                                                                            readOnly: true
+                                                                            selectByMouse: true
+                                                                            textFormat:
+                                                                                TextEdit.PlainText
+                                                                        }
+
+                                                                        TextEdit {
+                                                                            width: parent.width
+                                                                            height: implicitHeight
+                                                                            text: secItem.callData
+                                                                                ? (secItem.callData.result
+                                                                                    !== undefined
+                                                                                    ? String(
+                                                                                        secItem.callData.result)
+                                                                                    : "(исполняется...)")
+                                                                                : ""
+                                                                            color:
+                                                                                Settings.c1
+                                                                            font.pixelSize:
+                                                                                Settings.textXs
+                                                                            wrapMode:
+                                                                                TextEdit.WrapAtWordBoundaryOrAnywhere
+                                                                            readOnly: true
+                                                                            selectByMouse: true
+                                                                            textFormat:
+                                                                                TextEdit.PlainText
+                                                                        }
+                                                                    }
                                                                 }
                                                             }
-                                                            color: Settings.c1
-                                                            font.pixelSize: Settings.textXs
-                                                            wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
-                                                            readOnly: true
-                                                            selectByMouse: true
-                                                            textFormat: TextEdit.PlainText
-                                                        }
-
-                                                        TextEdit {
-                                                            width: parent.width
-                                                            height: implicitHeight
-                                                            text: callBlock.pending
-                                                                ? "(исполняется...)"
-                                                                : String(callBlock.modelData.result)
-                                                            color: Settings.c1
-                                                            font.pixelSize: Settings.textXs
-                                                            wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
-                                                            readOnly: true
-                                                            selectByMouse: true
-                                                            textFormat: TextEdit.PlainText
                                                         }
                                                     }
-
                                                 }
                                             }
                                         }
-                                    }
-                                    }
 
-                                    // текст можно выделять и копировать
-                                    TextEdit {
-                                        id: msgLabel
+                                        // правка текста сообщения: редактор
+                                        // вместо всего содержимого
+                                        TextInput {
+                                            id: editInput
 
-                                        // вёрстка по полному пузырю — клип
-                                        // только отсекает, без перевёрстки
-                                        x: 13 - Settings.line / 2
-                                        y: 4 - Settings.line / 2
-                                            + attFlow.height + msgRoot.attGap
-                                            + reasonBlock.height
-                                            + toolsBlock.height
-                                        width: bubble.width - 26
-                                        height: msgRoot.hasText
-                                            ? Math.max(0, bubble.height - 8
-                                                - attFlow.height
-                                                - msgRoot.attGap
-                                                - reasonBlock.height
-                                                - toolsBlock.height)
-                                            : 0
-                                        verticalAlignment: reasonBlock.present
-                                            || toolsBlock.present
-                                            ? TextEdit.AlignTop : TextEdit.AlignVCenter
+                                            visible: msgRoot.editing
+                                            width: parent.width
+                                            height: visible
+                                                ? Math.max(40, implicitHeight)
+                                                : 0
+                                            color: Settings.c1
+                                            font.pixelSize: Settings.textSm
+                                            wrapMode:
+                                                TextInput.WrapAtWordBoundaryOrAnywhere
+                                            clip: true
 
-                                        text: msgRoot.mtext
-                                        color: Settings.c1
-                                        font.pixelSize: Settings.textSm
-                                        wrapMode: msgRoot.attCount > 0
-                                            || msgRoot.overflow
-                                            ? TextEdit.WrapAtWordBoundaryOrAnywhere
-                                            : TextEdit.NoWrap
+                                            onVisibleChanged: {
+                                                if (!visible)
+                                                    return
 
-                                        readOnly: true
-                                        selectByMouse: true
-                                        selectByKeyboard: true
-                                        cursorVisible: false
-                                        textFormat: TextEdit.MarkdownText
-                                        selectionColor: Settings.c1
-                                        selectedTextColor: Settings.c2
-                                        visible: !msgRoot.editing
-                                            && msgRoot.hasText
-                                    }
+                                                text = msgRoot.mtext
+                                                forceActiveFocus()
+                                                selectAll()
+                                            }
 
-                                    // правка текста сообщения
-                                    TextInput {
-                                        id: editInput
-
-                                        visible: msgRoot.editing
-                                        x: 13 - Settings.line / 2
-                                        y: 4 - Settings.line / 2
-                                            + attFlow.height + msgRoot.attGap
-                                            + reasonBlock.height
-                                            + toolsBlock.height
-                                        width: bubble.width - 26
-                                        height: Math.max(20,
-                                            bubble.height - 8
-                                            - attFlow.height
-                                            - msgRoot.attGap
-                                            - reasonBlock.height
-                                            - toolsBlock.height)
-                                        verticalAlignment: TextInput.AlignVCenter
-                                        color: Settings.c1
-                                        font.pixelSize: Settings.textSm
-                                        wrapMode: TextInput.WrapAtWordBoundaryOrAnywhere
-                                        clip: true
-
-                                        onVisibleChanged: {
-                                            if (!visible)
-                                                return
-
-                                            text = msgRoot.mtext
-                                            forceActiveFocus()
-                                            selectAll()
-                                        }
-
-                                        onAccepted: {
-                                            msgRoot.editing = false
-                                            cat.editMessage(msgRoot.index, text)
-                                        }
-
-                                        // клик мимо редактора — правка
-                                        // сохраняется, редактор не зависает
-                                        onActiveFocusChanged: {
-                                            if (!activeFocus && visible
-                                                    && msgRoot.editing
-                                                    && text !== msgRoot.mtext) {
+                                            onAccepted: {
                                                 msgRoot.editing = false
                                                 cat.editMessage(msgRoot.index,
                                                     text)
-                                            } else if (!activeFocus
-                                                    && msgRoot.editing) {
-                                                msgRoot.editing = false
                                             }
-                                        }
 
-                                        Keys.onEscapePressed: msgRoot.editing = false
+                                            // клик мимо редактора — правка
+                                            // сохраняется, редактор не
+                                            // зависает
+                                            onActiveFocusChanged: {
+                                                if (!activeFocus && visible
+                                                        && msgRoot.editing
+                                                        && text !== msgRoot.mtext) {
+                                                    msgRoot.editing = false
+                                                    cat.editMessage(msgRoot.index,
+                                                        text)
+                                                } else if (!activeFocus
+                                                        && msgRoot.editing) {
+                                                    msgRoot.editing = false
+                                                }
+                                            }
+
+                                            Keys.onEscapePressed: msgRoot.editing = false
+                                        }
                                     }
                                 }
                             }
@@ -4136,9 +4515,8 @@ print("\n\n".join(out) if out else "ничего не найдено")
                         }
                     }
 
-                    // пузырь стрима — под последним сообщением:
-                    // живые секции reasoning и вызовов инструментов над
-                    // растущим текстом
+                    // пузырь стрима — под последним сообщением: хронология
+                    // хода вживую — текст, секции reasoning/вызовов
                     Item {
                         id: streamFooter
 
@@ -4148,18 +4526,17 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                 || cat.streamReasoning !== ""
                                 || cat.streamToolCalls.length > 0
                                 || cat.toolsBusy)
-                        readonly property bool hasSections:
-                            cat.streamReasoning !== ""
-                            || cat.streamToolCalls.length > 0
-                        // есть что показывать в текстовой зоне: текст
-                        // или думанье-точки; без текста зона схлопывается,
-                        // а не оставляет пустой шахту под будущий ответ
-                        readonly property bool hasText:
-                            cat.thinking || cat.streamText !== ""
-                        readonly property string shownText: cat.thinking
-                            ? ".".repeat(1
-                                + (Math.floor(cat.zzzPhase * 3) % 3))
-                            : cat.streamText
+                        readonly property bool hasSecs: {
+                            for (let i = 0; i < turnSegsModel.count; i++)
+                                if (turnSegsModel.get(i).type === "sec")
+                                    return true
+
+                            return false
+                        }
+                        // хронология для рендера: пересобирается на
+                        // структурных изменениях хода
+                        readonly property var streamSegs:
+                            turnStructureRev >= 0 ? materializeSegs() : []
 
                         visible: active
                         width: chatColumn.width
@@ -4167,33 +4544,27 @@ print("\n\n".join(out) if out else "ничего не найдено")
                             ? catBubble.height + 10 + Settings.line * 2
                             : 0
 
-                        TextMetrics {
-                            id: streamMetrics
-
-                            font: streamLabel.font
-                            text: streamFooter.shownText
-                        }
-
                         Item {
                             id: catBubble
 
                             x: Settings.line * 1.5
-                            width: streamFooter.hasSections
-                                ? Math.min(272,
-                                    Math.max(
-                                        Math.ceil(streamMetrics.width) + 28,
-                                        240))
+                            width: streamFooter.hasSecs
+                                ? 240
                                 : Math.min(272,
                                     Math.ceil(streamMetrics.width) + 28)
-                            // с текстом: текст + секции; без текста, но
-                            // с секциями: только секции, без пустой шахты
-                            height: streamFooter.hasText
-                                ? streamLabel.implicitHeight + 12
-                                    + streamReason.height + streamTools.height
-                                : streamFooter.hasSections
-                                    ? streamReason.height + streamTools.height
-                                        + 6
-                                    : streamLabel.implicitHeight + 12
+                            // высоту несет Column содержимого: сегменты
+                            // и думанье-точки
+                            height: streamCol.height + 12
+
+                            TextMetrics {
+                                id: streamMetrics
+
+                                font.pixelSize: Settings.textSm
+                                text: cat.thinking
+                                    ? ".".repeat(1
+                                        + (Math.floor(cat.zzzPhase * 3) % 3))
+                                    : cat.streamText
+                            }
 
                             // вторая обводка — как в ControlPanel
                             Panel {
@@ -4222,8 +4593,8 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                 strokeWidth: Settings.line
                             }
 
-                            // стрим растёт токен за токеном, панель догоняет
-                            // анимацией — текст клипуем по её кромке
+                            // стрим растёт токен за токен, панель догоняет
+                            // анимацией — содержимое клипуем по её кромке
                             Item {
                                 id: streamClip
 
@@ -4235,658 +4606,906 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                     - Settings.line)
                                 clip: true
 
-                                // живой reasoning: та же рамка, что у
-                                // сообщений; по умолчанию свёрнут, живёт
-                                // ПОСЛЕ вызовов — хронология стрима
-                                Item {
-                                    id: streamReason
+                                Column {
+                                    id: streamCol
 
-                                    property bool streamReasonOpen: false
+                                    x: 0
+                                    y: 0
+                                    width: parent.width
+                                    spacing: 6
 
-                                    readonly property bool present:
-                                        cat.streamReasoning !== ""
-
-                                    x: 13 - Settings.line / 2
-                                    y: 4 - Settings.line / 2
-                                        + streamTools.height
-                                    width: catBubble.width - 26
-                                    visible: present
-                                    height: present
-                                        ? streamReasonFrame.height : 0
-
-                                    Item {
-                                        id: streamReasonFrame
-
-                                        width: parent.width
-                                        height: streamReason.streamReasonOpen
-                                            ? streamReasonBody.height
-                                                + 18 + Settings.line * 3
-                                            : 18 + Settings.line * 3
-                                        clip: true
-
-                                        Behavior on height {
-                                            NumberAnimation {
-                                                duration: 180
-                                                easing.type: Easing.OutCubic
-                                            }
-                                        }
-
-                                        Panel {
-                                            x: Settings.line / 2
-                                            y: Settings.line / 2
-                                            width: parent.width
-                                                - Settings.line
-                                            height: parent.height
-                                                - Settings.line
-                                            cornerCut: Settings.line * 2
-                                            strokeColor: Settings.c1
-                                            fillColor: "transparent"
-                                            strokeWidth: Settings.line
-                                        }
-
-                                        Column {
-                                            id: streamReasonContent
-
-                                            x: Settings.line * 1.5
-                                            y: Settings.line * 1.5
-                                            width: parent.width
-                                                - Settings.line * 3
-                                            spacing: 3
-
-                                            // заголовок: Item с Row внутри —
-                                            // MouseArea с fill-анкорами нельзя
-                                            // класть в Row, он ломается
-                                            Item {
-                                                width: parent.width
-                                                height: 18
-
-                                                Row {
-                                                    spacing: 5
-
-                                                    SText {
-                                                        height: 18
-                                                        verticalAlignment: Text.AlignVCenter
-                                                        text: "reasoning"
-                                                        color: Settings.c1
-                                                        font.pixelSize: Settings.textXs
-                                                        font.bold: true
-                                                    }
-
-                                                    VIcon {
-                                                        anchors.verticalCenter: parent.verticalCenter
-                                                        width: 12
-                                                        height: 12
-                                                        strokePath: Glyphs.iconChevronDown
-                                                        lineColor: Settings.c1
-
-                                                        rotation: streamReason.streamReasonOpen
-                                                            ? 0 : -90
-                                                    }
-                                                }
-
-                                                MouseArea {
-                                                    anchors.fill: parent
-                                                    cursorShape:
-                                                        Qt.PointingHandCursor
-
-                                                    onClicked:
-                                                        streamReason.streamReasonOpen =
-                                                            !streamReason.streamReasonOpen
-                                                }
-                                            }
-
-                                            TextEdit {
-                                                id: streamReasonBody
-
-                                                visible: streamReason.streamReasonOpen
-                                                width: parent.width
-                                                height: implicitHeight
-                                                text: cat.streamReasoning
-                                                color: Settings.c1
-                                                font.pixelSize: Settings.textXs
-                                                wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
-                                                readOnly: true
-                                                selectByMouse: true
-                                                textFormat: TextEdit.PlainText
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // живые вызовы инструментов: та же рамка,
-                                // имя + точка исполнения
-                                Item {
-                                    id: streamTools
-
-                                    readonly property bool present:
-                                        cat.streamToolCalls.length > 0
-
-                                    x: 13 - Settings.line / 2
-                                    y: 4 - Settings.line / 2
-                                    width: catBubble.width - 26
-                                    visible: present
-                                    height: present
-                                        ? streamToolsFrame.height : 0
-
-                                    Item {
-                                        id: streamToolsFrame
-
-                                        width: parent.width
-                                        height: streamToolsCol.height
-                                            + Settings.line * 3
-                                        clip: true
-
-                                        Behavior on height {
-                                            NumberAnimation {
-                                                duration: 200
-                                                easing.type: Easing.OutCubic
-                                            }
-                                        }
-
-                                        Panel {
-                                            x: Settings.line / 2
-                                            y: Settings.line / 2
-                                            width: parent.width
-                                                - Settings.line
-                                            height: parent.height
-                                                - Settings.line
-                                            cornerCut: Settings.line * 2
-                                            strokeColor: Settings.c1
-                                            fillColor: "transparent"
-                                            strokeWidth: Settings.line
-                                        }
-
-                                        Column {
-                                            id: streamToolsCol
-
-                                            x: Settings.line * 1.5
-                                            y: Settings.line * 1.5
-                                            width: parent.width
-                                                - Settings.line * 3
-                                            spacing: 3
-
+                                    // хронология хода: текст и секции — ровно в порядке генерации.
+                                    // Repeater на пересобираемом массиве:
+                                    // пересоздаётся на структурных
+                                    // изменениях хода (rev)
                                     Repeater {
-                                        model: cat.streamToolCalls
+                                        model: streamFooter.streamSegs
 
-                                        delegate: Column {
-                                            id: streamCall
+delegate: Column {
+                                            id: segCol
 
                                             required property var modelData
                                             required property int index
 
-                                            readonly property bool isAsk:
-                                                modelData.name === "ask_user"
-                                            readonly property bool showCard:
-                                                isAsk && cat.askOpen
-                                                && cat.toolsCursor === index
+                                            readonly property bool isText:
+                                                modelData.type === "text"
+                                            readonly property var items:
+                                                isText ? [] : (modelData.items || [])
 
-                                            property bool open: false
-                                            property bool reasonOpen: false
+                                            width: streamCol.width
+                                            spacing: 6
 
-                                            width: streamToolsCol.width
-                                            spacing: 3
-
-                                            // reasoning вызова: свёрнутая
-                                            // зона в хронологии, стоит
-                                            // ПЕРЕД строкой вызова;
-                                            // раскрытие едет плавно
-                                            Fold {
-                                                visible: (streamCall.modelData.reasoning
-                                                    || "") !== ""
-                                                x: 18
-                                                width: parent.width - 18
-                                                closedH: 16
-                                                open: streamCall.reasonOpen
-
-                                                Item {
-                                                    width: parent.width
-                                                    height: 16
-
-                                                    Row {
-                                                        spacing: 5
-
-                                                        SText {
-                                                            height: 16
-                                                            verticalAlignment: Text.AlignVCenter
-                                                            text: "reasoning"
-                                                            color: Settings.c1
-                                                            font.pixelSize: Settings.textXs
-                                                            font.bold: true
-                                                        }
-
-                                                        VIcon {
-                                                            anchors.verticalCenter: parent.verticalCenter
-                                                            width: 10
-                                                            height: 10
-                                                            strokePath: Glyphs.iconChevronDown
-                                                            lineColor: Settings.c1
-
-                                                            rotation: streamCall.reasonOpen
-                                                                ? 0 : -90
-                                                        }
-                                                    }
-
-                                                    MouseArea {
-                                                        anchors.fill: parent
-                                                        cursorShape:
-                                                            Qt.PointingHandCursor
-
-                                                        onClicked:
-                                                            streamCall.reasonOpen =
-                                                                !streamCall.reasonOpen
-                                                    }
-                                                }
-
-                                                TextEdit {
-                                                    width: parent.width
-                                                    height: implicitHeight
-                                                    text: streamCall.modelData.reasoning
-                                                    color: Settings.c1
-                                                    font.pixelSize: Settings.textXs
-                                                    wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
-                                                    readOnly: true
-                                                    selectByMouse: true
-                                                    textFormat: TextEdit.PlainText
-                                                }
-                                            }
-
-                                            Item {
+                                            // текст сегмента: растет срезом
+                                            // streamText от стартового
+                                            // смещения — без переч felici-
+                                            // тирования всего списка
+                                            TextEdit {
+                                                visible: segCol.isText
+                                                    && text.trim() !== ""
                                                 width: parent.width
-                                                height: 18
-
-                                                VIcon {
-                                                    x: 0
-                                                    y: 3
-                                                    width: 12
-                                                    height: 12
-                                                    strokePath: streamCall.modelData.name
-                                                        === "terminal"
-                                                            ? Glyphs.iconTerminal
-                                                            : streamCall.modelData.name
-                                                                === "web_search"
-                                                                ? Glyphs.iconGlobe
-                                                                : streamCall.modelData.name
-                                                                    === "view_image"
-                                                                    ? Glyphs.iconEye
-                                                                    : Glyphs.iconAsk
-                                                    lineColor: Settings.c1
-                                                }
-
-                                                SText {
-                                                    x: 18
-                                                    y: 0
-                                                    width: parent.width - 18 - 18
-                                                    height: 18
-                                                    verticalAlignment: Text.AlignVCenter
-                                                    text: streamCall.modelData.name
-                                                        + (streamCall.modelData.args !== ""
-                                                            ? " …" : "")
-                                                    color: Settings.c1
-                                                    font.pixelSize: Settings.textXs
-                                                    font.bold: true
-                                                    elide: Text.ElideRight
-                                                }
-
-                                                SRectangle {
-                                                    anchors.verticalCenter: parent.verticalCenter
-                                                    x: parent.width - 12
-                                                    width: 6
-                                                    height: 6
-                                                    rotation: 45
-
-                                                    color: streamCall.modelData.result
-                                                        !== undefined
-                                                        ? Settings.c1
-                                                        : Settings.c2
-                                                    border.color: Settings.c1
-                                                    border.width: 1
-                                                }
-
-                                                MouseArea {
-                                                    anchors.fill: parent
-                                                    cursorShape:
-                                                        Qt.PointingHandCursor
-
-                                                    onClicked:
-                                                        streamCall.open =
-                                                            !streamCall.open
-                                                }
+                                                height: implicitHeight
+                                                text: segCol.isText
+                                                    ? cat.mdStripImages(
+                                                        cat.flatTables(
+                                                            cat.streamText.slice(
+                                                                segCol.modelData.start
+                                                                || 0)))
+                                                    : ""
+                                                color: Settings.c1
+                                                font.pixelSize: Settings.textSm
+                                                wrapMode:
+                                                    TextEdit.WrapAtWordBoundaryOrAnywhere
+                                                readOnly: true
+                                                selectByMouse: true
+                                                textFormat:
+                                                    TextEdit.MarkdownText
                                             }
 
-                                            // живые аргументы и результат:
-                                            // раскрываются по клику на
-                                            // строку, высота едет плавно
-                                            Fold {
-                                                open: streamCall.open
-                                                x: 8
-                                                width: parent.width - 16
+                                            // медиа из ![](src)
+                                            Repeater {
+                                                model: segCol.isText
+                                                    ? cat.mdImages(
+                                                        cat.streamText.slice(
+                                                            segCol.modelData.start
+                                                            || 0))
+                                                    : []
 
-                                                TextEdit {
+                                                delegate: Column {
+                                                    required property var modelData
+
                                                     width: parent.width
-                                                    height: implicitHeight
-                                                    text: {
-                                                        try {
-                                                            return JSON.stringify(
-                                                                JSON.parse(
-                                                                    streamCall.modelData.args || "{}"),
-                                                                null, 1)
-                                                        } catch (e) {
-                                                            return streamCall.modelData.args
-                                                        }
-                                                    }
-                                                    color: Settings.c1
-                                                    font.pixelSize: Settings.textXs
-                                                    wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
-                                                    readOnly: true
-                                                    selectByMouse: true
-                                                    textFormat: TextEdit.PlainText
-                                                }
+                                                    spacing: 2
 
-                                                TextEdit {
-                                                    width: parent.width
-                                                    height: implicitHeight
-                                                    text: streamCall.modelData.result
-                                                        !== undefined
-                                                        ? String(streamCall.modelData.result)
-                                                        : "(исполняется...)"
-                                                    color: Settings.c1
-                                                    font.pixelSize: Settings.textXs
-                                                    wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
-                                                    readOnly: true
-                                                    selectByMouse: true
-                                                    textFormat: TextEdit.PlainText
-                                                }
-                                            }
-
-                                                // === карточка опроса ask_user:
-                                                // раскрывается плавно ===
-                                                Fold {
-                                                    open: streamCall.showCard
-                                                    x: 8
-                                                    width: parent.width - 16
-
-                                                    Column {
-                                                        id: askCard
+                                                    Image {
+                                                        id: segImg
 
                                                         width: parent.width
-                                                        spacing: 5
-
-                                                    // локальное состояние ответов:
-                                                    // на каждый вопрос — индекс(ы)
-                                                    // выбора или текст своего варианта
-                                                    property var picks: {
-                                                        const arr = []
-
-                                                        for (let i = 0; i < cat.askQuestions.length; i++) {
-                                                            const q = cat.askQuestions[i]
-
-                                                            arr.push({
-                                                                sel: q.type === "multi"
-                                                                    ? [] : -1,
-                                                                custom: ""
-                                                            })
-                                                        }
-
-                                                        return arr
+                                                        height: status
+                                                            === Image.Ready
+                                                            ? Math.min(220,
+                                                                width
+                                                                * implicitHeight
+                                                                / Math.max(1,
+                                                                    implicitWidth))
+                                                            : 24
+                                                        source: parent.modelData.url
+                                                        fillMode:
+                                                            Image.PreserveAspectFit
+                                                        asynchronous: true
                                                     }
 
-                                                    function answerOf(qi) {
-                                                        const q = cat.askQuestions[qi]
-                                                        const p = picks[qi]
+                                                    SText {
+                                                        visible: parent.modelData.alt
+                                                            !== ""
+                                                        width: parent.width
+                                                        text: parent.modelData.alt
+                                                        color: Settings.c1
+                                                        font.pixelSize:
+                                                            Settings.textXs
+                                                        wrapMode:
+                                                            Text.WrapAtWordBoundaryOrAnywhere
+                                                    }
+                                                }
+                                            }
 
-                                                        if (q.type === "multi") {
-                                                            const list = []
+                                            // секция: рамка, внутри reasoning
+                                            // и вызовы в порядке генерации
+                                            Item {
+                                                visible: !segCol.isText
+                                                width: parent.width
+                                                height: secFrame.height
 
-                                                            for (let i = 0; i < p.sel.length; i++)
-                                                                list.push(q.options[p.sel[i]])
+                                                Item {
+                                                    id: secFrame
 
-                                                            if (p.custom !== "")
-                                                                list.push(p.custom)
+                                                    width: parent.width
+                                                    height: secContent.height
+                                                        + Settings.line * 3
+                                                    clip: true
 
-                                                            return list
+                                                    Behavior on height {
+                                                        NumberAnimation {
+                                                            duration: 200
+                                                            easing.type:
+                                                                Easing.OutCubic
                                                         }
-
-                                                        return p.sel === -1
-                                                            ? p.custom
-                                                            : q.options[p.sel]
                                                     }
 
-                                                    Repeater {
-                                                        model: cat.askQuestions
+                                                    Panel {
+                                                        x: Settings.line / 2
+                                                        y: Settings.line / 2
+                                                        width: parent.width
+                                                            - Settings.line
+                                                        height: parent.height
+                                                            - Settings.line
+                                                        cornerCut:
+                                                            Settings.line * 2
+                                                        strokeColor:
+                                                            Settings.c1
+                                                        fillColor: "transparent"
+                                                        strokeWidth:
+                                                            Settings.line
+                                                    }
 
-                                                        delegate: Column {
-                                                            id: askQ
+                                                    Column {
+                                                        id: secContent
 
-                                                            required property var modelData
-                                                            required property int index
+                                                        x: Settings.line * 1.5
+                                                        y: Settings.line * 1.5
+                                                        width: parent.width
+                                                            - Settings.line * 3
+                                                        spacing: 3
 
-                                                            width: askCard.width
-                                                            spacing: 2
+                                                        Repeater {
+                                                            model: segCol.items
 
-                                                            SText {
+                                                            delegate: Column {
+                                                                id: secItem
+
+                                                                required property var modelData
+                                                                required property int index
+
+                                                                readonly property bool isReason:
+                                                                    modelData.kind
+                                                                    === "reason"
+                                                                function callDataNow() {
+                                                                    return isReason
+                                                                        ? null
+                                                                        : cat.streamToolCalls[modelData.idx]
+                                                                }
+
+                                                                readonly property string key:
+                                                                    segCol.index
+                                                                    + "_" + index
+                                                                readonly property bool isAsk:
+                                                                    secItem.callDataNow() !== undefined
+                                                                    && secItem.callDataNow() !== null
+                                                                    && secItem.callDataNow().name
+                                                                        === "ask_user"
+                                                                readonly property bool showCard:
+                                                                    secItem.isAsk
+                                                                    && cat.askOpen
+                                                                    && cat.toolsCursor
+                                                                        === modelData.idx
+
                                                                 width: parent.width
-                                                                height: 16
-                                                                verticalAlignment: Text.AlignVCenter
-                                                                text: (index + 1) + ". "
-                                                                    + modelData.question
-                                                                color: Settings.c1
-                                                                font.pixelSize: Settings.textXs
-                                                                font.bold: true
-                                                                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                                                            }
+                                                                spacing: 3
 
-                                                            Repeater {
-                                                                model: askQ.modelData.options
+                                                                // === reasoning
+                                                                // (иконка-
+                                                                // лампочка,
+                                                                // свёрнуто) ===
+                                                                Fold {
+                                                                    visible: secItem.isReason
+                                                                    x: 0
+                                                                    width: parent.width
+                                                                    closedH: 16
+                                                                    open: cat.streamOpens[secItem.key]
+                                                                        === true
 
-                                                                delegate: Item {
-                                                                    id: askOpt
+                                                                    Item {
+                                                                        width: parent.width
+                                                                        height: 16
 
-                                                                    required property var modelData
-                                                                    required property int index
+                                                                        Row {
+                                                                            spacing: 5
 
-                                                                    readonly property bool multi:
-                                                                        askQ.modelData.type === "multi"
-                                                                    readonly property bool picked:
-                                                                        multi
-                                                                        ? askCard.picks[askQ.index]
-                                                                            && askCard.picks[askQ.index].sel.indexOf(index) >= 0
-                                                                        : askCard.picks[askQ.index]
-                                                                            && askCard.picks[askQ.index].sel === index
+                                                                            VIcon {
+                                                                                y: 3
+                                                                                width: 11
+                                                                                height: 11
+                                                                                strokePath:
+                                                                                    Glyphs.iconBulb
+                                                                                lineColor:
+                                                                                    Settings.c1
+                                                                            }
 
-                                                                    width: askCard.width
+                                                                            SText {
+                                                                                height: 16
+                                                                                verticalAlignment:
+                                                                                    Text.AlignVCenter
+                                                                                text: "reasoning"
+                                                                                color:
+                                                                                    Settings.c1
+                                                                                font.pixelSize:
+                                                                                    Settings.textXs
+                                                                                font.bold: true
+                                                                            }
+
+                                                                            VIcon {
+                                                                                y: 4
+                                                                                width: 10
+                                                                                height: 10
+                                                                                strokePath:
+                                                                                    Glyphs.iconChevronDown
+                                                                                lineColor:
+                                                                                    Settings.c1
+
+                                                                                rotation:
+                                                                                    cat.streamOpens[secItem.key]
+                                                                                    === true
+                                                                                    ? 0 : -90
+                                                                            }
+                                                                        }
+
+                                                                        MouseArea {
+                                                                            anchors.fill: parent
+                                                                            cursorShape:
+                                                                                Qt.PointingHandCursor
+
+                                                                            onClicked:
+                                                                                cat.toggleStreamOpen(
+                                                                                    secItem.key)
+                                                                        }
+                                                                    }
+
+                                                                    TextEdit {
+                                                                        width: parent.width
+                                                                        height: implicitHeight
+                                                                        text: secItem.modelData.text
+                                                                            || ""
+                                                                        color:
+                                                                            Settings.c1
+                                                                        font.pixelSize:
+                                                                            Settings.textXs
+                                                                        wrapMode:
+                                                                            TextEdit.WrapAtWordBoundaryOrAnywhere
+                                                                        readOnly: true
+                                                                        selectByMouse: true
+                                                                        textFormat:
+                                                                            TextEdit.PlainText
+                                                                    }
+                                                                }
+
+                                                                // reasoning
+                                                                // вызова —
+                                                                // перед его
+                                                                // строкой
+                                                                Fold {
+                                                                    visible: !secItem.isReason
+                                                                        && secItem.callDataNow() !== undefined
+                                                                        && (secItem.callDataNow().reasoning
+                                                                            || "") !== ""
+                                                                    x: 18
+                                                                    width: parent.width
+                                                                        - 18
+                                                                    closedH: 16
+                                                                    open: cat.streamOpens[secItem.key
+                                                                        + "r"] === true
+
+                                                                    Item {
+                                                                        width: parent.width
+                                                                        height: 16
+
+                                                                        Row {
+                                                                            spacing: 5
+
+                                                                            VIcon {
+                                                                                y: 3
+                                                                                width: 11
+                                                                                height: 11
+                                                                                strokePath:
+                                                                                    Glyphs.iconBulb
+                                                                                lineColor:
+                                                                                    Settings.c1
+                                                                            }
+
+                                                                            SText {
+                                                                                height: 16
+                                                                                verticalAlignment:
+                                                                                    Text.AlignVCenter
+                                                                                text: "reasoning"
+                                                                                color:
+                                                                                    Settings.c1
+                                                                                font.pixelSize:
+                                                                                    Settings.textXs
+                                                                                font.bold: true
+                                                                            }
+
+                                                                            VIcon {
+                                                                                y: 4
+                                                                                width: 10
+                                                                                height: 10
+                                                                                strokePath:
+                                                                                    Glyphs.iconChevronDown
+                                                                                lineColor:
+                                                                                    Settings.c1
+
+                                                                                rotation:
+                                                                                    cat.streamOpens[secItem.key
+                                                                                    + "r"] === true
+                                                                                    ? 0 : -90
+                                                                            }
+                                                                        }
+
+                                                                        MouseArea {
+                                                                            anchors.fill: parent
+                                                                            cursorShape:
+                                                                                Qt.PointingHandCursor
+
+                                                                            onClicked:
+                                                                                cat.toggleStreamOpen(
+                                                                                    secItem.key
+                                                                                    + "r")
+                                                                        }
+                                                                    }
+
+                                                                    TextEdit {
+                                                                        width: parent.width
+                                                                        height: implicitHeight
+                                                                        text: secItem.callDataNow()
+                                                                            ? (secItem.callDataNow().reasoning
+                                                                                || "")
+                                                                            : ""
+                                                                        color:
+                                                                            Settings.c1
+                                                                        font.pixelSize:
+                                                                            Settings.textXs
+                                                                        wrapMode:
+                                                                            TextEdit.WrapAtWordBoundaryOrAnywhere
+                                                                        readOnly: true
+                                                                        selectByMouse: true
+                                                                        textFormat:
+                                                                            TextEdit.PlainText
+                                                                    }
+                                                                }
+
+                                                                // строка
+                                                                // вызова
+                                                                Item {
+                                                                    visible: !secItem.isReason
+                                                                    width: parent.width
                                                                     height: 18
 
-                                                                    SRectangle {
+                                                                    VIcon {
                                                                         x: 0
                                                                         y: 3
                                                                         width: 12
                                                                         height: 12
-                                                                        radius: 2
-
-                                                                        color: askOpt.picked
-                                                                            ? Settings.c1 : Settings.c2
-                                                                        border.color: Settings.c1
-                                                                        border.width: 1
+                                                                        strokePath:
+                                                                            secItem.callDataNow()
+                                                                            && secItem.callDataNow().name
+                                                                            === "terminal"
+                                                                                ? Glyphs.iconTerminal
+                                                                                : secItem.callDataNow()
+                                                                                    && secItem.callDataNow().name
+                                                                                    === "web_search"
+                                                                                    ? Glyphs.iconGlobe
+                                                                                    : secItem.callDataNow()
+                                                                                        && secItem.callDataNow().name
+                                                                                        === "view_image"
+                                                                                        ? Glyphs.iconEye
+                                                                                        : Glyphs.iconAsk
+                                                                        lineColor:
+                                                                            Settings.c1
                                                                     }
 
                                                                     SText {
                                                                         x: 18
                                                                         y: 0
-                                                                        width: parent.width - 18
+                                                                        width: parent.width
+                                                                            - 18 - 18
                                                                         height: 18
-                                                                        verticalAlignment: Text.AlignVCenter
-                                                                        text: askOpt.modelData
-                                                                        color: askOpt.picked
-                                                                            ? Settings.c2 : Settings.c1
-                                                                        font.pixelSize: Settings.textXs
-                                                                        elide: Text.ElideRight
+                                                                        verticalAlignment:
+                                                                            Text.AlignVCenter
+                                                                        text: secItem.callDataNow()
+                                                                            ? secItem.callDataNow().name
+                                                                            : ""
+                                                                        color:
+                                                                            Settings.c1
+                                                                        font.pixelSize:
+                                                                            Settings.textXs
+                                                                        font.bold: true
+                                                                        elide:
+                                                                            Text.ElideRight
+                                                                    }
+
+                                                                    SRectangle {
+                                                                        anchors.verticalCenter: parent.verticalCenter
+                                                                        x: parent.width
+                                                                            - 12
+                                                                        width: 6
+                                                                        height: 6
+                                                                        rotation: 45
+
+                                                                        color: secItem.callDataNow()
+                                                                            && secItem.callDataNow().result
+                                                                            !== undefined
+                                                                            ? Settings.c1
+                                                                            : Settings.c2
+                                                                        border.color:
+                                                                            Settings.c1
+                                                                        border.width: 1
                                                                     }
 
                                                                     MouseArea {
                                                                         anchors.fill: parent
-                                                                        cursorShape: Qt.PointingHandCursor
+                                                                        cursorShape:
+                                                                            Qt.PointingHandCursor
 
-                                                                        onClicked: {
-                                                                            const p = askCard.picks[askQ.index]
+                                                                        onClicked:
+                                                                            cat.toggleStreamOpen(
+                                                                                secItem.key)
+                                                                    }
+                                                                }
 
-                                                                            if (askOpt.multi) {
-                                                                                const i = p.sel.indexOf(askOpt.index)
+                                                                // аргументы и
+                                                                // результат
+                                                                Fold {
+                                                                    visible: !secItem.isReason
+                                                                    open: cat.streamOpens[secItem.key]
+                                                                        === true
+                                                                    x: 8
+                                                                    width: parent.width
+                                                                        - 16
 
-                                                                                if (i >= 0)
-                                                                                    p.sel.splice(i, 1)
-                                                                                else
-                                                                                    p.sel.push(askOpt.index)
-                                                                            } else {
-                                                                                p.sel = askOpt.picked
-                                                                                    ? -1 : askOpt.index
+                                                                    TextEdit {
+                                                                        width: parent.width
+                                                                        height: implicitHeight
+                                                                        text: secItem.callDataNow()
+                                                                            ? (function () {
+                                                                                try {
+                                                                                    return JSON.stringify(
+                                                                                        JSON.parse(
+                                                                                            secItem.callDataNow.args
+                                                                                            || "{}"),
+                                                                                        null, 1)
+                                                                                } catch (e) {
+                                                                                    return secItem.callDataNow().args
+                                                                                }
+                                                                            })()
+                                                                            : ""
+                                                                        color:
+                                                                            Settings.c1
+                                                                        font.pixelSize:
+                                                                            Settings.textXs
+                                                                        wrapMode:
+                                                                            TextEdit.WrapAtWordBoundaryOrAnywhere
+                                                                        readOnly: true
+                                                                        selectByMouse: true
+                                                                        textFormat:
+                                                                            TextEdit.PlainText
+                                                                    }
+
+                                                                    TextEdit {
+                                                                        width: parent.width
+                                                                        height: implicitHeight
+                                                                        text: secItem.callDataNow()
+                                                                            ? (secItem.callDataNow().result
+                                                                                !== undefined
+                                                                                ? String(
+                                                                                    secItem.callDataNow().result)
+                                                                                : "(исполняется...)")
+                                                                            : ""
+                                                                        color:
+                                                                            Settings.c1
+                                                                        font.pixelSize:
+                                                                            Settings.textXs
+                                                                        wrapMode:
+                                                                            TextEdit.WrapAtWordBoundaryOrAnywhere
+                                                                        readOnly: true
+                                                                        selectByMouse: true
+                                                                        textFormat:
+                                                                            TextEdit.PlainText
+                                                                    }
+                                                                }
+
+                                                                // === опрос
+                                                                // ask_user:
+                                                                // без
+                                                                // подложек,
+                                                                // radio vs
+                                                                // checkbox,
+                                                                // с
+                                                                // прокруткой ===
+                                                                Fold {
+                                                                    visible: secItem.showCard
+                                                                    open: secItem.showCard
+                                                                    x: 8
+                                                                    width: parent.width
+                                                                        - 16
+
+                                                                    Flickable {
+                                                                        id: askScroll
+
+                                                                        width: parent.width
+                                                                        height: Math.min(
+                                                                            260,
+                                                                            askCard.height)
+                                                                        clip: true
+                                                                        interactive:
+                                                                            contentHeight
+                                                                            > height
+                                                                        contentHeight:
+                                                                            askCard.height
+                                                                        contentWidth:
+                                                                            width
+
+                                                                        boundsBehavior:
+                                                                            Flickable.StopAtBounds
+
+                                                                        Column {
+                                                                            id: askCard
+
+                                                                            width: askScroll.width
+                                                                            spacing: 5
+
+                                                                            // локальное
+                                                                            // состояние
+                                                                            // ответов:
+                                                                            // на каждый
+                                                                            // вопрос —
+                                                                            // индекс(ы)
+                                                                            // выбора
+                                                                            // или текст
+                                                                            // своего
+                                                                            // варианта
+                                                                            property var picks: {
+                                                                                const arr = []
+
+                                                                                for (let i = 0; i < cat.askQuestions.length; i++) {
+                                                                                    const q = cat.askQuestions[i]
+
+                                                                                    arr.push({
+                                                                                        sel: q.type === "multi"
+                                                                                            ? [] : -1,
+                                                                                        custom: ""
+                                                                                    })
+                                                                                }
+
+                                                                                return arr
                                                                             }
 
-                                                                            askCard.picks = askCard.picks.slice()
+                                                                            function answerOf(qi) {
+                                                                                const q = cat.askQuestions[qi]
+                                                                                const p = picks[qi]
+
+                                                                                if (q.type === "multi") {
+                                                                                    const list = []
+
+                                                                                    for (let i = 0; i < p.sel.length; i++)
+                                                                                        list.push(q.options[p.sel[i]])
+
+                                                                                    if (p.custom !== "")
+                                                                                        list.push(p.custom)
+
+                                                                                    return list
+                                                                                }
+
+                                                                                return p.sel === -1
+                                                                                    ? p.custom
+                                                                                    : q.options[p.sel]
+                                                                            }
+
+                                                                            Repeater {
+                                                                                model: cat.askQuestions
+
+                                                                                delegate: Column {
+                                                                                    id: askQ
+
+                                                                                    required property var modelData
+                                                                                    required property int index
+
+                                                                                    width: askCard.width
+                                                                                    spacing: 2
+
+                                                                                    SText {
+                                                                                        width: parent.width
+                                                                                        height: 16
+                                                                                        verticalAlignment:
+                                                                                            Text.AlignVCenter
+                                                                                        text: (index + 1) + ". "
+                                                                                            + modelData.question
+                                                                                        color:
+                                                                                            Settings.c1
+                                                                                        font.pixelSize:
+                                                                                            Settings.textXs
+                                                                                        font.bold: true
+                                                                                        wrapMode:
+                                                                                            Text.WrapAtWordBoundaryOrAnywhere
+                                                                                    }
+
+                                                                                    Repeater {
+                                                                                        model: askQ.modelData.options
+
+                                                                                        delegate: Item {
+                                                                                            id: askOpt
+
+                                                                                            required property var modelData
+                                                                                            required property int index
+
+                                                                                            readonly property bool multi:
+                                                                                                askQ.modelData.type
+                                                                                                === "multi"
+                                                                                            readonly property bool picked:
+                                                                                                multi
+                                                                                                ? (askCard.picks[askQ.index]
+                                                                                                    && askCard.picks[askQ.index].sel.indexOf(index) >= 0)
+                                                                                                    === true
+                                                                                                : (askCard.picks[askQ.index]
+                                                                                                    && askCard.picks[askQ.index].sel === index)
+                                                                                                    === true
+
+                                                                                            width: askCard.width
+                                                                                            height: 18
+
+                                                                                            // маркер:
+                                                                                            // круг —
+                                                                                            // один
+                                                                                            // выбор,
+                                                                                            // квадрат —
+                                                                                            // много
+                                                                                            SRectangle {
+                                                                                                x: 0
+                                                                                                y: 3
+                                                                                                width: 12
+                                                                                                height: 12
+                                                                                                radius: askOpt.multi
+                                                                                                    ? 2 : 6
+
+                                                                                                color: askOpt.picked
+                                                                                                    ? Settings.c1
+                                                                                                    : "transparent"
+                                                                                                border.color:
+                                                                                                    Settings.c1
+                                                                                                border.width: 1
+                                                                                            }
+
+                                                                                            SText {
+                                                                                                x: 18
+                                                                                                y: 0
+                                                                                                width: parent.width
+                                                                                                    - 18
+                                                                                                height: 18
+                                                                                                verticalAlignment:
+                                                                                                    Text.AlignVCenter
+                                                                                                text: askOpt.modelData
+                                                                                                color:
+                                                                                                    Settings.c1
+                                                                                                font.pixelSize:
+                                                                                                    Settings.textXs
+                                                                                                font.bold: askOpt.picked
+                                                                                                elide:
+                                                                                                    Text.ElideRight
+                                                                                            }
+
+                                                                                            MouseArea {
+                                                                                                anchors.fill: parent
+                                                                                                cursorShape:
+                                                                                                    Qt.PointingHandCursor
+
+                                                                                                onClicked: {
+                                                                                                    const p = askCard.picks[askQ.index]
+
+                                                                                                    if (askOpt.multi) {
+                                                                                                        const i = p.sel.indexOf(askOpt.index)
+
+                                                                                                        if (i >= 0)
+                                                                                                            p.sel.splice(i, 1)
+                                                                                                        else
+                                                                                                            p.sel.push(askOpt.index)
+                                                                                                    } else {
+                                                                                                        p.sel = askOpt.picked
+                                                                                                            ? -1 : askOpt.index
+                                                                                                    }
+
+                                                                                                    askCard.picks = askCard.picks.slice()
+                                                                                                }
+                                                                                            }
+                                                                                        }
+                                                                                    }
+
+                                                                                    // свой
+                                                                                    // вариант
+                                                                                    // ответа
+                                                                                    Item {
+                                                                                        visible: askQ.modelData.custom
+                                                                                        width: askCard.width
+                                                                                        height: visible ? 20 : 0
+
+                                                                                        SRectangle {
+                                                                                            x: 0
+                                                                                            y: 4
+                                                                                            width: 12
+                                                                                            height: 12
+                                                                                            radius: askQ.modelData.type
+                                                                                                === "multi"
+                                                                                                ? 2 : 6
+
+                                                                                            color: askCard.picks[askQ.index]
+                                                                                                && askCard.picks[askQ.index].sel === -1
+                                                                                                && askCard.picks[askQ.index].custom !== ""
+                                                                                                ? Settings.c1
+                                                                                                : "transparent"
+                                                                                            border.color:
+                                                                                                Settings.c1
+                                                                                            border.width: 1
+                                                                                        }
+
+                                                                                        TextInput {
+                                                                                            id: customInput
+
+                                                                                            x: 18
+                                                                                            y: 0
+                                                                                            width: parent.width
+                                                                                                - 18
+                                                                                            height: 20
+                                                                                            verticalAlignment:
+                                                                                                TextInput.AlignVCenter
+                                                                                            color:
+                                                                                                Settings.c1
+                                                                                            font.pixelSize:
+                                                                                                Settings.textXs
+
+                                                                                            Text {
+                                                                                                anchors.fill: parent
+                                                                                                visible: text === ""
+                                                                                                text: "свой вариант..."
+                                                                                                color:
+                                                                                                    Settings.c1
+                                                                                                font.pixelSize:
+                                                                                                    Settings.textXs
+                                                                                                font.italic: true
+                                                                                                verticalAlignment:
+                                                                                                    Text.AlignVCenter
+                                                                                            }
+
+                                                                                            onTextEdited: {
+                                                                                                const p = askCard.picks[askQ.index]
+
+                                                                                                p.sel = -1
+                                                                                                p.custom = text
+                                                                                                askCard.picks = askCard.picks.slice()
+                                                                                            }
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                            }
+
+                                                                            // кнопки без
+                                                                            // подложек:
+                                                                            // просто
+                                                                            // текст,
+                                                                            // активная —
+                                                                            // жирная
+                                                                            Row {
+                                                                                spacing: 12
+
+                                                                                SText {
+                                                                                    height: 18
+                                                                                    verticalAlignment:
+                                                                                        Text.AlignVCenter
+                                                                                    text: "ответить"
+                                                                                    color:
+                                                                                        Settings.c1
+                                                                                    font.pixelSize:
+                                                                                        Settings.textXs
+                                                                                    font.bold: askBtn.containsMouse
+                                                                                        || askEnabled
+                                                                                    font.underline:
+                                                                                        askBtn.containsMouse
+                                                                                        && askEnabled
+                                                                                    readonly property bool askEnabled: {
+                                                                                        for (let i = 0; i < askCard.picks.length; i++) {
+                                                                                            const p = askCard.picks[i]
+
+                                                                                            if (cat.askQuestions[i]
+                                                                                                    && cat.askQuestions[i].type
+                                                                                                        === "multi") {
+                                                                                                if (p.sel.length === 0
+                                                                                                        && p.custom === "")
+                                                                                                    return false
+                                                                                            } else if (p.sel === -1
+                                                                                                    && p.custom === "") {
+                                                                                                return false
+                                                                                            }
+                                                                                        }
+
+                                                                                        return true
+                                                                                    }
+
+                                                                                    MouseArea {
+                                                                                        id: askBtn
+
+                                                                                        anchors.fill: parent
+                                                                                        hoverEnabled: true
+                                                                                        cursorShape: parent.askEnabled
+                                                                                            ? Qt.PointingHandCursor
+                                                                                            : Qt.ArrowCursor
+
+                                                                                        onClicked: {
+                                                                                            if (!parent.askEnabled)
+                                                                                                return
+
+                                                                                            const answers = []
+
+                                                                                            for (let i = 0; i < cat.askQuestions.length; i++)
+                                                                                                answers.push({
+                                                                                                    question: cat.askQuestions[i].question,
+                                                                                                    answer: askCard.answerOf(i)
+                                                                                                })
+
+                                                                                            cat.submitAskUser(answers)
+                                                                                        }
+                                                                                    }
+                                                                                }
+
+                                                                                SText {
+                                                                                    height: 18
+                                                                                    verticalAlignment:
+                                                                                        Text.AlignVCenter
+                                                                                    text: "закрыть"
+                                                                                    color:
+                                                                                        Settings.c1
+                                                                                    font.pixelSize:
+                                                                                        Settings.textXs
+                                                                                    font.bold: closeBtn.containsMouse
+                                                                                    font.underline:
+                                                                                        closeBtn.containsMouse
+
+                                                                                    MouseArea {
+                                                                                        id: closeBtn
+
+                                                                                        anchors.fill: parent
+                                                                                        hoverEnabled: true
+                                                                                        cursorShape:
+                                                                                            Qt.PointingHandCursor
+
+                                                                                        onClicked:
+                                                                                            cat.cancelAskUser()
+                                                                                    }
+                                                                                }
+                                                                            }
                                                                         }
                                                                     }
                                                                 }
                                                             }
-
-                                                            // свой вариант ответа
-                                                            Item {
-                                                                visible: askQ.modelData.custom
-                                                                width: askCard.width
-                                                                height: visible ? 20 : 0
-
-                                                                SRectangle {
-                                                                    x: 0
-                                                                    y: 4
-                                                                    width: 12
-                                                                    height: 12
-                                                                    radius: 2
-
-                                                                    color: askCard.picks[askQ.index]
-                                                                        && askCard.picks[askQ.index].sel === -1
-                                                                        && askCard.picks[askQ.index].custom !== ""
-                                                                        ? Settings.c1 : Settings.c2
-                                                                    border.color: Settings.c1
-                                                                    border.width: 1
-                                                                }
-
-                                                                TextInput {
-                                                                    id: customInput
-
-                                                                    x: 18
-                                                                    y: 0
-                                                                    width: parent.width - 18
-                                                                    height: 20
-                                                                    verticalAlignment: TextInput.AlignVCenter
-                                                                    color: Settings.c1
-                                                                    font.pixelSize: Settings.textXs
-
-                                                                    Text {
-                                                                        anchors.fill: parent
-                                                                        visible: text === ""
-                                                                        text: "свой вариант..."
-                                                                        color: Settings.c1
-                                                                        font.pixelSize: Settings.textXs
-                                                                        font.italic: true
-                                                                        verticalAlignment: Text.AlignVCenter
-                                                                    }
-
-                                                                    onTextEdited: {
-                                                                        const p = askCard.picks[askQ.index]
-
-                                                                        p.sel = -1
-                                                                        p.custom = text
-                                                                        askCard.picks = askCard.picks.slice()
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Row {
-                                                        spacing: 8
-
-                                                        SButton {
-                                                            width: 72
-                                                            height: 20
-                                                            label: "ответить"
-                                                            textSize: Settings.textXs
-                                                            enabled: {
-                                                                for (let i = 0; i < askCard.picks.length; i++) {
-                                                                    const p = askCard.picks[i]
-
-                                                                    if (cat.askQuestions[i]
-                                                                            && cat.askQuestions[i].type
-                                                                                === "multi") {
-                                                                        if (p.sel.length === 0
-                                                                                && p.custom === "")
-                                                                            return false
-                                                                    } else if (p.sel === -1
-                                                                            && p.custom === "") {
-                                                                        return false
-                                                                    }
-                                                                }
-
-                                                                return true
-                                                            }
-
-                                                            onActivated: {
-                                                                const answers = []
-
-                                                                for (let i = 0; i < cat.askQuestions.length; i++)
-                                                                    answers.push({
-                                                                        question: cat.askQuestions[i].question,
-                                                                        answer: askCard.answerOf(i)
-                                                                    })
-
-                                                                cat.submitAskUser(answers)
-                                                            }
-                                                        }
-
-                                                        SButton {
-                                                            width: 64
-                                                            height: 20
-                                                            label: "закрыть"
-                                                            textSize: Settings.textXs
-
-                                                            onActivated: cat.cancelAskUser()
                                                         }
                                                     }
                                                 }
                                             }
+                                        }
 
+                                    }
+
+                                    // думанье-точки, пока хода нет
+                                        SText {
+                                            visible: cat.thinking
+                                                && turnSegsModel.count === 0
+                                            width: parent.width
+                                            height: visible ? 18 : 0
+                                            verticalAlignment:
+                                                Text.AlignVCenter
+                                            text: ".".repeat(1
+                                                + (Math.floor(cat.zzzPhase * 3)
+                                                    % 3))
+                                            color: Settings.c1
+                                            font.pixelSize: Settings.textSm
                                         }
                                     }
-                                        }
-                                    }
-                                }
-
-                                SText {
-                                    id: streamLabel
-
-                                    x: 13 - Settings.line / 2
-                                    y: 4 - Settings.line / 2
-                                        + streamReason.height
-                                        + streamTools.height
-                                    width: catBubble.width - 26
-                                    height: streamFooter.hasText
-                                        ? Math.max(0, catBubble.height - 8
-                                            - streamReason.height
-                                            - streamTools.height)
-                                        : 0
-                                    visible: streamFooter.hasText
-                                    verticalAlignment: streamFooter.hasSections
-                                        ? Text.AlignTop : Text.AlignVCenter
-
-                                    text: streamFooter.shownText
-                                    color: Settings.c1
-                                    font.pixelSize: Settings.textSm
-                                    wrapMode: streamMetrics.width + 28 > 272
-                                        ? Text.WrapAtWordBoundaryOrAnywhere
-                                        : Text.NoWrap
-                                    textFormat: Text.MarkdownText
                                 }
                             }
                         }
-                    }
 
                     // нижний запас под внешнюю обводку последнего сообщения
                     Item {
