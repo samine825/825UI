@@ -906,6 +906,9 @@ PanelWindow {
         streamReasoning = ""
         streamToolCalls = []
         toolsCursor = 0
+        // фото прошлого хода больше не нужно: уходит в payload только
+        // пока живёт его цепочка ходов
+        agentImgB64 = ""
     }
 
     function toolDone(result) {
@@ -974,8 +977,13 @@ PanelWindow {
             }', cat, "AgentTerm_" + clean)
 
         proc.fifoPath = fifo
+        // перезапуск сессии: осиротевший tail прошлой инстанции читает
+        // тот же fifo и перехватывает команды (маркер уходит мёртвому
+        // bash) — убиваем его. Сам fifo НЕ пересоздаём: writer может
+        // открыться на старом inode и навсегда зависнуть мимо нового
         proc.command = ["sh", "-c",
-            'mkdir -p "$(dirname "$1")" && mkfifo "$1" 2>/dev/null; '
+            'mkdir -p "$(dirname "$1")"; mkfifo "$1" 2>/dev/null; '
+            + 'pkill -xf "tail -f $1" 2>/dev/null; sleep 0.2; '
             + 'tail -f "$1" | bash --noprofile --norc 2>&1',
             "sh", fifo]
         proc.running = true
@@ -1109,10 +1117,13 @@ PanelWindow {
 
         s.timer.restart()
 
+        // маркер обязан совпадать с regex в terminalLine: по три
+        // подчёркивания с каждой стороны — __X825_DONE_<seq>_<exit>__
+        // (без хвостовых __ regex не матчится и все команды висят)
         termWriter.command = ["sh", "-c",
             'printf "%s\\n%s\\n" "$1" "$2" > "$3"',
             "sh", command,
-            'echo "__X825_DONE_' + seq + '_$?"', s.fifo]
+            'echo "__X825_DONE_' + seq + '_$?__"', s.fifo]
         termWriter.running = true
     }
 
@@ -1242,8 +1253,23 @@ print("\n\n".join(out) if out else "ничего не найдено")
     }
 
     // === просмотр изображения агентом ===
-    // фото уходит в контекст скрытым сообщением юзера с image_url
+    // фото уходит в контекст запроса напрямую из памяти: ListModel
+    // тихо падает на append строки размером с фото, а chats.json не
+    // должен раздуваться мегабайтами base64. Изображение вставляется
+    // в реконструкцию текущей цепочки ходов; в истории ходов оно не
+    // живёт — в следующих ходах модель видит уже свой ответ о нём
     property string agentImgPath: ""
+    property string agentImgB64: ""
+
+    function imgMime(path) {
+        const lower = path.toLowerCase()
+
+        return lower.endsWith(".png") ? "image/png"
+            : lower.endsWith(".webp") ? "image/webp"
+            : lower.endsWith(".gif") ? "image/gif"
+            : lower.endsWith(".bmp") ? "image/bmp"
+            : "image/jpeg"
+    }
 
     Process {
         id: agentImgProc
@@ -1257,12 +1283,6 @@ print("\n\n".join(out) if out else "ничего не найдено")
 
                 const b64 = this.text.trim()
                 const path = cat.agentImgPath
-                const lower = path.toLowerCase()
-                const mime = lower.endsWith(".png") ? "image/png"
-                    : lower.endsWith(".webp") ? "image/webp"
-                    : lower.endsWith(".gif") ? "image/gif"
-                    : lower.endsWith(".bmp") ? "image/bmp"
-                    : "image/jpeg"
 
                 if (b64 === "" || b64.startsWith("base64:")
                         || b64.indexOf(" ") >= 0) {
@@ -1271,20 +1291,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
                     return
                 }
 
-                cat.chatModel.append({
-                    role: "user",
-                    mtext: "[view_image] " + path,
-                    partsJson: JSON.stringify([
-                        { type: "text", text: "(изображение для "
-                            + "tool-вызова view_image: " + path + ")" },
-                        { type: "image_url", image_url: {
-                            url: "data:" + mime + ";base64," + b64 } }
-                    ]),
-                    attJson: "",
-                    reasoning: "",
-                    toolCalls: "",
-                    hidden: true
-                })
+                cat.agentImgB64 = b64
 
                 cat.toolDone("изображение приложено к контексту")
             }
@@ -2179,7 +2186,8 @@ print("\n\n".join(out) if out else "ничего не найдено")
         }
 
         // цепочка ходов с инструментами ещё не легла в историю:
-        // добавляем её как assistant + результаты
+        // добавляем её как assistant + результаты; просмотренное фото
+        // — между вызовом и результатами (порядок проверен на сервере)
         if (streamToolCalls.length > 0 && toolsCursor >= streamToolCalls.length) {
             messages.push({
                 role: "assistant",
@@ -2192,6 +2200,20 @@ print("\n\n".join(out) if out else "ничего не найдено")
                     }
                 })
             })
+
+            if (agentImgB64 !== "") {
+                messages.push({
+                    role: "user",
+                    content: [
+                        { type: "text", text: "(изображение для "
+                            + "tool-вызова view_image: "
+                            + agentImgPath + ")" },
+                        { type: "image_url", image_url: {
+                            url: "data:" + imgMime(agentImgPath)
+                                + ";base64," + agentImgB64 } }
+                    ]
+                })
+            }
 
             for (let t = 0; t < streamToolCalls.length; t++) {
                 messages.push({
