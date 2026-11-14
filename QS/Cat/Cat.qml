@@ -980,11 +980,15 @@ PanelWindow {
         // перезапуск сессии: осиротевший tail прошлой инстанции читает
         // тот же fifo и перехватывает команды (маркер уходит мёртвому
         // bash) — убиваем его. Сам fifo НЕ пересоздаём: writer может
-        // открыться на старом inode и навсегда зависнуть мимо нового
+        // открыться на старом inode и зависнуть мимо нового.
+        // Сигнал __X825_UP__ идёт после pkill — первая команда пишется
+        // только по нему, иначе writer успевает подключиться к ещё
+        // живому осиротевшему tail и команда уходит в мёртвый bash
         proc.command = ["sh", "-c",
             'mkdir -p "$(dirname "$1")"; mkfifo "$1" 2>/dev/null; '
             + 'pkill -xf "tail -f $1" 2>/dev/null; sleep 0.2; '
-            + 'tail -f "$1" | bash --noprofile --norc 2>&1',
+            + 'tail -f "$1" | bash --noprofile --norc 2>&1 & '
+            + 'echo "__X825_UP__"; wait',
             "sh", fifo]
         proc.running = true
 
@@ -1006,7 +1010,9 @@ PanelWindow {
             timer: timer,
             buf: "",
             seq: 0,
-            cb: null
+            cb: null,
+            up: false,
+            pending: null
         }
         termSessions = sessions
 
@@ -1023,6 +1029,20 @@ PanelWindow {
 
         if (text.endsWith("\r"))
             text = text.slice(0, -1)
+
+        // сессия поднялась: осиротевшие tail убиты, tail открыл fifo —
+        // можно безопасно писать накопленную первую команду
+        if (text === "__X825_UP__") {
+            s.up = true
+
+            if (s.pending) {
+                termWriter.command = s.pending
+                s.pending = null
+                termWriter.running = true
+            }
+
+            return
+        }
 
         // маркер конца команды: __X825_DONE_<seq>_<exit>__
         const m = text.match(/^__X825_DONE_(\d+)_(\d+)__$/)
@@ -1117,13 +1137,20 @@ PanelWindow {
 
         s.timer.restart()
 
-        // маркер обязан совпадать с regex в terminalLine: по три
-        // подчёркивания с каждой стороны — __X825_DONE_<seq>_<exit>__
-        // (без хвостовых __ regex не матчится и все команды висят)
-        termWriter.command = ["sh", "-c",
+        const writeCmd = ["sh", "-c",
             'printf "%s\\n%s\\n" "$1" "$2" > "$3"',
             "sh", command,
             'echo "__X825_DONE_' + seq + '_$?__"', s.fifo]
+
+        // сессия ещё поднимается: writer, подключившийся раньше pkill,
+        // уходил в ещё живой осиротевший tail — команда попадала в
+        // мёртвый bash без всякого вывода. Пишем после сигнала UP
+        if (!s.up) {
+            s.pending = writeCmd
+            return
+        }
+
+        termWriter.command = writeCmd
         termWriter.running = true
     }
 
@@ -1940,6 +1967,13 @@ print("\n\n".join(out) if out else "ничего не найдено")
     function abortTurn() {
         toolWatchdog.stop()
         abortTermWaits()
+
+        // ход с содержимым не пропадает бесследно: частичный текст и
+        // вызовы (незавершённые помечены «(отменено)») ложатся в
+        // историю — видны и после перезахода в чат
+        if (streamText !== "" || streamToolCalls.length > 0)
+            finishStream(false)
+
         askOpen = false
         askQuestions = []
         askPending = false
