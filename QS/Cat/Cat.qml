@@ -1915,16 +1915,40 @@ print("\n\n".join(out) if out else "ничего не найдено")
         menuOpen = false
     }
 
+    // снимаем ожидания терминальных команд: сессии живут, но конвейер
+    // больше не ждёт их маркеров
+    function abortTermWaits() {
+        const keys = Object.keys(termSessions)
+
+        for (let i = 0; i < keys.length; i++) {
+            const s = termSessions[keys[i]]
+
+            if (s.cb) {
+                s.cb = null
+                s.timer.stop()
+            }
+        }
+    }
+
     function abortTurn() {
         toolWatchdog.stop()
+        abortTermWaits()
         askOpen = false
         askQuestions = []
         askPending = false
         toolsBusy = false
+        toolRunId++
         clearTurn()
     }
 
     function stopGeneration() {
+        // конвейер инструментов или открытый опрос: кнопка рвёт
+        // ожидание целиком, а не только стрим текста
+        if (toolsBusy || askPending) {
+            abortTurn()
+            return
+        }
+
         if (!aiProc.running)
             return
 
@@ -3322,6 +3346,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
                             readonly property bool hasCalls: calls.length > 0
                             readonly property bool hasReasoning:
                                 reasoning !== ""
+                            readonly property bool hasText: mtext !== ""
 
                             // раскрытые секции: reasoning и вызовы,
                             // обе свернуты по умолчанию
@@ -3427,9 +3452,18 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                 240))
                                         : Math.min(msgRoot.maxBubbleW,
                                             Math.ceil(msgMetrics.width) + 28)
-                                height: msgLabel.implicitHeight + 12
-                                    + attFlow.height + msgRoot.attGap
-                                    + reasonBlock.height + toolsBlock.height
+                                // с текстом: текст + секции; без текста,
+                                // но с секциями: без пустой шахты под текст
+                                height: msgRoot.hasText
+                                    || (!msgRoot.hasCalls
+                                        && !msgRoot.hasReasoning)
+                                    ? msgLabel.implicitHeight + 12
+                                        + attFlow.height + msgRoot.attGap
+                                        + reasonBlock.height
+                                        + toolsBlock.height
+                                    : reasonBlock.height + toolsBlock.height
+                                        + attFlow.height + msgRoot.attGap
+                                        + 6
 
                                 // вторая обводка — как в ControlPanel
                                 Panel {
@@ -3891,10 +3925,13 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                             + reasonBlock.height
                                             + toolsBlock.height
                                         width: bubble.width - 26
-                                        height: bubble.height - 8
-                                            - attFlow.height - msgRoot.attGap
-                                            - reasonBlock.height
-                                            - toolsBlock.height
+                                        height: msgRoot.hasText
+                                            ? Math.max(0, bubble.height - 8
+                                                - attFlow.height
+                                                - msgRoot.attGap
+                                                - reasonBlock.height
+                                                - toolsBlock.height)
+                                            : 0
                                         verticalAlignment: reasonBlock.present
                                             || toolsBlock.present
                                             ? TextEdit.AlignTop : TextEdit.AlignVCenter
@@ -3915,6 +3952,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                         selectionColor: Settings.c1
                                         selectedTextColor: Settings.c2
                                         visible: !msgRoot.editing
+                                            && msgRoot.hasText
                                     }
 
                                     // правка текста сообщения
@@ -3928,10 +3966,12 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                             + reasonBlock.height
                                             + toolsBlock.height
                                         width: bubble.width - 26
-                                        height: bubble.height - 8
-                                            - attFlow.height - msgRoot.attGap
+                                        height: Math.max(20,
+                                            bubble.height - 8
+                                            - attFlow.height
+                                            - msgRoot.attGap
                                             - reasonBlock.height
-                                            - toolsBlock.height
+                                            - toolsBlock.height)
                                         verticalAlignment: TextInput.AlignVCenter
                                         color: Settings.c1
                                         font.pixelSize: Settings.textSm
@@ -4055,6 +4095,11 @@ print("\n\n".join(out) if out else "ничего не найдено")
                         readonly property bool hasSections:
                             cat.streamReasoning !== ""
                             || cat.streamToolCalls.length > 0
+                        // есть что показывать в текстовой зоне: текст
+                        // или думанье-точки; без текста зона схлопывается,
+                        // а не оставляет пустой шахту под будущий ответ
+                        readonly property bool hasText:
+                            cat.thinking || cat.streamText !== ""
                         readonly property string shownText: cat.thinking
                             ? ".".repeat(1
                                 + (Math.floor(cat.zzzPhase * 3) % 3))
@@ -4084,8 +4129,15 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                         240))
                                 : Math.min(272,
                                     Math.ceil(streamMetrics.width) + 28)
-                            height: streamLabel.implicitHeight + 12
-                                + streamReason.height + streamTools.height
+                            // с текстом: текст + секции; без текста, но
+                            // с секциями: только секции, без пустой шахты
+                            height: streamFooter.hasText
+                                ? streamLabel.implicitHeight + 12
+                                    + streamReason.height + streamTools.height
+                                : streamFooter.hasSections
+                                    ? streamReason.height + streamTools.height
+                                        + 6
+                                    : streamLabel.implicitHeight + 12
 
                             // вторая обводка — как в ControlPanel
                             Panel {
@@ -4759,9 +4811,12 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                         + streamReason.height
                                         + streamTools.height
                                     width: catBubble.width - 26
-                                    height: catBubble.height - 8
-                                        - streamReason.height
-                                        - streamTools.height
+                                    height: streamFooter.hasText
+                                        ? Math.max(0, catBubble.height - 8
+                                            - streamReason.height
+                                            - streamTools.height)
+                                        : 0
+                                    visible: streamFooter.hasText
                                     verticalAlignment: streamFooter.hasSections
                                         ? Text.AlignTop : Text.AlignVCenter
 
