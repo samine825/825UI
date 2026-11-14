@@ -132,6 +132,37 @@ PanelWindow {
         }
     }
 
+    // плавно раскрывающийся блок секций reasoning/вызовов: контент
+    // сверстан всегда, высота блока едет анимацией, лишнее отсекается
+    // клипом — раскрытие не вставляет текст рывком и не дёргает то,
+    // что ниже
+    component Fold: Item {
+        id: fold
+
+        default property alias content: foldBody.data
+
+        property bool open: false
+        // высота в свёрнутом виде: 0 — блок пуст, 16/18 — виден заголовок
+        property real closedH: 0
+
+        clip: true
+        height: open ? foldBody.height : closedH
+
+        Behavior on height {
+            NumberAnimation {
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        Column {
+            id: foldBody
+
+            width: parent.width
+            spacing: 3
+        }
+    }
+
     // плашка вложения: миниатюра/иконка, имя и расширение.
     // Одна и та же в поле ввода и в отправленном сообщении.
     component AttachChip: Item {
@@ -3468,7 +3499,9 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                         }
                                     }
 
-                                    // === секция вызовов: рамка с ярлыком ===
+                                    // === секция reasoning финального текста:
+                                    // идёт ПОСЛЕ вызовов — модель думала
+                                    // над ответом уже после инструментов ===
                                     Column {
                                         id: reasonBlock
 
@@ -3476,8 +3509,8 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                             msgRoot.hasReasoning
 
                                         x: 13 - Settings.line / 2
-                                        y: 4 - Settings.line / 2
-                                            + attFlow.height + msgRoot.attGap
+                                        y: toolsBlock.y
+                                            + toolsBlock.height
                                         width: bubble.width - 26
                                         visible: present
                                         height: present
@@ -3526,9 +3559,16 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                     - Settings.line * 3
                                                 spacing: 3
 
-                                                Row {
-                                                    id: reasonHeader
+                                            // заголовок: Item с Row внутри —
+                                            // MouseArea с fill-анкорами
+                                            // нельзя класть в Row
+                                            Item {
+                                                id: reasonHeader
 
+                                                width: parent.width
+                                                height: 18
+
+                                                Row {
                                                     spacing: 5
 
                                                     SText {
@@ -3550,15 +3590,16 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                         rotation: msgRoot.reasonOpen
                                                             ? 0 : -90
                                                     }
+                                                }
 
-                                                    MouseArea {
-                                                        anchors.fill: parent
-                                                        cursorShape:
-                                                            Qt.PointingHandCursor
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape:
+                                                        Qt.PointingHandCursor
 
-                                                        onClicked:
-                                                            msgRoot.reasonOpen =
-                                                                !msgRoot.reasonOpen
+                                                    onClicked:
+                                                        msgRoot.reasonOpen =
+                                                            !msgRoot.reasonOpen
                                                     }
                                                 }
 
@@ -3580,9 +3621,9 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                         }
                                     }
 
-                                    // === секция reasoning: ПОСЛЕ вызовов —
-                                    // хронология стрима (reasoning финального
-                                    // текста идёт после инструментов) ===
+                                    // === секция вызовов: рамка с ярлыком,
+                                    // идёт первой — вызовы случились до
+                                    // финального reasoning ===
                                     Column {
                                         id: toolsBlock
 
@@ -3590,7 +3631,8 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                             msgRoot.hasCalls
 
                                         x: 13 - Settings.line / 2
-                                        y: reasonBlock.y + reasonBlock.height
+                                        y: 4 - Settings.line / 2
+                                            + attFlow.height + msgRoot.attGap
                                         width: bubble.width - 26
                                         visible: present
                                         height: present
@@ -3653,6 +3695,72 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                     // reasoning вызова — своя
                                                     // свёрнутая зона
                                                     property bool reasonOpen: false
+
+                                                    // зона reasoning вызова:
+                                                    // свёрнута по умолчанию,
+                                                    // стоит ПЕРЕД строкой
+                                                    // вызова — модель думает,
+                                                    // потом зовёт инструмент;
+                                                    // раскрытие едет плавно
+                                                    Fold {
+                                                        visible: (callBlock.modelData.reasoning
+                                                            || "") !== ""
+                                                        x: 18
+                                                        width: parent.width - 18
+                                                        closedH: 16
+                                                        open: callBlock.reasonOpen
+
+                                                        Item {
+                                                            width: parent.width
+                                                            height: 16
+
+                                                            Row {
+                                                                spacing: 5
+
+                                                                SText {
+                                                                    height: 16
+                                                                    verticalAlignment: Text.AlignVCenter
+                                                                    text: "reasoning"
+                                                                    color: Settings.c1
+                                                                    font.pixelSize: Settings.textXs
+                                                                    font.bold: true
+                                                                }
+
+                                                                VIcon {
+                                                                    anchors.verticalCenter: parent.verticalCenter
+                                                                    width: 10
+                                                                    height: 10
+                                                                    strokePath: Glyphs.iconChevronDown
+                                                                    lineColor: Settings.c1
+
+                                                                    rotation: callBlock.reasonOpen
+                                                                        ? 0 : -90
+                                                                }
+                                                            }
+
+                                                            MouseArea {
+                                                                anchors.fill: parent
+                                                                cursorShape:
+                                                                    Qt.PointingHandCursor
+
+                                                                onClicked:
+                                                                    callBlock.reasonOpen =
+                                                                        !callBlock.reasonOpen
+                                                            }
+                                                        }
+
+                                                        TextEdit {
+                                                            width: parent.width
+                                                            height: implicitHeight
+                                                            text: callBlock.modelData.reasoning
+                                                            color: Settings.c1
+                                                            font.pixelSize: Settings.textXs
+                                                            wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
+                                                            readOnly: true
+                                                            selectByMouse: true
+                                                            textFormat: TextEdit.PlainText
+                                                        }
+                                                    }
 
                                                     Item {
                                                         width: parent.width
@@ -3720,78 +3828,14 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                         }
                                                     }
 
-                                                    // зона reasoning вызова:
-                                                    // свёрнута по умолчанию,
-                                                    // живёт в хронологии —
-                                                    // под своей строкой
-                                                    Column {
-                                                        visible: (callBlock.modelData.reasoning
-                                                            || "") !== ""
-                                                        x: 18
-                                                        width: parent.width - 18
-                                                        spacing: 3
-
-                                                        Item {
-                                                            width: parent.width
-                                                            height: 16
-
-                                                            Row {
-                                                                spacing: 5
-
-                                                                SText {
-                                                                    height: 16
-                                                                    verticalAlignment: Text.AlignVCenter
-                                                                    text: "reasoning"
-                                                                    color: Settings.c1
-                                                                    font.pixelSize: Settings.textXs
-                                                                    font.bold: true
-                                                                }
-
-                                                                VIcon {
-                                                                    anchors.verticalCenter: parent.verticalCenter
-                                                                    width: 10
-                                                                    height: 10
-                                                                    strokePath: Glyphs.iconChevronDown
-                                                                    lineColor: Settings.c1
-
-                                                                    rotation: callBlock.reasonOpen
-                                                                        ? 0 : -90
-                                                                }
-                                                            }
-
-                                                            MouseArea {
-                                                                anchors.fill: parent
-                                                                cursorShape:
-                                                                    Qt.PointingHandCursor
-
-                                                                onClicked:
-                                                                    callBlock.reasonOpen =
-                                                                        !callBlock.reasonOpen
-                                                            }
-                                                        }
-
-                                                        TextEdit {
-                                                            visible: callBlock.reasonOpen
-                                                            width: parent.width
-                                                            height: implicitHeight
-                                                            text: callBlock.modelData.reasoning
-                                                            color: Settings.c1
-                                                            font.pixelSize: Settings.textXs
-                                                            wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
-                                                            readOnly: true
-                                                            selectByMouse: true
-                                                            textFormat: TextEdit.PlainText
-                                                        }
-                                                    }
-
                                                     // раскрытый вызов:
-                                                    // аргументы + результат
-                                                    Column {
-                                                        visible: msgRoot.openCalls[callBlock.index]
+                                                    // аргументы + результат,
+                                                    // высота едет плавно
+                                                    Fold {
+                                                        open: msgRoot.openCalls[callBlock.index]
                                                             === true
                                                         x: 8
                                                         width: parent.width - 16
-                                                        spacing: 3
 
                                                         TextEdit {
                                                             width: parent.width
@@ -4106,7 +4150,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                         id: streamReasonFrame
 
                                         width: parent.width
-                                        height: streamReasonOpen
+                                        height: streamReason.streamReasonOpen
                                             ? streamReasonBody.height
                                                 + 18 + Settings.line * 3
                                             : 18 + Settings.line * 3
@@ -4141,27 +4185,35 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                 - Settings.line * 3
                                             spacing: 3
 
-                                            Row {
-                                                spacing: 5
+                                            // заголовок: Item с Row внутри —
+                                            // MouseArea с fill-анкорами нельзя
+                                            // класть в Row, он ломается
+                                            Item {
+                                                width: parent.width
+                                                height: 18
 
-                                                SText {
-                                                    height: 18
-                                                    verticalAlignment: Text.AlignVCenter
-                                                    text: "reasoning"
-                                                    color: Settings.c1
-                                                    font.pixelSize: Settings.textXs
-                                                    font.bold: true
-                                                }
+                                                Row {
+                                                    spacing: 5
 
-                                                VIcon {
-                                                    anchors.verticalCenter: parent.verticalCenter
-                                                    width: 12
-                                                    height: 12
-                                                    strokePath: Glyphs.iconChevronDown
-                                                    lineColor: Settings.c1
+                                                    SText {
+                                                        height: 18
+                                                        verticalAlignment: Text.AlignVCenter
+                                                        text: "reasoning"
+                                                        color: Settings.c1
+                                                        font.pixelSize: Settings.textXs
+                                                        font.bold: true
+                                                    }
 
-                                                    rotation: streamReasonOpen
-                                                        ? 0 : -90
+                                                    VIcon {
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        width: 12
+                                                        height: 12
+                                                        strokePath: Glyphs.iconChevronDown
+                                                        lineColor: Settings.c1
+
+                                                        rotation: streamReason.streamReasonOpen
+                                                            ? 0 : -90
+                                                    }
                                                 }
 
                                                 MouseArea {
@@ -4170,15 +4222,15 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                         Qt.PointingHandCursor
 
                                                     onClicked:
-                                                        streamReasonOpen =
-                                                            !streamReasonOpen
+                                                        streamReason.streamReasonOpen =
+                                                            !streamReason.streamReasonOpen
                                                 }
                                             }
 
                                             TextEdit {
                                                 id: streamReasonBody
 
-                                                visible: streamReasonOpen
+                                                visible: streamReason.streamReasonOpen
                                                 width: parent.width
                                                 height: implicitHeight
                                                 text: cat.streamReasoning
@@ -4214,6 +4266,14 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                         width: parent.width
                                         height: streamToolsCol.height
                                             + Settings.line * 3
+                                        clip: true
+
+                                        Behavior on height {
+                                            NumberAnimation {
+                                                duration: 200
+                                                easing.type: Easing.OutCubic
+                                            }
+                                        }
 
                                         Panel {
                                             x: Settings.line / 2
@@ -4257,6 +4317,70 @@ print("\n\n".join(out) if out else "ничего не найдено")
 
                                             width: streamToolsCol.width
                                             spacing: 3
+
+                                            // reasoning вызова: свёрнутая
+                                            // зона в хронологии, стоит
+                                            // ПЕРЕД строкой вызова;
+                                            // раскрытие едет плавно
+                                            Fold {
+                                                visible: (streamCall.modelData.reasoning
+                                                    || "") !== ""
+                                                x: 18
+                                                width: parent.width - 18
+                                                closedH: 16
+                                                open: streamCall.reasonOpen
+
+                                                Item {
+                                                    width: parent.width
+                                                    height: 16
+
+                                                    Row {
+                                                        spacing: 5
+
+                                                        SText {
+                                                            height: 16
+                                                            verticalAlignment: Text.AlignVCenter
+                                                            text: "reasoning"
+                                                            color: Settings.c1
+                                                            font.pixelSize: Settings.textXs
+                                                            font.bold: true
+                                                        }
+
+                                                        VIcon {
+                                                            anchors.verticalCenter: parent.verticalCenter
+                                                            width: 10
+                                                            height: 10
+                                                            strokePath: Glyphs.iconChevronDown
+                                                            lineColor: Settings.c1
+
+                                                            rotation: streamCall.reasonOpen
+                                                                ? 0 : -90
+                                                        }
+                                                    }
+
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        cursorShape:
+                                                            Qt.PointingHandCursor
+
+                                                        onClicked:
+                                                            streamCall.reasonOpen =
+                                                                !streamCall.reasonOpen
+                                                    }
+                                                }
+
+                                                TextEdit {
+                                                    width: parent.width
+                                                    height: implicitHeight
+                                                    text: streamCall.modelData.reasoning
+                                                    color: Settings.c1
+                                                    font.pixelSize: Settings.textXs
+                                                    wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
+                                                    readOnly: true
+                                                    selectByMouse: true
+                                                    textFormat: TextEdit.PlainText
+                                                }
+                                            }
 
                                             Item {
                                                 width: parent.width
@@ -4321,75 +4445,13 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                 }
                                             }
 
-                                            // reasoning вызова: свёрнутая
-                                            // зона в хронологии
-                                            Column {
-                                                visible: (streamCall.modelData.reasoning
-                                                    || "") !== ""
-                                                x: 18
-                                                width: parent.width - 18
-                                                spacing: 3
-
-                                                Item {
-                                                    width: parent.width
-                                                    height: 16
-
-                                                    Row {
-                                                        spacing: 5
-
-                                                        SText {
-                                                            height: 16
-                                                            verticalAlignment: Text.AlignVCenter
-                                                            text: "reasoning"
-                                                            color: Settings.c1
-                                                            font.pixelSize: Settings.textXs
-                                                            font.bold: true
-                                                        }
-
-                                                        VIcon {
-                                                            anchors.verticalCenter: parent.verticalCenter
-                                                            width: 10
-                                                            height: 10
-                                                            strokePath: Glyphs.iconChevronDown
-                                                            lineColor: Settings.c1
-
-                                                            rotation: streamCall.reasonOpen
-                                                                ? 0 : -90
-                                                        }
-                                                    }
-
-                                                    MouseArea {
-                                                        anchors.fill: parent
-                                                        cursorShape:
-                                                            Qt.PointingHandCursor
-
-                                                        onClicked:
-                                                            streamCall.reasonOpen =
-                                                                !streamCall.reasonOpen
-                                                    }
-                                                }
-
-                                                TextEdit {
-                                                    visible: streamCall.reasonOpen
-                                                    width: parent.width
-                                                    height: implicitHeight
-                                                    text: streamCall.modelData.reasoning
-                                                    color: Settings.c1
-                                                    font.pixelSize: Settings.textXs
-                                                    wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
-                                                    readOnly: true
-                                                    selectByMouse: true
-                                                    textFormat: TextEdit.PlainText
-                                                }
-                                            }
-
                                             // живые аргументы и результат:
-                                            // раскрываются по клику на строку
-                                            Column {
-                                                visible: streamCall.open
+                                            // раскрываются по клику на
+                                            // строку, высота едет плавно
+                                            Fold {
+                                                open: streamCall.open
                                                 x: 8
                                                 width: parent.width - 16
-                                                spacing: 3
 
                                                 TextEdit {
                                                     width: parent.width
@@ -4428,14 +4490,18 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                 }
                                             }
 
-                                                // === карточка опроса ask_user ===
-                                                Column {
-                                                    id: askCard
-
-                                                    visible: streamCall.showCard
+                                                // === карточка опроса ask_user:
+                                                // раскрывается плавно ===
+                                                Fold {
+                                                    open: streamCall.showCard
                                                     x: 8
                                                     width: parent.width - 16
-                                                    spacing: 5
+
+                                                    Column {
+                                                        id: askCard
+
+                                                        width: parent.width
+                                                        spacing: 5
 
                                                     // локальное состояние ответов:
                                                     // на каждый вопрос — индекс(ы)
@@ -4677,6 +4743,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                         }
                                                     }
                                                 }
+                                            }
 
                                         }
                                     }
