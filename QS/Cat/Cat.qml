@@ -169,7 +169,18 @@ PanelWindow {
 
                     measure.text = cell
                     nat[c] = Math.max(nat[c],
-                        Math.ceil(measure.width) + 8)
+                        Math.ceil(measure.width) + 12)
+
+                    // колонка не уже самого длинного слова ячейки:
+                    // короткие слова не ломаются посередине, перенос
+                    // только между словами
+                    const words = cell.split(" ")
+
+                    for (let w = 0; w < words.length; w++) {
+                        measure.text = words[w]
+                        nat[c] = Math.max(nat[c],
+                            Math.ceil(measure.width) + 12)
+                    }
                 }
             }
 
@@ -233,7 +244,7 @@ PanelWindow {
 
                             x: mtable.xoffs[index] + 4
                             width: Math.max(16,
-                                mtable.widths[index] - 8)
+                                mtable.widths[index] - 6)
                             height: implicitHeight
                             text: modelData
                             color: Settings.c1
@@ -252,6 +263,7 @@ PanelWindow {
                         required property int index
 
                         x: mtable.xoffs[index] + mtable.widths[index]
+                            + 4
                         y: 0
                         width: Settings.line
                         height: mrow.height
@@ -4266,7 +4278,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                                                 spacing: 5
 
                                                                                 VIcon {
-                                                                                    y: 3
+                                                                                    anchors.verticalCenter: parent.verticalCenter
                                                                                     width: 11
                                                                                     height: 11
                                                                                     strokePath:
@@ -4288,7 +4300,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                                                 }
 
                                                                                 VIcon {
-                                                                                    y: 4
+                                                                                    anchors.verticalCenter: parent.verticalCenter
                                                                                     width: 10
                                                                                     height: 10
                                                                                     strokePath:
@@ -4342,9 +4354,8 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                                             && secItem.callData
                                                                             && (secItem.callData.reasoning
                                                                                 || "") !== ""
-                                                                        x: 18
+                                                                        x: 0
                                                                         width: parent.width
-                                                                            - 18
                                                                         closedH: 16
                                                                         open: msgRoot.openReasons[secItem.key
                                                                             + "r"] === true
@@ -4357,7 +4368,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                                                 spacing: 5
 
                                                                                 VIcon {
-                                                                                    y: 3
+                                                                                    anchors.verticalCenter: parent.verticalCenter
                                                                                     width: 11
                                                                                     height: 11
                                                                                     strokePath:
@@ -4379,7 +4390,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                                                 }
 
                                                                                 VIcon {
-                                                                                    y: 4
+                                                                                    anchors.verticalCenter: parent.verticalCenter
                                                                                     width: 10
                                                                                     height: 10
                                                                                     strokePath:
@@ -4435,7 +4446,7 @@ print("\n\n".join(out) if out else "ничего не найдено")
 
                                                                         VIcon {
                                                                             x: 0
-                                                                            y: 3
+                                                                            anchors.verticalCenter: parent.verticalCenter
                                                                             width: 12
                                                                             height: 12
                                                                             strokePath:
@@ -5070,7 +5081,7 @@ delegate: Column {
                                                                             spacing: 5
 
                                                                             VIcon {
-                                                                                y: 3
+                                                                                anchors.verticalCenter: parent.verticalCenter
                                                                                 width: 11
                                                                                 height: 11
                                                                                 strokePath:
@@ -5092,7 +5103,7 @@ delegate: Column {
                                                                             }
 
                                                                             VIcon {
-                                                                                y: 4
+                                                                                anchors.verticalCenter: parent.verticalCenter
                                                                                 width: 10
                                                                                 height: 10
                                                                                 strokePath:
@@ -5145,9 +5156,8 @@ delegate: Column {
                                                                         && secItem.callDataNow() !== undefined
                                                                         && (secItem.callDataNow().reasoning
                                                                             || "") !== ""
-                                                                    x: 18
+                                                                    x: 0
                                                                     width: parent.width
-                                                                        - 18
                                                                     closedH: 16
                                                                     open: cat.streamOpens[secItem.key
                                                                         + "r"] === true
@@ -5160,7 +5170,7 @@ delegate: Column {
                                                                             spacing: 5
 
                                                                             VIcon {
-                                                                                y: 3
+                                                                                anchors.verticalCenter: parent.verticalCenter
                                                                                 width: 11
                                                                                 height: 11
                                                                                 strokePath:
@@ -5182,7 +5192,7 @@ delegate: Column {
                                                                             }
 
                                                                             VIcon {
-                                                                                y: 4
+                                                                                anchors.verticalCenter: parent.verticalCenter
                                                                                 width: 10
                                                                                 height: 10
                                                                                 strokePath:
@@ -5238,7 +5248,7 @@ delegate: Column {
 
                                                                     VIcon {
                                                                         x: 0
-                                                                        y: 3
+                                                                        anchors.verticalCenter: parent.verticalCenter
                                                                         width: 12
                                                                         height: 12
                                                                         strokePath:
@@ -5516,7 +5526,7 @@ delegate: Column {
                                                                                             // много
                                                                                             SRectangle {
                                                                                                 x: 0
-                                                                                                y: 3
+                                                                                                anchors.verticalCenter: parent.verticalCenter
                                                                                                 width: 12
                                                                                                 height: 12
                                                                                                 radius: askOpt.multi
@@ -5534,7 +5544,6 @@ delegate: Column {
                                                                                                 x: 18
                                                                                                 y: 0
                                                                                                 width: parent.width
-                                                                                                    - 18
                                                                                                 height: 18
                                                                                                 verticalAlignment:
                                                                                                     Text.AlignVCenter
@@ -5607,7 +5616,6 @@ delegate: Column {
                                                                                             x: 18
                                                                                             y: 0
                                                                                             width: parent.width
-                                                                                                - 18
                                                                                             height: 20
                                                                                             verticalAlignment:
                                                                                                 TextInput.AlignVCenter
