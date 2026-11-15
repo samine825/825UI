@@ -947,7 +947,7 @@ PanelWindow {
 
         turnSegsModel.append({ type: "text",
             start: Math.max(0, streamText.length - piece.length),
-            items: 0 })
+            end: 0, items: 0 })
     }
 
     // сегменты хода — ListModel вместо JS-массива: Repeater на
@@ -974,7 +974,9 @@ PanelWindow {
             if (s.type === "text")
                 out.push({ type: "text",
                     start: s.start || 0,
-                    text: streamText.slice(s.start || 0) })
+                    end: s.end || 0,
+                    text: streamText.slice(s.start || 0,
+                        s.end > s.start ? s.end : streamText.length) })
             else {
                 const items = []
 
@@ -1029,9 +1031,18 @@ PanelWindow {
     }
 
     function segEnsureSec() {
-        if (turnSegsModel.count === 0
-                || turnSegsModel.get(turnSegsModel.count - 1).type !== "sec")
-            turnSegsModel.append({ type: "sec", start: 0, items: 0 })
+        const n = turnSegsModel.count
+
+        if (n > 0 && turnSegsModel.get(n - 1).type === "text") {
+            // текст перед секцией кончается здесь: фиксируем его конец,
+            // иначе срез streamText тянется до конца хода и текст
+            // дублируется в следующей текстовой зоне
+            turnSegsModel.setProperty(n - 1, "end", streamText.length)
+            return
+        }
+
+        if (n === 0)
+            turnSegsModel.append({ type: "sec", start: 0, end: 0, items: 0 })
     }
 
     function segAddCall(globalIdx) {
@@ -1049,6 +1060,11 @@ PanelWindow {
     // Qt рисует markdown-таблицы дефолтным HTML-стилем, чужим для
     // шелла: превращаем их в моноблоки с выровненными колонками
     function flatTables(md) {
+        // Qt рисует markdown-таблицы дефолтным HTML-стилем, чужим для
+        // шелла: превращаем их в моноблок с колонками и перегородками.
+        // Ширина ограничена ~34 моноширинными знаками (240px пузыря),
+        // длинные ячейки обрезаются с многоточием
+        const cap = 34
         const lines = String(md).split("\n")
         const out = []
         let tbl = []
@@ -1080,26 +1096,50 @@ PanelWindow {
                 const w = []
 
                 for (let c = 0; c < n; c++) {
-                    w[c] = 0
+                    w[c] = 1
 
                     for (let r = 0; r < rows.length; r++)
                         if (rows[r][c] && rows[r][c].length > w[c])
                             w[c] = rows[r][c].length
                 }
 
-                out.push("```\n" + rows.map(function (row) {
-                    let line = ""
+                // ужать колонки под потолок ширины
+                let total = 0
 
-                    for (let c = 0; c < n; c++) {
-                        const cell = row[c] || ""
+                for (let c = 0; c < n; c++)
+                    total += w[c]
 
-                        line += (c > 0 ? "   " : "")
-                            + cell
-                            + " ".repeat(w[c] - cell.length)
-                    }
+                if (total + (n - 1) * 3 > cap) {
+                    const room = cap - (n - 1) * 3
 
-                    return line
-                }).join("\n") + "\n```")
+                    for (let c = 0; c < n; c++)
+                        w[c] = Math.max(1, Math.floor(w[c] * room / total))
+                }
+
+                const clip = function (s, w) {
+                    return s.length > w
+                        ? s.slice(0, Math.max(1, w - 1)) + "…"
+                        : s + " ".repeat(w - s.length)
+                }
+
+                let block = ""
+
+                for (let r = 0; r < rows.length; r++) {
+                    const cells = []
+
+                    for (let c = 0; c < n; c++)
+                        cells.push(clip(rows[r][c] || "", w[c]))
+
+                    block += "\u2502 " + cells.join(" \u2502 ")
+                        + " \u2502\n"
+
+                    if (r === 0)
+                        block += "\u2502" + cells.map(function (cell) {
+                            return "\u2500".repeat(cell.length + 2)
+                        }).join("\u252c") + "\u2502\n"
+                }
+
+                out.push("\u0060\u0060\u0060\n" + block + "\u0060\u0060\u0060")
             }
 
             tbl = []
@@ -1787,6 +1827,11 @@ print("\n\n".join(out) if out else "ничего не найдено")
             }
         } else {
             chatModel.setProperty(index, "mtext", text)
+
+            // у ходов с сегментами текстовые зоны устарели: сегменты
+            // пересобираются из базовых полей
+            if (m.role === "cat" && m.segments)
+                chatModel.setProperty(index, "segments", "")
         }
 
         persistCurrentChat()
@@ -1904,7 +1949,8 @@ print("\n\n".join(out) if out else "ничего не найдено")
             title: chat.title || "",
             pinned: !!chat.pinned,
             updated: Date.now(),
-            messages: serializeMessages()
+            messages: serializeMessages(),
+            ctx: cat.ctxPromptTokens
         })
         writeChats()
     }
@@ -2070,6 +2116,11 @@ print("\n\n".join(out) if out else "ничего не найдено")
         const chat = findChat(id)
         const messages = chat && chat.messages ? chat.messages : []
 
+        // колечко контекста: заполненность последнего хода чата
+        // восстанавливается, потолок — перезапрашивается у сервера
+        ctxPromptTokens = chat && chat.ctx !== undefined ? chat.ctx : -1
+        ctxProc.running = true
+
         for (let i = 0; i < messages.length; i++) {
             const m = messages[i]
 
@@ -2163,6 +2214,10 @@ print("\n\n".join(out) if out else "ничего не найдено")
 
         if (modelOptions.length === 0)
             modelsProc.running = true
+
+        // потолок контекста может измениться (перезагрузка модели) —
+        // обновляем при каждом открытии чата
+        ctxProc.running = true
     }
 
     function closeChat() {
@@ -4408,6 +4463,9 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                             font.pixelSize: Settings.textSm
                                             wrapMode:
                                                 TextInput.WrapAtWordBoundaryOrAnywhere
+                                            selectByMouse: true
+                                            selectionColor: Settings.c1
+                                            selectedTextColor: Settings.c2
                                             clip: true
 
                                             onVisibleChanged: {
@@ -4649,7 +4707,11 @@ delegate: Column {
                                                         cat.flatTables(
                                                             cat.streamText.slice(
                                                                 segCol.modelData.start
-                                                                || 0)))
+                                                                || 0,
+                                                                segCol.modelData.end
+                                                                    > segCol.modelData.start
+                                                                    ? segCol.modelData.end
+                                                                    : cat.streamText.length)))
                                                     : ""
                                                 color: Settings.c1
                                                 font.pixelSize: Settings.textSm
@@ -4667,7 +4729,11 @@ delegate: Column {
                                                     ? cat.mdImages(
                                                         cat.streamText.slice(
                                                             segCol.modelData.start
-                                                            || 0))
+                                                            || 0,
+                                                            segCol.modelData.end
+                                                                > segCol.modelData.start
+                                                                ? segCol.modelData.end
+                                                                : cat.streamText.length))
                                                     : []
 
                                                 delegate: Column {
