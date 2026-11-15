@@ -132,6 +132,122 @@ PanelWindow {
         }
     }
 
+    // настоящая таблица из линий толщиной конфига: колонки
+    // пропорциональны содержимому, длинные ячейки переносятся
+    component MdTable: Column {
+        id: mtable
+
+        property var rows: []
+
+        width: parent.width
+
+        readonly property var widths: {
+            const n = mtable.rows.length > 0
+                ? mtable.rows[0].length : 0
+            const len = []
+
+            for (let c = 0; c < n; c++) {
+                len[c] = 1
+
+                for (let r = 0; r < mtable.rows.length; r++)
+                    if (mtable.rows[r][c]
+                            && mtable.rows[r][c].length > len[c])
+                        len[c] = mtable.rows[r][c].length
+            }
+
+            let sum = 0
+
+            for (let c = 0; c < n; c++)
+                sum += len[c]
+
+            const avail = Math.max(n * 24, mtable.width
+                - (n - 1) * Settings.line - n * 8)
+            const out = []
+
+            for (let c = 0; c < n; c++)
+                out.push(Math.max(24,
+                    Math.round(avail * len[c] / Math.max(1, sum))))
+
+            return out
+        }
+
+        // x-позиции колонок: колонка + перегородка между ними
+        readonly property var xoffs: {
+            const out = []
+            let x = 0
+
+            for (let c = 0; c < mtable.widths.length; c++) {
+                out.push(x)
+                x += mtable.widths[c] + Settings.line
+            }
+
+            return out
+        }
+
+        Repeater {
+            model: mtable.rows
+
+            delegate: Item {
+                id: mrow
+
+                required property var modelData
+                required property int index
+
+                width: mtable.width
+                height: mrowCells.height
+                    + (index === 0 ? Settings.line : 0)
+
+                Row {
+                    id: mrowCells
+
+                    Repeater {
+                        model: mrow.modelData
+
+                        delegate: SText {
+                            required property var modelData
+                            required property int index
+
+                            x: mtable.xoffs[index] + 4
+                            width: Math.max(16,
+                                mtable.widths[index] - 8)
+                            height: implicitHeight
+                            text: modelData
+                            color: Settings.c1
+                            font.pixelSize: Settings.textXs
+                            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                            font.bold: mrow.index === 0
+                        }
+                    }
+                }
+
+                // вертикальные перегородки между колонками
+                Repeater {
+                    model: mtable.widths.length - 1
+
+                    delegate: SRectangle {
+                        required property int index
+
+                        x: mtable.xoffs[index] + mtable.widths[index]
+                            + 4
+                        y: 0
+                        width: Settings.line
+                        height: mrow.height
+                        color: Settings.c1
+                    }
+                }
+
+                // линия под заголовком
+                SRectangle {
+                    visible: mrow.index === 0
+                    y: mrow.height - Settings.line
+                    width: parent.width
+                    height: Settings.line
+                    color: Settings.c1
+                }
+            }
+        }
+    }
+
     // плавно раскрывающийся блок секций reasoning/вызовов: контент
     // сверстан всегда, высота блока едет анимацией, лишнее отсекается
     // клипом — раскрытие не вставляет текст рывком и не дёргает то,
@@ -1036,8 +1152,10 @@ PanelWindow {
         if (n > 0 && turnSegsModel.get(n - 1).type === "text") {
             // текст перед секцией кончается здесь: фиксируем его конец,
             // иначе срез streamText тянется до конца хода и текст
-            // дублируется в следующей текстовой зоне
+            // дублируется в следующей текстовой зоне. Секцию добавляем
+            // дальше в любом случае
             turnSegsModel.setProperty(n - 1, "end", streamText.length)
+            turnSegsModel.append({ type: "sec", start: 0, end: 0, items: 0 })
             return
         }
 
@@ -1161,6 +1279,65 @@ PanelWindow {
 
     // ![](src) — Qt не грузит картинки из markdown: вытаскиваем их
     // отдельными плитками, в тексте остаётся alt
+    // разбор markdown на части: обычные куски и таблицы (таблицы
+    // рендерятся отдельным компонентом с линиями из конфига)
+    function mdParts(md) {
+        const lines = String(md).split("\n")
+        const parts = []
+        let mdBuf = []
+        let tbl = []
+
+        function flushMd() {
+            if (mdBuf.length > 0) {
+                parts.push({ kind: "md", text: mdBuf.join("\n") })
+                mdBuf = []
+            }
+        }
+
+        function flushTbl() {
+            if (tbl.length === 0)
+                return
+
+            const rows = []
+
+            for (let r = 0; r < tbl.length; r++) {
+                const cells = tbl[r].replace(/^\s*\|/, "")
+                    .replace(/\|\s*$/, "").split("|")
+
+                let isSep = cells.length > 0
+
+                for (let c = 0; c < cells.length; c++)
+                    if (!/^\s*:?-+:?\s*$/.test(cells[c]))
+                        isSep = false
+
+                if (!isSep)
+                    rows.push(cells.map(function (c) {
+                        return c.trim()
+                    }))
+            }
+
+            if (rows.length > 0)
+                parts.push({ kind: "table", rows: rows })
+
+            tbl = []
+        }
+
+        for (let i = 0; i < lines.length; i++) {
+            if (/^\s*\|.*\|\s*$/.test(lines[i])) {
+                flushMd()
+                tbl.push(lines[i])
+                continue
+            }
+
+            flushTbl()
+            mdBuf.push(lines[i])
+        }
+
+        flushTbl()
+        flushMd()
+        return parts
+    }
+
     function mdImages(md) {
         const out = []
         const re = /!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g
@@ -3960,10 +4137,9 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                     modelData.type === "text"
                                                 readonly property var items:
                                                     isText ? [] : (modelData.items || [])
-                                                readonly property string md: isText
+                                                readonly property string plainText: isText
                                                     ? cat.mdStripImages(
-                                                        cat.flatTables(
-                                                            modelData.text))
+                                                        modelData.text)
                                                     : ""
                                                 readonly property var imgs: isText
                                                     ? cat.mdImages(modelData.text)
@@ -3972,23 +4148,54 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                 width: msgCol.width
                                                 spacing: 6
 
-                                                // обычный текст: markdown,
-                                                // картинки вынуты плитками
-                                                TextEdit {
-                                                    visible: segCol.isText
-                                                        && text.trim() !== ""
-                                                    width: parent.width
-                                                    height: implicitHeight
-                                                    text: segCol.md
-                                                    color: Settings.c1
-                                                    font.pixelSize:
-                                                        Settings.textSm
-                                                    wrapMode:
-                                                        TextEdit.WrapAtWordBoundaryOrAnywhere
-                                                    readOnly: true
-                                                    selectByMouse: true
-                                                    textFormat:
-                                                        TextEdit.MarkdownText
+                                                // текст: markdown-куски и
+                                                // настоящие таблицы с
+                                                // линиями конфига; картинки
+                                                // вынуты плитками
+                                                Repeater {
+                                                    model: segCol.isText
+                                                        ? cat.mdParts(
+                                                            segCol.plainText)
+                                                        : []
+
+                                                    delegate: Column {
+                                                        required property var modelData
+
+                                                        width: parent.width
+                                                        spacing: 6
+
+                                                        TextEdit {
+                                                            visible: parent.modelData.kind
+                                                                === "md"
+                                                                && text.trim()
+                                                                    !== ""
+                                                            width: parent.width
+                                                            height: implicitHeight
+                                                            text: parent.modelData.kind
+                                                                === "md"
+                                                                ? parent.modelData.text
+                                                                : ""
+                                                            color: Settings.c1
+                                                            font.pixelSize:
+                                                                Settings.textSm
+                                                            wrapMode:
+                                                                TextEdit.WrapAtWordBoundaryOrAnywhere
+                                                            readOnly: true
+                                                            selectByMouse: true
+                                                            textFormat:
+                                                                TextEdit.MarkdownText
+                                                        }
+
+                                                        MdTable {
+                                                            visible: parent.modelData.kind
+                                                                === "table"
+                                                            width: parent.width
+                                                            rows: parent.modelData.kind
+                                                                === "table"
+                                                                ? parent.modelData.rows
+                                                                : []
+                                                        }
+                                                    }
                                                 }
 
                                                 // медиа из ![](src): плитки
@@ -4591,10 +4798,28 @@ print("\n\n".join(out) if out else "ничего не найдено")
 
                             return false
                         }
-                        // хронология для рендера: пересобирается на
-                        // структурных изменениях хода
-                        readonly property var streamSegs:
-                            turnStructureRev >= 0 ? materializeSegs() : []
+                        // хронология для рендера: пересобирается ТОЛЬКО
+                        // на структурных изменениях хода — зависимость от
+                        // streamText пересобирала Repeater каждый токен,
+                        // и делегаты переставали доставаться
+                        readonly property var streamSegs: {
+                            turnStructureRev
+
+                            const out = []
+
+                            for (let i = 0; i < turnSegsModel.count; i++) {
+                                const s = turnSegsModel.get(i)
+
+                                out.push(s.type === "text"
+                                    ? { type: "text",
+                                        start: s.start || 0,
+                                        end: s.end || 0 }
+                                    : { type: "sec",
+                                        items: segItems[i] || [] })
+                            }
+
+                            return out
+                        }
 
                         visible: active
                         width: chatColumn.width
