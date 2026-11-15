@@ -132,6 +132,46 @@ PanelWindow {
         }
     }
 
+    // блок кода: рамка + моноширинный текст с переносом длинных строк
+    component CodeBlock: Column {
+        id: cblock
+
+        property string code: ""
+
+        width: parent.width
+
+        Item {
+            width: parent.width
+            height: codeText.height + Settings.line * 4 + 4
+
+            Panel {
+                x: Settings.line / 2
+                y: Settings.line / 2
+                width: parent.width - Settings.line
+                height: parent.height - Settings.line
+                cornerCut: Settings.line * 2
+                strokeColor: Settings.c1
+                fillColor: "transparent"
+                strokeWidth: Settings.line
+            }
+
+            SText {
+                id: codeText
+
+                x: Settings.line * 2
+                y: Settings.line * 2 + 2
+                width: parent.width - Settings.line * 4
+                height: implicitHeight
+                text: cblock.code
+                color: Settings.c1
+                font.pixelSize: Settings.textXs
+                // generic-алиас "monospace" ломал инкубацию делегата
+                font.family: "Noto Sans Mono"
+                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+            }
+        }
+    }
+
     // настоящая таблица из линий толщиной конфига: колонки
     // пропорциональны содержимому, длинные ячейки переносятся
     component MdTable: Column {
@@ -1219,6 +1259,15 @@ PanelWindow {
         const parts = []
         let mdBuf = []
         let tbl = []
+        let codeBuf = []
+        let inCode = false
+
+        function flushCode() {
+            if (codeBuf.length > 0) {
+                parts.push({ kind: "code", text: codeBuf.join("\n") })
+                codeBuf = []
+            }
+        }
 
         function flushMd() {
             if (mdBuf.length > 0) {
@@ -1256,6 +1305,24 @@ PanelWindow {
         }
 
         for (let i = 0; i < lines.length; i++) {
+            if (/^\s*```/.test(lines[i])) {
+                if (inCode) {
+                    flushCode()
+                    inCode = false
+                } else {
+                    flushMd()
+                    flushTbl()
+                    inCode = true
+                }
+
+                continue
+            }
+
+            if (inCode) {
+                codeBuf.push(lines[i])
+                continue
+            }
+
             if (/^\s*\|.*\|\s*$/.test(lines[i])) {
                 flushMd()
                 tbl.push(lines[i])
@@ -1266,6 +1333,8 @@ PanelWindow {
             mdBuf.push(lines[i])
         }
 
+        // незакрытый блок — всё, что накопилось
+        flushCode()
         flushTbl()
         flushMd()
         return parts
@@ -2532,6 +2601,10 @@ print("\n\n".join(out) if out else "ничего не найдено")
         aiErrText = ""
         aiRawText = ""
         chatState = "response"
+        // отправленное — принудительно к низу диалога, даже если юзер
+        // отскроллил вверх
+        dialogFlick.stick = true
+        dialogFlick.scrollToBottom(true)
         // ввод остаётся на экране и в фокусе — можно писать дальше
         inputField.forceActiveFocus()
 
@@ -2699,6 +2772,20 @@ print("\n\n".join(out) if out else "ничего не найдено")
             + '-H "Content-Type: application/json" --data-binary @-',
             "sh", String(utf8Len(payload))]
         aiProc.running = true
+    }
+
+    // 560 -> "560", 262144 -> "262K", 1500000 -> "1.5M"
+    function fmtTokens(n) {
+        if (n < 0)
+            return "-"
+
+        if (n >= 1000000)
+            return (Math.round(n / 100000) / 10) + "M"
+
+        if (n >= 10000)
+            return Math.round(n / 1000) + "K"
+
+        return String(n)
     }
 
     function silhouetteHit(sx, sy) {
@@ -3841,6 +3928,11 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                 openCalls = next
                             }
 
+                            // пересборка сегментов: сторож недоставленных
+                            // делегатов дергает rev
+                            property int segsRev: 0
+                            property int segsFixes: 0
+
                             // хронология отображения: сегменты хода, а для
                             // старых чатов — секция (reasoning + вызовы) и
                             // текст следом
@@ -3882,6 +3974,34 @@ print("\n\n".join(out) if out else "ничего не найдено")
 
                                 return false
                             }
+
+                            // сторож: incubation Repeater недоставляет
+                            // делегаты недетерминированно — пересборка
+                            // модели, пока все сегменты не оживут
+                            Timer {
+                                interval: 150
+                                repeat: true
+                                running: true
+
+                                onTriggered: {
+                                    if (segs.length === 0)
+                                        return
+
+                                    let n = 0
+
+                                    for (let i = 0; i < msgCol.children.length; i++)
+                                        if ("isText" in msgCol.children[i])
+                                            n++
+
+                                    if (n < segs.length && segsFixes < 20) {
+                                        segsFixes++
+                                        segsRev++
+                                    }
+                                }
+                            }
+
+                            onSegmentsChanged: segsFixes = 0
+                            onMtextChanged: segsFixes = 0
 
                             // последнее сообщение кота: только у него есть
                             // перегенерация и продолжение
@@ -4058,7 +4178,8 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                         // порядке генерации; секции не стоят
                                         // друг под другом — их разделяет текст
                                         Repeater {
-                                            model: msgRoot.segs
+                                            model: segsRev >= 0
+                                                ? msgRoot.segs : []
 
                                             delegate: Column {
                                                 id: segCol
@@ -4119,17 +4240,35 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                                 TextEdit.MarkdownText
                                                         }
 
-                                                        MdTable {
-                                                            visible: parent.modelData.kind
-                                                                === "table"
-                                                            width: segCol.width
-                                                            tableW: segCol.width
-                                                            rows: parent.modelData.kind
-                                                                === "table"
+                                                    MdTable {
+                                                        visible: parent.modelData.kind
+                                                            === "table"
+                                                        width: segCol.width
+                                                        tableW: segCol.width
+                                                        rows: parent.modelData.kind
+                                                            === "table"
                                                                 ? parent.modelData.rows
-                                                                : []
-                                                        }
+                                                            : []
                                                     }
+
+                                                    CodeBlock {
+                                                        visible: parent.modelData.kind
+                                                            === "code"
+                                                        width: parent.width
+                                                        code: parent.modelData.kind
+                                                            === "code"
+                                                                ? parent.modelData.text
+                                                        : ""
+                                                    }
+                                                        CodeBlock {
+                                                            visible: parent.modelData.kind
+                                                                === "code"
+                                                            width: parent.width
+                                                            code: parent.modelData.kind
+                                                                === "code"
+                                                                    ? parent.modelData.text
+                                                            : ""
+                                                        }                                                    }
                                                 }
 
                                                 // медиа из ![](src): плитки
@@ -4735,6 +4874,29 @@ print("\n\n".join(out) if out else "ничего не найдено")
                         // на структурных изменениях хода — зависимость от
                         // streamText пересобирала Repeater каждый токен,
                         // и делегаты переставали доставаться
+                        // сторож: пересборка, пока делегаты сегментов
+                        // не доставлены все
+                        Timer {
+                            interval: 150
+                            repeat: true
+                            running: true
+
+                            onTriggered: {
+                                if (turnSegsModel.count === 0)
+                                    return
+
+                                let n = 0
+
+                                for (let i = 0; i < streamCol.children.length; i++)
+                                    if ("isText" in streamCol.children[i])
+                                        n++
+
+                                if (n < turnSegsModel.count
+                                        && turnStructureRev < 60)
+                                    turnStructureRev++
+                            }
+                        }
+
                         readonly property var streamSegs: {
                             turnStructureRev
 
@@ -4921,17 +5083,26 @@ delegate: Column {
                                                             TextEdit.MarkdownText
                                                     }
 
-                                                    MdTable {
-                                                        visible: parent.modelData.kind
-                                                            === "table"
-                                                        width: segCol.width
-                                                        tableW: segCol.width
-                                                        rows: parent.modelData.kind
-                                                            === "table"
-                                                            ? parent.modelData.rows
-                                                            : []
-                                                    }
-                                                }
+MdTable {
+    visible: parent.modelData.kind
+        === "table"
+    width: segCol.width
+    tableW: segCol.width
+    rows: parent.modelData.kind
+        === "table"
+            ? parent.modelData.rows
+        : []
+}
+
+CodeBlock {
+    visible: parent.modelData.kind
+        === "code"
+    width: parent.width
+    code: parent.modelData.kind
+        === "code"
+            ? parent.modelData.text
+    : ""
+}                                                }
                                             }
 
                                             // медиа из ![](src)
@@ -6386,11 +6557,48 @@ delegate: Column {
                             }
 
                             MouseArea {
+                                id: gaugeHover
+
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
 
                                 onClicked: cat.ctxProc.running = true
+                            }
+
+                            // точное число при наведении: 560/262K
+                            Item {
+                                id: ctxTip
+
+                                visible: gaugeHover.containsMouse
+                                    && cat.ctxPromptTokens >= 0
+                                x: -(width - parent.width) / 2
+                                y: -height - 8
+                                width: tipText.width
+                                    + Settings.line * 6
+                                height: tipText.height
+                                    + Settings.line * 3
+
+                                Panel {
+                                    width: parent.width
+                                    height: parent.height
+                                    cornerCut: Settings.line * 2
+                                    strokeColor: Settings.c1
+                                    fillColor: Settings.c2
+                                    strokeWidth: Settings.line
+                                }
+
+                                SText {
+                                    id: tipText
+
+                                    x: Settings.line * 3
+                                    y: Settings.line * 1.5
+                                    height: implicitHeight
+                                    text: cat.fmtTokens(cat.ctxPromptTokens)
+                                        + "/" + cat.fmtTokens(cat.ctxMaxTokens)
+                                    color: Settings.c1
+                                    font.pixelSize: Settings.textXs
+                                }
                             }
                         }
 
