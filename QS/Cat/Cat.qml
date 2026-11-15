@@ -138,40 +138,64 @@ PanelWindow {
         id: mtable
 
         property var rows: []
+        // ширина передаётся вызывающим: связка с parent.width внутри
+        // компонента давала цикл (widths читает width)
+        property real tableW: 0
 
-        width: parent.width
+        width: tableW
 
-        readonly property var widths: {
-            const n = mtable.rows.length > 0
-                ? mtable.rows[0].length : 0
-            const len = []
+        TextMetrics {
+            id: measure
+
+            font.pixelSize: Settings.textXs
+        }
+
+        // ширины колонок: по фактической ширине текста ячеек; сжатие
+        // пропорциональное и только если таблица шире пузыря.
+        // Считается императивно: запись в measure.text внутри биндинга
+        // зацикливала widths (measure.width зависит от measure.text)
+        property var widths: []
+
+        function recalcWidths() {
+            const rows = mtable.rows
+            const n = rows.length > 0 ? rows[0].length : 0
+            const nat = []
 
             for (let c = 0; c < n; c++) {
-                len[c] = 1
+                nat[c] = 24
 
-                for (let r = 0; r < mtable.rows.length; r++)
-                    if (mtable.rows[r][c]
-                            && mtable.rows[r][c].length > len[c])
-                        len[c] = mtable.rows[r][c].length
+                for (let r = 0; r < rows.length; r++) {
+                    const cell = rows[r][c] || ""
+
+                    measure.text = cell
+                    nat[c] = Math.max(nat[c],
+                        Math.ceil(measure.width) + 8)
+                }
             }
 
             let sum = 0
 
             for (let c = 0; c < n; c++)
-                sum += len[c]
+                sum += nat[c]
 
-            const avail = Math.max(n * 24, mtable.width
-                - (n - 1) * Settings.line - n * 8)
-            const out = []
+            const avail = Math.max(n * 24, mtable.tableW
+                - (n - 1) * Settings.line)
 
-            for (let c = 0; c < n; c++)
-                out.push(Math.max(24,
-                    Math.round(avail * len[c] / Math.max(1, sum))))
+            if (sum > avail) {
+                for (let c = 0; c < n; c++)
+                    nat[c] = Math.max(24,
+                        Math.round(nat[c] * avail / sum))
+            }
 
-            return out
+            widths = nat
         }
 
-        // x-позиции колонок: колонка + перегородка между ними
+        onRowsChanged: recalcWidths()
+        onTableWChanged: recalcWidths()
+        Component.onCompleted: recalcWidths()
+
+        // x-позиции колонок; перегородка после колонки c стоит ровно
+        // в зазоре [xoffs[c] + widths[c], ... + line]
         readonly property var xoffs: {
             const out = []
             let x = 0
@@ -220,7 +244,7 @@ PanelWindow {
                     }
                 }
 
-                // вертикальные перегородки между колонками
+                // вертикальные перегородки ровно в зазорах
                 Repeater {
                     model: mtable.widths.length - 1
 
@@ -228,7 +252,6 @@ PanelWindow {
                         required property int index
 
                         x: mtable.xoffs[index] + mtable.widths[index]
-                            + 4
                         y: 0
                         width: Settings.line
                         height: mrow.height
@@ -1177,108 +1200,6 @@ PanelWindow {
     // === markdown-подготовка ===
     // Qt рисует markdown-таблицы дефолтным HTML-стилем, чужим для
     // шелла: превращаем их в моноблоки с выровненными колонками
-    function flatTables(md) {
-        // Qt рисует markdown-таблицы дефолтным HTML-стилем, чужим для
-        // шелла: превращаем их в моноблок с колонками и перегородками.
-        // Ширина ограничена ~34 моноширинными знаками (240px пузыря),
-        // длинные ячейки обрезаются с многоточием
-        const cap = 34
-        const lines = String(md).split("\n")
-        const out = []
-        let tbl = []
-
-        function flush() {
-            if (tbl.length === 0)
-                return
-
-            const rows = []
-
-            for (let r = 0; r < tbl.length; r++) {
-                const cells = tbl[r].replace(/^\s*\|/, "")
-                    .replace(/\|\s*$/, "").split("|")
-
-                let isSep = cells.length > 0
-
-                for (let c = 0; c < cells.length; c++)
-                    if (!/^\s*:?-+:?\s*$/.test(cells[c]))
-                        isSep = false
-
-                if (!isSep)
-                    rows.push(cells.map(function (c) {
-                        return c.trim()
-                    }))
-            }
-
-            if (rows.length > 0) {
-                const n = rows[0].length
-                const w = []
-
-                for (let c = 0; c < n; c++) {
-                    w[c] = 1
-
-                    for (let r = 0; r < rows.length; r++)
-                        if (rows[r][c] && rows[r][c].length > w[c])
-                            w[c] = rows[r][c].length
-                }
-
-                // ужать колонки под потолок ширины
-                let total = 0
-
-                for (let c = 0; c < n; c++)
-                    total += w[c]
-
-                if (total + (n - 1) * 3 > cap) {
-                    const room = cap - (n - 1) * 3
-
-                    for (let c = 0; c < n; c++)
-                        w[c] = Math.max(1, Math.floor(w[c] * room / total))
-                }
-
-                const clip = function (s, w) {
-                    return s.length > w
-                        ? s.slice(0, Math.max(1, w - 1)) + "…"
-                        : s + " ".repeat(w - s.length)
-                }
-
-                let block = ""
-
-                for (let r = 0; r < rows.length; r++) {
-                    const cells = []
-
-                    for (let c = 0; c < n; c++)
-                        cells.push(clip(rows[r][c] || "", w[c]))
-
-                    block += "\u2502 " + cells.join(" \u2502 ")
-                        + " \u2502\n"
-
-                    if (r === 0)
-                        block += "\u2502" + cells.map(function (cell) {
-                            return "\u2500".repeat(cell.length + 2)
-                        }).join("\u252c") + "\u2502\n"
-                }
-
-                out.push("\u0060\u0060\u0060\n" + block + "\u0060\u0060\u0060")
-            }
-
-            tbl = []
-        }
-
-        for (let i = 0; i < lines.length; i++) {
-            if (/^\s*\|.*\|\s*$/.test(lines[i])) {
-                tbl.push(lines[i])
-                continue
-            }
-
-            flush()
-            out.push(lines[i])
-        }
-
-        flush()
-        return out.join("\n")
-    }
-
-    // ![](src) — Qt не грузит картинки из markdown: вытаскиваем их
-    // отдельными плитками, в тексте остаётся alt
     // разбор markdown на части: обычные куски и таблицы (таблицы
     // рендерятся отдельным компонентом с линиями из конфига)
     function mdParts(md) {
@@ -4189,7 +4110,8 @@ print("\n\n".join(out) if out else "ничего не найдено")
                                                         MdTable {
                                                             visible: parent.modelData.kind
                                                                 === "table"
-                                                            width: parent.width
+                                                            width: segCol.width
+                                                            tableW: segCol.width
                                                             rows: parent.modelData.kind
                                                                 === "table"
                                                                 ? parent.modelData.rows
@@ -4920,45 +4842,91 @@ delegate: Column {
 
                                             // текст сегмента: растет срезом
                                             // streamText от стартового
-                                            // смещения — без переч felici-
-                                            // тирования всего списка
-                                            TextEdit {
-                                                visible: segCol.isText
-                                                    && text.trim() !== ""
-                                                width: parent.width
-                                                height: implicitHeight
-                                                text: segCol.isText
-                                                    ? cat.mdStripImages(
-                                                        cat.flatTables(
-                                                            cat.streamText.slice(
-                                                                segCol.modelData.start
-                                                                || 0,
-                                                                segCol.modelData.end
-                                                                    > segCol.modelData.start
-                                                                    ? segCol.modelData.end
-                                                                    : cat.streamText.length)))
-                                                    : ""
-                                                color: Settings.c1
-                                                font.pixelSize: Settings.textSm
-                                                wrapMode:
-                                                    TextEdit.WrapAtWordBoundaryOrAnywhere
-                                                readOnly: true
-                                                selectByMouse: true
-                                                textFormat:
-                                                    TextEdit.MarkdownText
+                                            // смещения; md-куски и таблицы
+                                            // пересобираются только на
+                                            // переводах строки — не каждый
+                                            // токен (иначе Repeater не
+                                            // достраивается)
+                                            readonly property int nlKey:
+                                                segCol.isText
+                                                ? cat.streamText.slice(
+                                                    segCol.modelData.start || 0,
+                                                    segCol.modelData.end
+                                                        > segCol.modelData.start
+                                                        ? segCol.modelData.end
+                                                        : cat.streamText.length).split(
+                                                            "\n").length
+                                                : 0
+                                            readonly property var parts: nlKey
+                                                >= 0 && segCol.isText
+                                                ? cat.mdParts(cat.streamText.slice(
+                                                    segCol.modelData.start || 0,
+                                                    segCol.modelData.end
+                                                        > segCol.modelData.start
+                                                        ? segCol.modelData.end
+                                                        : cat.streamText.length))
+                                                : []
+                                            readonly property var imgList: nlKey
+                                                >= 0 && segCol.isText
+                                                ? cat.mdImages(cat.streamText.slice(
+                                                    segCol.modelData.start || 0,
+                                                    segCol.modelData.end
+                                                        > segCol.modelData.start
+                                                        ? segCol.modelData.end
+                                                        : cat.streamText.length))
+                                                : []
+
+                                            Repeater {
+                                                model: segCol.isText
+                                                    ? segCol.parts
+                                                    : []
+
+                                                delegate: Column {
+                                                    required property var modelData
+
+                                                    width: parent.width
+                                                    spacing: 6
+
+                                                    TextEdit {
+                                                        visible: parent.modelData.kind
+                                                            === "md"
+                                                            && text.trim()
+                                                                !== ""
+                                                        width: parent.width
+                                                        height: implicitHeight
+                                                        text: parent.modelData.kind
+                                                            === "md"
+                                                            ? cat.mdStripImages(
+                                                                parent.modelData.text)
+                                                            : ""
+                                                        color: Settings.c1
+                                                        font.pixelSize:
+                                                            Settings.textSm
+                                                        wrapMode:
+                                                            TextEdit.WrapAtWordBoundaryOrAnywhere
+                                                        readOnly: true
+                                                        selectByMouse: true
+                                                        textFormat:
+                                                            TextEdit.MarkdownText
+                                                    }
+
+                                                    MdTable {
+                                                        visible: parent.modelData.kind
+                                                            === "table"
+                                                        width: segCol.width
+                                                        tableW: segCol.width
+                                                        rows: parent.modelData.kind
+                                                            === "table"
+                                                            ? parent.modelData.rows
+                                                            : []
+                                                    }
+                                                }
                                             }
 
                                             // медиа из ![](src)
                                             Repeater {
                                                 model: segCol.isText
-                                                    ? cat.mdImages(
-                                                        cat.streamText.slice(
-                                                            segCol.modelData.start
-                                                            || 0,
-                                                            segCol.modelData.end
-                                                                > segCol.modelData.start
-                                                                ? segCol.modelData.end
-                                                                : cat.streamText.length))
+                                                    ? segCol.imgList
                                                     : []
 
                                                 delegate: Column {
